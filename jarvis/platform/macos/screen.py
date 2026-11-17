@@ -36,7 +36,7 @@ def ocr_image_file(path: str, fast: bool = False) -> list[dict]:
     import Vision  # type: ignore
     from Foundation import NSURL  # type: ignore
 
-    handler = Vision.VNImageRequestHandler.alloc().initWithURL_options_(NSURL.fileURLWithPath_(path), None)
+    handler = Vision.VNImageRequestHandler.alloc().initWithURL_options_(NSURL.fileURLWithPath_(path), {})
     req = Vision.VNRecognizeTextRequest.alloc().init()
     req.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelFast if fast else Vision.VNRequestTextRecognitionLevelAccurate)
     req.setUsesLanguageCorrection_(True)

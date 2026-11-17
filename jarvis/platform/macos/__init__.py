@@ -49,9 +49,16 @@ class MacComputer(Computer):
         return self._apps_cache[1]
 
     def running_apps(self) -> list[str]:
-        # lsappinfo is always fresh (NSWorkspace needs a main run loop to update) and needs no permission.
-        out = _sh(["lsappinfo", "visibleProcessList"])
-        return re.findall(r'"([^"]+)"', out)
+        # `lsappinfo list` includes hidden (⌘H) apps; it is always fresh and needs no permission.
+        out = _sh(["lsappinfo", "list"])
+        names = re.findall(r'^\s*\d+\)\s+"([^"]+)"', out, re.M)
+        return names or re.findall(r'"([^"]+)"', _sh(["lsappinfo", "visibleProcessList"]))
+
+    def _is_running(self, name: str) -> bool:
+        """Display names can differ from bundle names ("Visual Studio Code" shows as "Code")."""
+        if name in self.running_apps():
+            return True
+        return subprocess.run(["pgrep", "-f", f"/{name}.app/Contents/MacOS/"], capture_output=True).returncode == 0
 
     def _pid(self, name: str) -> int | None:
         out = _sh(["lsappinfo", "info", "-only", "pid", name])
@@ -75,7 +82,7 @@ class MacComputer(Computer):
             return ActionResult.fail(f"Couldn't open {name}: {proc.stderr.strip() or 'not found'}")
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
-            if name in self.running_apps():
+            if self._is_running(name):
                 return ActionResult(True, f"{name} is open.", {"app": name}, verified=True)
             time.sleep(0.2)
         return ActionResult(True, f"Asked macOS to open {name}, but couldn't confirm it started.", {"app": name})
@@ -86,7 +93,7 @@ class MacComputer(Computer):
         except AutomationError as e:
             return ActionResult.fail(str(e))
         for _ in range(25):
-            if name not in self.running_apps():
+            if not self._is_running(name):
                 return ActionResult(True, f"Quit {name}.", verified=True)
             time.sleep(0.2)
         return ActionResult(True, f"Asked {name} to quit; it may be showing a save dialog.")
@@ -175,8 +182,9 @@ class MacComputer(Computer):
                 from ApplicationServices import AXUIElementSetAttributeValue  # type: ignore
 
                 el = self.ax.app_element(pid)
+                # AXManualAccessibility is enough for Chromium; AXEnhancedUserInterface would persist
+                # and make window moves/resizes slow.
                 AXUIElementSetAttributeValue(el, "AXManualAccessibility", True)
-                AXUIElementSetAttributeValue(el, "AXEnhancedUserInterface", True)
             except Exception:
                 pass
         return self.ax.snapshot(pid, app, max_elements)

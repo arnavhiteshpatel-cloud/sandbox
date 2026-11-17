@@ -17,6 +17,10 @@ Honest list, newest understanding first. "Unverified" means designed and written
 
 ## By design / platform limits
 
+* **⌥⇧C needs Accessibility.** macOS 15 blocks Option/Option+Shift-only global shortcuts via `RegisterEventHotKey`, so
+  push-to-talk uses a keyboard event tap (it sees key events system-wide but only acts on ⌥⇧C). Without
+  Accessibility it falls back to ⌃⌥C.
+
 * **Wake word:** the pre-trained `hey_jarvis` model expects "hey JARVIS". "JARVIS" alone may not trigger it; use the hot key
   or train a custom openWakeWord model. The sound-alike "Hey Travis" scored 0.48 against a 0.5 threshold in testing, so tune
   sensitivity to your voice and room. The `hey_jarvis` model is CC BY-NC-SA 4.0: fine for personal use, not for selling.

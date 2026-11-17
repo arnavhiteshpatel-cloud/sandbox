@@ -8,6 +8,7 @@ final class Daemon {
     private var process: Process?
     private var quitting = false
     private var restarts: [Date] = []
+    private var generation = 0   // ignores termination of processes we already replaced or stopped
     var onReady: (() -> Void)?
     var onStatus: ((String) -> Void)?
 
@@ -45,6 +46,8 @@ final class Daemon {
         env["JARVIS_TOKEN"] = token
         env["PYTHONNOUSERSITE"] = "1"
         env["PYTHONUNBUFFERED"] = "1"
+        // Never write .pyc files into the signed bundle (would break its code signature).
+        env["PYTHONPYCACHEPREFIX"] = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches/JARVIS/pycache").path
         env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin"
         env.removeValue(forKey: "PYTHONPATH")
         p.environment = env
@@ -59,9 +62,13 @@ final class Daemon {
             p.standardOutput = fh
             p.standardError = fh
         }
+        generation += 1
+        let myGeneration = generation
         p.terminationHandler = { [weak self] proc in
-            guard let self = self, !self.quitting else { return }
-            DispatchQueue.main.async { self.crashed(code: proc.terminationStatus) }
+            DispatchQueue.main.async {
+                guard let self = self, !self.quitting, myGeneration == self.generation else { return }
+                self.crashed(code: proc.terminationStatus)
+            }
         }
         do {
             try p.run()
@@ -102,11 +109,15 @@ final class Daemon {
 
     func stop() {
         quitting = true
+        generation += 1
         guard let p = process, p.isRunning else { return }
         p.terminate()  // SIGTERM: the service unloads models and closes the database cleanly
         let deadline = Date().addingTimeInterval(4)
         while p.isRunning && Date() < deadline { usleep(50_000) }
-        if p.isRunning { kill(p.processIdentifier, SIGKILL) }
+        if p.isRunning {
+            kill(p.processIdentifier, SIGKILL)
+            p.waitUntilExit()  // the port must be free before a restart
+        }
     }
 
     // MARK: API

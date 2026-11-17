@@ -28,17 +28,22 @@ swiftc -O -target arm64-apple-macos14.0 \
 
 echo "==> Embedding Python $PYVER (python-build-standalone via uv)"
 uv python install "$PYVER"
-PYBIN="$(uv python find "$PYVER")"
+# --system: never pick up a project .venv (a venv is not relocatable and would ship dev packages)
+PYBIN="$(cd / && uv python find --system --python-preference only-managed "$PYVER")"
 PYHOME="$(cd "$(dirname "$PYBIN")/.." && pwd)"
+[[ ! -f "$PYHOME/pyvenv.cfg" ]] || { echo "error: $PYHOME is a virtualenv, not a standalone Python"; exit 1; }
 cp -R "$PYHOME" "$APP/Contents/Resources/python"
 BUNDLED="$APP/Contents/Resources/python/bin/python3"
-"$BUNDLED" -m ensurepip --upgrade >/dev/null 2>&1 || true
 # PEP 668 marker from uv-managed Pythons would block pip inside the bundle; it is our private copy.
 find "$APP/Contents/Resources/python/lib" -maxdepth 2 -name EXTERNALLY-MANAGED -delete || true
+"$BUNDLED" -m ensurepip --upgrade >/dev/null
 
 echo "==> Installing JARVIS and its dependencies into the bundle"
 "$BUNDLED" -m pip install --no-cache-dir --upgrade pip wheel >/dev/null
 "$BUNDLED" -m pip install --no-cache-dir "$ROOT[voice,stt-mlx,files,macos]"
+
+echo "==> Precompiling bytecode (the signed bundle is never written to at runtime)"
+"$BUNDLED" -m compileall -q "$APP/Contents/Resources/python/lib" >/dev/null || true
 
 echo "==> App icon"
 ICONSET="$ROOT/build/AppIcon.iconset"; rm -rf "$ICONSET"; mkdir -p "$ICONSET"

@@ -65,13 +65,27 @@ def press_keys(combo: str) -> ActionResult:
     return ActionResult(True, f"Pressed {combo}.")
 
 
+def _utf16_chunks(text: str, units: int):
+    """Split without breaking surrogate pairs (emoji count as 2 UTF-16 units)."""
+    buf, n = "", 0
+    for ch in text:
+        w = 2 if ord(ch) > 0xFFFF else 1
+        if n + w > units and buf:
+            yield buf
+            buf, n = "", 0
+        buf += ch
+        n += w
+    if buf:
+        yield buf
+
+
 def type_text(text: str) -> ActionResult:
     src = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStateHIDSystemState)
-    for i in range(0, len(text), 16):
-        chunk = text[i:i + 16]
+    for chunk in _utf16_chunks(text, 16):
+        n = len(chunk.encode("utf-16-le")) // 2   # the API counts UTF-16 units, not code points
         for down in (True, False):
             ev = Quartz.CGEventCreateKeyboardEvent(src, 0, down)
-            Quartz.CGEventKeyboardSetUnicodeString(ev, len(chunk), chunk)
+            Quartz.CGEventKeyboardSetUnicodeString(ev, n, chunk)
             Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
         time.sleep(0.012)
     return ActionResult(True, "Typed the text.")

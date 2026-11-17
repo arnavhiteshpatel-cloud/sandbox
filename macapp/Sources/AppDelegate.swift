@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         hotkeys.onPress = { [weak self] id in self?.hotkeyPressed(id) }
         hotkeys.onRelease = { [weak self] id in self?.hotkeyReleased(id) }
-        hotkeys.register(HotKeys.defaults)
+        hotkeys.start()
 
         system.send = { [weak self] ev in self?.daemon.post("api/system/event", ["event": ev]) }
         system.start()
@@ -44,7 +44,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func serviceReady() {
         setIcon("smallcircle.filled.circle")
-        buildHUD()
+        hotkeys.retryTapIfNeeded()          // Accessibility may have been granted since launch
+        if hudPanel == nil { buildHUD() }   // onReady fires again after a service restart
         if !UserDefaults.standard.bool(forKey: "onboarded") {
             onboard()
         }
@@ -136,12 +137,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             popover = p
             return p
         }()
+        NSApp.activate(ignoringOtherApps: true)  // lets a .transient popover close on outside clicks
         if let b = statusItem.button { p.show(relativeTo: b.bounds, of: b, preferredEdge: .minY) }
     }
 
     private func buildMenu() -> NSMenu {
         let m = NSMenu()
-        let header = NSMenuItem(title: statusText, action: nil, keyEquivalent: "")
+        let header = NSMenuItem(title: "\(statusText) · talk: hold \(hotkeys.pttDescription)", action: nil, keyEquivalent: "")
         header.isEnabled = false
         m.addItem(header)
         m.addItem(.separator())

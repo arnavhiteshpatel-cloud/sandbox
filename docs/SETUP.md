@@ -34,7 +34,10 @@ macOS asks for each on first use; you can also open **Command Center → Setting
 | Screen Recording | screenshots for "what's on my screen" and OCR fallback | Privacy & Security → Screen & System Audio Recording |
 | Automation (per app) | controlling Arc, Finder, System Events | prompted per app ("JARVIS wants to control Arc") |
 
-Hot keys use Carbon hot keys, which need **no** Input Monitoring permission.
+Hot keys: **⌃⌥⌘.** (stop) is a Carbon hot key and needs no permission. **Hold ⌥⇧C** (talk) needs **Accessibility**,
+because macOS 15 no longer lets apps register Option/Option+Shift-only shortcuts the normal way. JARVIS reads that one
+key with a keyboard event tap and swallows it, so no "Ç" is typed. Until Accessibility is granted, push-to-talk is
+**⌃⌥C**; it switches to ⌥⇧C automatically once permission is granted (on the next service start, or restart JARVIS).
 
 > **Rebuilding resets permissions.** Ad-hoc signatures change with every build, and macOS ties permissions to the
 > signature. To keep permissions across rebuilds, create a self-signed code-signing certificate once (Keychain Access →

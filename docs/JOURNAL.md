@@ -64,6 +64,15 @@ Recorded 2026-11-17, answers given directly by the user:
 5. **No separate intent-classifier model.** The deterministic router is the fast path and everything else goes to one LLM,
    so only one model is resident.
 
+### Independent review of the unverified macOS code (session 1)
+A separate reviewer audited the Swift, pyobjc, AppleScript and build script. Fixed: ⌥⇧C rejected by macOS 15
+RegisterEventHotKey (now an event tap with a ⌃⌥C fallback); build_app.sh could bundle the project .venv (now
+`uv python find --system --python-preference only-managed` plus a venv check); daemon restart race (generation guard plus
+wait after SIGKILL); UTF-16 length for typed text; hidden apps missed by `visibleProcessList` (now `lsappinfo list` plus
+a pgrep fallback); .pyc writes into the signed bundle (precompiled plus PYTHONPYCACHEPREFIX); duplicate HUD panel after
+restart; popover activation; AXEnhancedUserInterface removed. Reviewed as correct: pyobjc AX/Vision/CGEvent call
+conventions, AppleScript for Arc/Chrome/Safari, lsappinfo parsing, Carbon/IOKit closures, TCC attribution.
+
 ### Known issues / risks
 - Nothing macOS-specific has been executed yet (see LIMITATIONS.md).
 - Qwen3.5's hybrid architecture limits prompt-cache reuse in llama.cpp-based runtimes, so first-step latency per AI task
