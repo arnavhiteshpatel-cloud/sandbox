@@ -27,3 +27,54 @@ Recorded 2026-11-17, answers given directly by the user:
 - Development so far happened in a **Linux x86_64 cloud container** (Claude Code on the web). **No Mac was attached.**
   Consequently, nothing macOS-specific (Swift build, Accessibility, microphone, Arc, power) has been executed yet.
 - Target: MacBook Pro 14" (Nov 2024), M4 Pro, 24 GB, macOS 15.7.3 (as reported by the user; `jarvis doctor` verifies this on the Mac).
+
+## Status (2026-11-17, session 1)
+
+### Completed (code exists, tested where possible)
+- **Core service** (`jarvis/`): config, SQLite DB, event bus, local API with token/Host/Origin guard, CLI.
+- **Level 1 router**: built-ins (apps, URLs, volume, lock, time/date/battery, power modes, memory, shortcuts CRUD by voice,
+  browser follow-ups incl. deterministic "click X" with an ambiguity guard).
+- **Shortcut engine**: validated JSON schema, `{param}` triggers, 25 actions (browser, apps, waits/verify, if/else,
+  reusable blocks, agent steps, Shortcuts-app bridge, windows, files, gated shell/AppleScript), retries, run history,
+  import/export; voice creation dialog ("open Arc and go to this URL" uses the current tab URL).
+- **Agent**: bounded observe→act→verify loop, 25 tools, schema validation and recovery, cancellation, code-enforced
+  safety policy, untrusted-content wrapping, tool subsetting, cache-friendly history.
+- **macOS layer** (unverified): Arc/Chrome/Safari via AppleScript + injected JS (JS verified in Chromium), AX tree
+  snapshot/press/set-value/menus/window frames, CGEvent keys/mouse/scroll, screencapture + Vision OCR, volume/lock/battery/
+  notifications/Shortcuts/open/reveal, permission checks.
+- **Voice**: mic, energy-gated openWakeWord, VAD capture, PTT, follow-up window, ask/confirm by voice, Whisper (MLX/CPU),
+  Kokoro (sentence streaming, interruptible), `say` fallback, idle unloading. Real-model self-test 6/6.
+- **Memory** (explicit vs inferred, FTS5) and **file search** (extractors for PDF/Office/code/images, incremental indexer,
+  duplicates, hybrid Spotlight + FTS + semantic search).
+- **Power**: three modes, auto-switching deferred during tasks, wake word on AC only, charging-only background-QoS indexing.
+- **UI**: pill HUD, menu-bar popover, command center (Live, Dashboard, Shortcuts editor, Memory, Search, Settings).
+- **Native shell** (unverified, parses with swiftc): menu bar, HUD panel, hot keys, sleep/wake/lock/power events, login item,
+  service supervision.
+- **Tooling**: `jarvis doctor`, `jarvis bench`, `jarvis.voice.selftest`, `jarvis.powerprof`, `jarvis.acceptance`,
+  `scripts/build_app.sh`, `scripts/install.sh`.
+
+### Architecture decisions
+1. **Python service + thin Swift shell + web UI.** The Python ecosystem has the local-AI pieces (MLX Whisper, openWakeWord,
+   Kokoro, pyobjc); the Swift shell does what must be native (menu bar, hot keys, panels, login item, system
+   notifications). The web UI could be rendered and verified without a Mac.
+2. **Drive the user's real Arc, not Playwright.** It keeps logins (IB portal) and uses AppleScript + JS for structured DOM
+   access, with the AX tree and then OCR as fallbacks.
+3. **Single multimodal model** (Qwen3.5) for tools and vision, which avoids a second resident model.
+4. **Safety in code, not in prompts.**
+5. **No separate intent-classifier model.** The deterministic router is the fast path and everything else goes to one LLM,
+   so only one model is resident.
+
+### Known issues / risks
+- Nothing macOS-specific has been executed yet (see LIMITATIONS.md).
+- Qwen3.5's hybrid architecture limits prompt-cache reuse in llama.cpp-based runtimes, so first-step latency per AI task
+  must be measured on the Mac.
+- openWakeWord pinned to 0.4.0 (0.5+ needs tflite-runtime, which has no Python 3.12 wheels).
+
+### Exact next actions (do these in order on the Mac)
+1. `./scripts/install.sh`. Fix any Swift compile errors (AppKit can't be type-checked on Linux) and re-run.
+2. `python -m jarvis doctor`. Confirm M4 Pro / 24 GB / macOS 15.7.3 and that all packages and models are present.
+3. Grant permissions; check that the TCC prompts name JARVIS (not python3).
+4. Create "Open My IB" with the real URL; run acceptance tests 7–19 (`python -m jarvis.acceptance --only 7,…,19`).
+5. `jarvis bench --models qwen3.5:4b,qwen3.5:9b,qwen3:8b --repeat 3` and pick models per mode (update MODELS.md).
+6. `sudo … -m jarvis.powerprof` unplugged and fill in POWER.md.
+7. Run the remaining acceptance tests; record in ACCEPTANCE_RESULTS.md.
