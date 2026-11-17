@@ -17,7 +17,7 @@ dependencies = [
 # Voice: wake word, speech recognition, speech synthesis
 voice = [
   "sounddevice>=0.4.6",
-  "openwakeword>=0.6",
+  "openwakeword==0.4.0",        # 0.5+ needs tflite-runtime, which has no Python 3.12 wheels
   "onnxruntime>=1.17",
   "kokoro-onnx>=0.4",
   "soundfile>=0.12",

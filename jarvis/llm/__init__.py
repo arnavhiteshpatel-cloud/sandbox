@@ -39,21 +39,49 @@ class LLMError(Exception):
     pass
 
 
-INLINE_CALL = re.compile(r"<tool_call>\s*(\{.*?\})\s*</tool_call>", re.S)
+INLINE_CALL = re.compile(r"<tool_call>\s*(.*?)\s*(?:</tool_call>|$)", re.S)
+XML_FUNC = re.compile(r"<function=([\w.-]+)>(.*?)(?:</function>|$)", re.S)
+XML_PARAM = re.compile(r"<parameter=([\w.-]+)>\s*(.*?)\s*</parameter>", re.S)
+
+
+def _param_value(v: str):
+    v = v.strip()
+    if v[:1] in "[{" or v in ("true", "false", "null") or re.fullmatch(r"-?\d+(\.\d+)?", v):
+        try:
+            return json.loads(v)
+        except json.JSONDecodeError:
+            pass
+    return v
 
 
 def _parse_inline_calls(content: str) -> tuple[str, list[ToolCall]]:
-    """Some models/templates emit tool calls as text; recover them instead of failing."""
-    calls = []
-    for m in INLINE_CALL.finditer(content or ""):
-        try:
-            obj = json.loads(m.group(1))
-            calls.append(ToolCall(obj.get("name", ""), obj.get("arguments") or obj.get("parameters") or {}))
-        except json.JSONDecodeError:
-            continue
+    """Recover tool calls that a runtime left in the text instead of parsing them.
+
+    Handles both Qwen formats: JSON  <tool_call>{"name":..,"arguments":{..}}</tool_call>
+    and XML  <tool_call><function=open_app><parameter=name>Spotify</parameter></function></tool_call>.
+    """
+    calls: list[ToolCall] = []
+    text = content or ""
+    for m in INLINE_CALL.finditer(text):
+        body = m.group(1).strip()
+        if body.startswith("{"):
+            try:
+                obj = json.loads(body)
+                calls.append(ToolCall(obj.get("name", ""), _coerce_args(obj.get("arguments") or obj.get("parameters") or {})))
+                continue
+            except json.JSONDecodeError:
+                pass
+        for f in XML_FUNC.finditer(body):
+            args = {p.group(1): _param_value(p.group(2)) for p in XML_PARAM.finditer(f.group(2))}
+            calls.append(ToolCall(f.group(1), args))
+    if not calls:  # bare <function=...> without the <tool_call> wrapper
+        for f in XML_FUNC.finditer(text):
+            args = {p.group(1): _param_value(p.group(2)) for p in XML_PARAM.finditer(f.group(2))}
+            calls.append(ToolCall(f.group(1), args))
     if calls:
-        content = INLINE_CALL.sub("", content).strip()
-    return content, calls
+        text = INLINE_CALL.sub("", text)
+        text = XML_FUNC.sub("", text).strip()
+    return text, calls
 
 
 def _strip_think(content: str) -> tuple[str, str]:
@@ -100,6 +128,8 @@ class LLMClient:
                 return json.loads(text) if text else {}
         except aiohttp.ClientConnectorError as e:
             raise LLMError(f"The local AI runtime isn't reachable at {self.base_url}. Is it running?") from e
+        except aiohttp.ClientError as e:
+            raise LLMError(f"The local AI runtime dropped the connection ({type(e).__name__}).") from e
         except asyncio.TimeoutError as e:
             raise LLMError("The local AI model took too long to answer.") from e
 

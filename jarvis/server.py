@@ -22,10 +22,14 @@ log = logging.getLogger("jarvis.server")
 
 
 def load_token() -> str:
+    p = paths.token_path()
     env = os.environ.get("JARVIS_TOKEN")
     if env:
+        # The app generates a fresh token per launch; mirror it to the 0600 file so the
+        # `jarvis ask` CLI can talk to the running service.
+        p.write_text(env)
+        os.chmod(p, 0o600)
         return env
-    p = paths.token_path()
     if p.exists():
         return p.read_text().strip()
     tok = secrets.token_urlsafe(32)
@@ -115,6 +119,15 @@ def make_app(assistant, token: str, port: int) -> web.Application:
             a._apply_voice_profile()
         return J({"ok": True, "power": a.power.status()})
 
+    async def voice_preview(request):
+        b = await body(request)
+        if not a.voice:
+            return J({"error": "Voice is unavailable on this system."}, status=409)
+        a.voice.tts.voice = S.get("voice.tts_voice", a.voice.tts.voice)
+        a.voice.tts.speed = float(S.get("voice.tts_speed", a.voice.tts.speed))
+        asyncio.create_task(a.voice.speak(b.get("text") or "Hello."))
+        return J({"ok": True, "backend": a.voice.tts.backend, "voice": a.voice.tts.voice})
+
     async def mute(request):
         b = await body(request)
         if a.voice:
@@ -138,7 +151,7 @@ def make_app(assistant, token: str, port: int) -> web.Application:
         if "auto" in b:
             S.set("power.auto_switch", bool(b["auto"]))
         if b.get("mode"):
-            a.power.set_mode(b["mode"])
+            a.power.set_mode(b["mode"], immediate=not (a.current and not a.current["task"].done()))
         a._apply_voice_profile()
         return J(a.power.status())
 
@@ -237,7 +250,7 @@ def make_app(assistant, token: str, port: int) -> web.Application:
 
     # --- events ---------------------------------------------------------------------------------
     async def ws(request):
-        sock = web.WebSocketResponse(heartbeat=30)
+        sock = web.WebSocketResponse()  # no heartbeat: loopback only, avoids periodic wakeups
         await sock.prepare(request)
         q = a.events.queue()
         await sock.send_json({"type": "hello", "state": a.status()})
@@ -284,6 +297,7 @@ def make_app(assistant, token: str, port: int) -> web.Application:
     r.add_post("/api/answer", answer)
     r.add_post("/api/system/event", system_event)
     r.add_post("/api/mute", mute)
+    r.add_post("/api/voice/preview", voice_preview)
     r.add_get("/api/settings", get_settings)
     r.add_put("/api/settings", put_settings)
     r.add_post("/api/power", power_mode)

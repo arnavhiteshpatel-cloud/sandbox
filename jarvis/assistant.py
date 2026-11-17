@@ -143,6 +143,12 @@ class Assistant:
     def _apply_voice_profile(self) -> None:
         if not self.voice:
             return
+        v, st = self.voice, self.settings
+        v.tts.voice = st.get("voice.tts_voice", v.tts.voice)
+        v.tts.speed = float(st.get("voice.tts_speed", v.tts.speed))
+        v.wake.threshold = float(st.get("voice.wake_threshold", v.wake.threshold))
+        if v.tts._kokoro is None and v.tts.backend != "kokoro" and v.tts.kokoro_available():
+            v.tts.backend = "kokoro"   # models were installed after start-up
         size = self.settings.get("voice.stt_model", "auto")
         self.voice.stt.set_size(PROFILES[self.power.mode]["stt_model"] if size == "auto" else size)
         self.voice.set_wake_enabled(self.power.wake_word_allowed())
@@ -410,7 +416,8 @@ class Assistant:
             msg = f"Battery at {pct} percent" + (", charging." if b.get("source") == "ac" else ".") if pct is not None else "I can't read the battery."
             return await self._reply(msg + f" {PROFILES[self.power.mode]['label']} mode.")
         if n == "power_mode":
-            self.power.set_mode(a["mode"])
+            # The user asked for it directly (this command is the only task), so apply now.
+            self.power.set_mode(a["mode"], immediate=True)
             pending = self.power.pending_mode
             return await self._reply(f"{PROFILES[a['mode']]['label']} mode" + (" after the current task." if pending else "."))
         if n == "mute_mic":

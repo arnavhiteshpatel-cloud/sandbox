@@ -99,3 +99,16 @@ async def test_untrusted_content_is_wrapped(settings, scripted):
     await Agent(llm, settings).run("read", c, mode="balanced", model="m", cancel=CancelToken())
     tool_msg = llm.calls[1]
     assert "<untrusted" in tool_msg["content"]
+
+
+def test_inline_tool_call_formats():
+    from jarvis.llm import _parse_inline_calls
+
+    _, c = _parse_inline_calls('<tool_call>\n<function=open_app>\n<parameter=name>\nSpotify\n</parameter>\n</function>\n</tool_call>')
+    assert c[0].name == "open_app" and c[0].arguments == {"name": "Spotify"}
+    _, c = _parse_inline_calls('<tool_call>{"name": "scroll", "arguments": {"direction": "down"}}</tool_call>')
+    assert c[0].name == "scroll" and c[0].arguments["direction"] == "down"
+    _, c = _parse_inline_calls('<tool_call><function=trash_files><parameter=paths>["a","b"]</parameter></function></tool_call>')
+    assert c[0].arguments["paths"] == ["a", "b"]
+    text, c = _parse_inline_calls("Just text.")
+    assert c == [] and text == "Just text."

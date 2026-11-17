@@ -29,6 +29,7 @@ class AgentResult:
     llm_ms: int = 0
     llm_calls: int = 0
     asked_user: bool = False
+    error: str | None = None       # set when the model/runtime failed (never counted as success)
 
 
 Confirm = Callable[[str], Awaitable[bool]]
@@ -42,8 +43,13 @@ class Agent:
         self.confirm = confirm
         self.progress = progress or (lambda e: None)
 
-    def _compact_history(self, messages: list[dict]) -> None:
-        """Keep only the latest full observation; older ones become stubs (small models + speed)."""
+    def _compact_history(self, messages: list[dict], budget_chars: int = 40000) -> None:
+        """Append-only history keeps the runtime's prompt cache valid (each step then only
+        evaluates the new tokens; hybrid models like Qwen3.5 cannot reuse a partially changed
+        prefix). Only when the context grows past the budget are older observations replaced
+        by stubs, all at once, costing a single full re-evaluation."""
+        if sum(len(m.get("content") or "") for m in messages) < budget_chars:
+            return
         obs_idx = [i for i, m in enumerate(messages) if m["role"] == "tool" and m.get("name") in ("observe", "read_page", "look_at_screen")]
         for i in obs_idx[:-1]:
             if not messages[i]["content"].startswith("[older"):
@@ -84,6 +90,7 @@ class Agent:
                 reply = chat_task.result()
             except LLMError as e:
                 res.message = f"My local AI model isn't responding: {e}"
+                res.error = str(e)
                 return res
             res.llm_ms += reply.ms
             res.llm_calls += 1

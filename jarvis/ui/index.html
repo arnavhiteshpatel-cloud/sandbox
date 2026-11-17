@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en" data-view="center" data-status="idle" data-motion="normal">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS</title>
+<link rel="stylesheet" href="/ui/app.css">
+</head>
+<body>
+
+<!-- Floating HUD (minimal pill). Shown by the native shell only while JARVIS is active. -->
+<section id="hud" aria-live="polite">
+  <div class="pill">
+    <span class="dot" aria-hidden="true"><i></i></span>
+    <div class="pill-text">
+      <div class="pill-line" id="hud-line">Listening…</div>
+      <div class="pill-sub" id="hud-sub"></div>
+    </div>
+    <div class="pill-actions" id="hud-actions"></div>
+  </div>
+</section>
+
+<!-- Menu-bar popover -->
+<section id="compact">
+  <header class="c-head">
+    <div class="brand"><span class="mini-orb"></span><span>JARVIS</span></div>
+    <span class="chip" id="c-status">Idle</span>
+  </header>
+  <form class="cmd" id="c-form" autocomplete="off">
+    <input id="c-input" placeholder="Type a command…  (or hold ⌥⇧C to talk)" aria-label="Command">
+  </form>
+  <div class="c-row">
+    <div class="seg" id="c-mode" role="radiogroup" aria-label="Power mode">
+      <button data-mode="battery_saver" title="Battery Saver">Saver</button>
+      <button data-mode="balanced" title="Balanced">Balanced</button>
+      <button data-mode="max_performance" title="Maximum Performance">Max</button>
+    </div>
+  </div>
+  <div class="c-meta" id="c-meta"></div>
+  <ul class="c-tasks" id="c-tasks"></ul>
+  <footer class="c-foot">
+    <button class="ghost" id="c-mute">Mute mic</button>
+    <button class="danger" id="c-stop" title="⌃⌥⌘.">Stop</button>
+    <button class="primary" id="c-open">Command Center</button>
+  </footer>
+</section>
+
+<!-- Command center -->
+<section id="center">
+  <aside class="side">
+    <div class="brand big"><span class="mini-orb"></span><div><b>JARVIS</b><small id="side-sub">Local assistant</small></div></div>
+    <nav id="nav">
+      <a href="#live" class="active"><span class="ico">◉</span>Live</a>
+      <a href="#dashboard"><span class="ico">◎</span>Dashboard</a>
+      <a href="#shortcuts"><span class="ico">⌁</span>Shortcuts</a>
+      <a href="#memory"><span class="ico">◇</span>Memory</a>
+      <a href="#search"><span class="ico">⌕</span>Search</a>
+      <a href="#settings"><span class="ico">⚙</span>Settings</a>
+    </nav>
+    <div class="side-foot">
+      <div class="kv"><span>Mode</span><b id="sf-mode">—</b></div>
+      <div class="kv"><span>Model</span><b id="sf-model">—</b></div>
+      <div class="kv"><span>Listening</span><b id="sf-wake">—</b></div>
+      <button class="danger wide" id="sf-stop">Emergency stop <kbd>⌃⌥⌘.</kbd></button>
+    </div>
+  </aside>
+
+  <main>
+    <!-- LIVE -->
+    <div class="view active" id="v-live">
+      <div class="topbar">
+        <form class="cmd big" id="l-form" autocomplete="off"><input id="l-input" placeholder="Ask JARVIS anything, or type a command"></form>
+      </div>
+      <div class="banner hidden" id="l-question"></div>
+      <div class="grid2">
+        <section class="panel">
+          <h2>Current task</h2>
+          <div id="l-current" class="current empty">Nothing running.</div>
+          <ol id="l-steps" class="steps"></ol>
+        </section>
+        <section class="panel">
+          <h2>Conversation</h2>
+          <ul id="l-convo" class="convo"></ul>
+        </section>
+      </div>
+      <section class="panel">
+        <div class="panel-head"><h2>Recent tasks</h2><button class="ghost sm" id="l-refresh">Refresh</button></div>
+        <table class="table" id="l-tasks"><thead><tr><th>When</th><th>Request</th><th>Route</th><th>Result</th><th>Time</th></tr></thead><tbody></tbody></table>
+      </section>
+      <section class="panel">
+        <h2>Activity log</h2>
+        <ul id="l-activity" class="activity"></ul>
+      </section>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="view" id="v-dashboard">
+      <div class="dash">
+        <div class="hero">
+          <div class="orb" id="orb" aria-hidden="true">
+            <svg viewBox="0 0 200 200"><circle class="r1" cx="100" cy="100" r="92"/><circle class="r2" cx="100" cy="100" r="78"/>
+              <circle class="r3" cx="100" cy="100" r="64"/><circle class="core" cx="100" cy="100" r="40"/></svg>
+          </div>
+          <div class="hero-text"><div class="status-big" id="d-status">Idle</div><div class="muted" id="d-last">—</div></div>
+        </div>
+        <div class="cards">
+          <div class="card"><h3>Power</h3><div class="big" id="d-power">—</div><div class="muted" id="d-battery">—</div>
+            <div class="seg" id="d-mode"><button data-mode="battery_saver">Saver</button><button data-mode="balanced">Balanced</button><button data-mode="max_performance">Max</button></div></div>
+          <div class="card"><h3>Local AI</h3><div class="big" id="d-model">—</div><div class="muted" id="d-llm">—</div></div>
+          <div class="card"><h3>Voice</h3><div class="big" id="d-voice">—</div><div class="muted" id="d-voice2">—</div></div>
+          <div class="card"><h3>Files</h3><div class="big" id="d-files">—</div><div class="muted" id="d-files2">—</div></div>
+        </div>
+        <section class="panel"><h2>Quick shortcuts</h2><div id="d-quick" class="quick"></div></section>
+      </div>
+    </div>
+
+    <!-- SHORTCUTS -->
+    <div class="view" id="v-shortcuts">
+      <div class="split">
+        <section class="panel list-panel">
+          <div class="panel-head"><h2>Shortcuts</h2><button class="primary sm" id="s-new">New</button></div>
+          <ul id="s-list" class="list"></ul>
+          <div class="row gap">
+            <button class="ghost sm" id="s-export">Export</button>
+            <label class="ghost sm btn">Import<input type="file" id="s-import" accept="application/json" hidden></label>
+          </div>
+        </section>
+        <section class="panel editor" id="s-editor">
+          <div class="empty">Select a shortcut or create a new one.</div>
+        </section>
+      </div>
+    </div>
+
+    <!-- MEMORY -->
+    <div class="view" id="v-memory">
+      <section class="panel">
+        <div class="panel-head"><h2>Memory</h2>
+          <div class="row gap"><input id="m-q" placeholder="Search memories"><a class="ghost sm btn" id="m-export" download>Export</a></div></div>
+        <p class="muted">Only what is listed here is remembered. <b>Explicit</b> = you told JARVIS. <b>Inferred</b> = JARVIS's guess, marked as uncertain.</p>
+        <form id="m-add" class="row gap"><input id="m-new" placeholder="Add something to remember…" class="grow">
+          <select id="m-kind"><option value="">auto</option><option>preference</option><option>fact</option><option>instruction</option><option>project</option><option>location</option><option>website</option></select>
+          <button class="primary sm">Add</button></form>
+        <ul id="m-list" class="mem"></ul>
+      </section>
+    </div>
+
+    <!-- SEARCH -->
+    <div class="view" id="v-search">
+      <section class="panel">
+        <form id="f-form" class="row gap"><input id="f-q" class="grow" placeholder="e.g. the paper I downloaded about Parkinson's last month">
+          <select id="f-kind"><option value="">any type</option><option>pdf</option><option>document</option><option>presentation</option><option>spreadsheet</option><option>image</option><option>code</option></select>
+          <select id="f-days"><option value="">any time</option><option value="7">past week</option><option value="31">past month</option><option value="365">past year</option></select>
+          <button class="primary sm">Search</button></form>
+        <div class="muted" id="f-stats"></div>
+        <ul id="f-results" class="results"></ul>
+      </section>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="view" id="v-settings">
+      <div class="settings" id="settings"></div>
+    </div>
+  </main>
+</section>
+
+<script src="/ui/app.js"></script>
+</body>
+</html>

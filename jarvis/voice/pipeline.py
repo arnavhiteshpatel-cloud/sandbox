@@ -215,6 +215,7 @@ class VoiceLoop:
         with self._req_lock:
             if self._capture_req is req:
                 self._capture_req = None
+        self.wake.reset()  # the command audio must never feed a later wake-word decision
         fut = req.get("future")
         if audio is None:
             self.events.emit("status", status="idle")

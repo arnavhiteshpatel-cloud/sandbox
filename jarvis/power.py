@@ -114,14 +114,14 @@ class PowerManager:
             return self.settings.get("power.auto_on_battery_low", "battery_saver")
         return self.settings.get("power.auto_on_battery", "balanced")
 
-    def set_mode(self, mode: str, manual: bool = True) -> str:
+    def set_mode(self, mode: str, manual: bool = True, immediate: bool = False) -> str:
         if mode not in PROFILES:
             raise ValueError(f"unknown mode {mode}")
         if manual:
             self.settings.set("power.mode", mode)
             # A manual choice wins until the power source changes again.
             self._manual_until_source = self.state.source
-        if self.task_running and mode != self.mode:
+        if self.task_running and mode != self.mode and not immediate:
             self.pending_mode = mode
             self.events.emit("power", mode=self.mode, pending=mode, note="applies after the current task")
             return self.mode

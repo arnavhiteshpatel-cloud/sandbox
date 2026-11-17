@@ -161,3 +161,8 @@ async def test_llm_down_shortcuts_still_work(assistant):
     assert (await assistant.handle_text("open spotify"))["ok"]
     r = await assistant.handle_text("summarize my week")
     assert not r["ok"] and "local AI" in r["message"]
+
+
+async def test_power_mode_command_applies_immediately(assistant):
+    r = await assistant.handle_text("switch to battery saver mode")
+    assert r["ok"] and assistant.power.mode == "battery_saver" and "after" not in r["message"]
