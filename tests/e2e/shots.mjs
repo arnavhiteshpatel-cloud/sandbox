@@ -13,9 +13,10 @@ await page.waitForSelector('[data-testid="app"]', { timeout: 30000 });
 console.log(await page.evaluate(() => window.__faceletDemo()));
 await page.waitForFunction(() => document.querySelector('[data-testid="scramble"]')?.textContent?.includes(" ") && !document.querySelector('[data-testid="scramble"]').textContent.includes("generating"), null, { timeout: 60000 });
 await page.waitForTimeout(800);
-for (const layout of ["rail", "stage"]) {
-  await page.evaluate((l) => window.__faceletStore.getState().updateSettings({ layout: l }), layout);
-  await page.waitForTimeout(600);
-  await page.screenshot({ path: `${out}/layout-${layout}.png` });
+const themes = (process.env.THEMES || "hud").split(",");
+for (const t of themes) {
+  await page.evaluate((t) => window.__faceletStore.getState().updateSettings({ theme: t }), t);
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${out}/app-${t}.png` });
 }
 await browser.close();

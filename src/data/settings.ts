@@ -1,8 +1,9 @@
-export type ThemeId = "oled" | "graphite" | "midnight" | "paper";
+export type ThemeId = "hud" | "vision" | "telemetry" | "black";
 export type TimerFont = "inter" | "system" | "helvetica" | "mono" | "rounded" | "serif";
 
 export interface Settings {
-  layout: "rail" | "stage";
+  showCube3d: boolean;
+  showRuler: boolean;
   theme: ThemeId;
   accent: string;
   timerFont: TimerFont;
@@ -40,9 +41,10 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  layout: "rail",
-  theme: "oled",
-  accent: "#30d158",
+  showCube3d: true,
+  showRuler: true,
+  theme: "hud",
+  accent: "",
   timerFont: "inter",
   timerWeight: 450,
   timerScale: 1,
@@ -60,7 +62,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hideUiWhileTiming: true,
   showScrambleImage: true,
   showSidebar: true,
-  showRolling: ["ao5", "ao12"],
+  showRolling: [],
   statsRows: ["mo3", "ao5", "ao12", "ao25", "ao50", "ao100", "ao200", "ao500", "ao1000", "ao2000", "ao5000", "ao10000"],
   trimPct: 5,
   confirmDelete: false,
@@ -82,21 +84,25 @@ export const TIMER_FONTS: Record<TimerFont, { label: string; stack: string }> = 
   serif: { label: "New York", stack: "ui-serif, 'New York', Georgia, serif" },
 };
 
-export const THEMES: Record<ThemeId, { label: string; vars: Record<string, string> }> = {
-  oled: {
-    label: "OLED Black",
-    vars: { "--bg": "#000000", "--bg-elev": "#0b0b0c", "--bg-elev2": "#141416", "--fg": "#ffffff", "--fg2": "#a1a1a6", "--fg3": "#636366", "--fg4": "#3a3a3c", "--line": "#1c1c1e", "--line2": "#2c2c2e", "--tile-bg": "#ffffff", "--tile-fg": "#000000" },
+export const THEMES: Record<ThemeId, { label: string; desc: string; vars: Record<string, string> }> = {
+  hud: {
+    label: "HUD",
+    desc: "Deep space-black, ice-blue light, lit glass edges",
+    vars: { "--bg": "#03050a", "--bg-glow": "#0c1220", "--panel-a": "rgba(22,27,38,.72)", "--panel-b": "rgba(9,12,18,.74)", "--edge-a": "rgba(170,200,255,.30)", "--edge-b": "rgba(170,200,255,.05)", "--edge-c": "rgba(170,200,255,.16)", "--grid": "rgba(140,170,255,.045)", "--fg": "#eef3ff", "--fg2": "rgba(214,224,245,.72)", "--fg3": "rgba(190,205,235,.48)", "--fg4": "rgba(170,190,230,.22)", "--line": "rgba(160,185,235,.08)", "--line2": "rgba(160,185,235,.16)", "--accent": "#7fdcff", "--accent-soft": "rgba(127,220,255,.12)", "--glow": "rgba(127,220,255,.18)", "--bg-elev": "#0b0f17", "--bg-elev2": "#121826" },
   },
-  graphite: {
-    label: "Graphite",
-    vars: { "--bg": "#111113", "--bg-elev": "#1a1a1d", "--bg-elev2": "#232327", "--fg": "#f5f5f7", "--fg2": "#a1a1a6", "--fg3": "#6e6e73", "--fg4": "#424245", "--line": "#252528", "--line2": "#343438", "--tile-bg": "#f5f5f7", "--tile-fg": "#111113" },
+  vision: {
+    label: "Vision",
+    desc: "Frosted glass with soft colored light",
+    vars: { "--bg": "#06070b", "--bg-glow": "#141a2c", "--panel-a": "rgba(255,255,255,.075)", "--panel-b": "rgba(255,255,255,.035)", "--edge-a": "rgba(255,255,255,.34)", "--edge-b": "rgba(255,255,255,.05)", "--edge-c": "rgba(255,255,255,.14)", "--grid": "transparent", "--fg": "#ffffff", "--fg2": "rgba(255,255,255,.72)", "--fg3": "rgba(255,255,255,.46)", "--fg4": "rgba(255,255,255,.2)", "--line": "rgba(255,255,255,.07)", "--line2": "rgba(255,255,255,.15)", "--accent": "#ffffff", "--accent-soft": "rgba(255,255,255,.14)", "--glow": "rgba(255,255,255,.12)", "--bg-elev": "#12141b", "--bg-elev2": "#1b1e27" },
   },
-  midnight: {
-    label: "Midnight",
-    vars: { "--bg": "#05070d", "--bg-elev": "#0b0f1a", "--bg-elev2": "#121828", "--fg": "#eef2ff", "--fg2": "#9aa3b8", "--fg3": "#5d6579", "--fg4": "#323a4d", "--line": "#141a2a", "--line2": "#1f2738", "--tile-bg": "#eef2ff", "--tile-fg": "#05070d" },
+  telemetry: {
+    label: "Telemetry",
+    desc: "Amber instrument panel",
+    vars: { "--bg": "#050403", "--bg-glow": "#16120c", "--panel-a": "rgba(22,19,14,.8)", "--panel-b": "rgba(10,9,7,.8)", "--edge-a": "rgba(255,190,100,.34)", "--edge-b": "rgba(255,190,100,.05)", "--edge-c": "rgba(255,190,100,.18)", "--grid": "rgba(255,190,100,.045)", "--fg": "#fff7ec", "--fg2": "rgba(255,236,210,.72)", "--fg3": "rgba(255,205,140,.5)", "--fg4": "rgba(255,205,140,.22)", "--line": "rgba(255,190,100,.08)", "--line2": "rgba(255,190,100,.16)", "--accent": "#ffb547", "--accent-soft": "rgba(255,181,71,.13)", "--glow": "rgba(255,181,71,.2)", "--bg-elev": "#110e0a", "--bg-elev2": "#1a1610" },
   },
-  paper: {
-    label: "Paper",
-    vars: { "--bg": "#f6f5f2", "--bg-elev": "#ffffff", "--bg-elev2": "#eeece8", "--fg": "#0a0a0a", "--fg2": "#55555a", "--fg3": "#8e8e93", "--fg4": "#c7c7cc", "--line": "#e5e3df", "--line2": "#d6d4cf", "--tile-bg": "#0a0a0a", "--tile-fg": "#f6f5f2" },
+  black: {
+    label: "Pure Black",
+    desc: "Flat OLED black, no glow or grid",
+    vars: { "--bg": "#000000", "--bg-glow": "#000000", "--panel-a": "#0a0a0b", "--panel-b": "#0a0a0b", "--edge-a": "#1f1f22", "--edge-b": "#1f1f22", "--edge-c": "#1f1f22", "--grid": "transparent", "--fg": "#ffffff", "--fg2": "#a1a1a6", "--fg3": "#6e6e73", "--fg4": "#3a3a3c", "--line": "#1a1a1c", "--line2": "#2c2c2e", "--accent": "#30d158", "--accent-soft": "rgba(48,209,88,.12)", "--glow": "transparent", "--bg-elev": "#0b0b0c", "--bg-elev2": "#141416" },
   },
 };

@@ -233,3 +233,59 @@ export function Sparkline({ solves, stats, n = 100, height = 64 }: { solves: Sol
 export function useDetailState() {
   return useState<{ label: string; end: number } | null>(null);
 }
+
+/** Compact grid of averages (current large, best small) for the studio dock. */
+export function StatsGrid({ solves, stats, d, onDetail }: { solves: Solve[]; stats: SessionStats; d: number; onDetail: Detail }) {
+  const settings = useStore((s) => s.settings);
+  const openSolve = useStore((s) => s.openSolve);
+  const n = solves.length;
+  const sum = stats.summary;
+  const rows = settings.statsRows.map((l) => stats.rows.find((r) => r.label === l)).filter((r): r is NonNullable<typeof r> => !!r);
+  return (
+    <div className="sgrid" data-testid="stats-table">
+      <button className="sg" onClick={() => sum.bestIdx >= 0 && openSolve(solves[sum.bestIdx].id)}>
+        <span className="l">single</span>
+        <span className="c num">{n ? fmtSolve(solves[n - 1], d) : "–"}</span>
+        <span className="b num">{sum.bestIdx >= 0 ? fmtSingle(sum.best, d) : "–"}</span>
+      </button>
+      {rows.map((r) => {
+        const curOk = !Number.isNaN(r.current);
+        const isPb = curOk && r.bestEnd === n - 1 && n > r.spec.n;
+        return (
+          <button key={r.label} className={"sg" + (curOk ? "" : " na") + (isPb ? " pb" : "")} onClick={() => curOk && onDetail({ label: r.label, end: n - 1 })}>
+            <span className="l">{r.label}</span>
+            <span className="c num" data-testid={"cur-" + r.label}>{curOk ? fmtAvg(r.current, d) : "–"}</span>
+            <span
+              className="b num"
+              data-testid={"best-" + r.label}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (r.bestEnd >= 0) onDetail({ label: r.label, end: r.bestEnd });
+              }}
+            >
+              {r.bestEnd >= 0 ? fmtAvg(r.best, d) : "–"}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Most recent solves, newest first (compact). */
+export function RecentSolves({ solves, stats, d, count = 9 }: { solves: Solve[]; stats: SessionStats; d: number; count?: number }) {
+  const openSolve = useStore((s) => s.openSolve);
+  const items = [];
+  for (let i = solves.length - 1; i >= Math.max(0, solves.length - count); i--) {
+    const s = solves[i];
+    const ao5 = stats.rolling.get("ao5")?.avg[i] ?? NaN;
+    items.push(
+      <button key={s.id} className="rs" onClick={() => openSolve(s.id)} data-testid="solve-row">
+        <span className="i num">{i + 1}</span>
+        <span className={"t num" + (stats.pbSingle[i] && i > 0 ? " pb" : "")}>{fmtSolve(s, d)}</span>
+        <span className="a num">{Number.isNaN(ao5) ? "" : fmtAvg(ao5, d)}</span>
+      </button>,
+    );
+  }
+  return <div className="recent">{items.length ? items : <div className="empty">No solves yet</div>}</div>;
+}

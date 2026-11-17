@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="base.css"><style>
+.scr{position:absolute;top:92px;left:0;right:0;text-align:center;font-size:30px;line-height:1.5;color:#d6d6da;letter-spacing:.04em;word-spacing:.35em;padding:0 220px}
+.t{position:absolute;top:300px;left:0;right:0;text-align:center;font-size:310px;font-weight:300;letter-spacing:-.045em;line-height:1}
+.bar{position:absolute;left:0;right:0;bottom:0;height:52px;border-top:1px solid #161618;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:13px;color:#6e6e73}
+.bar b{color:#d6d6da;font-weight:500}.nav{display:flex;gap:26px}.nav span{color:#5a5a5f}.nav span.on{color:#fff}
+.kbd{border:1px solid #2c2c2e;border-radius:5px;padding:1px 6px;margin-right:6px;color:#8e8e93}
+.net{position:absolute;right:30px;bottom:78px;opacity:.9}
+.drawer{position:absolute;right:0;top:0;bottom:52px;width:0}
+</style></head><body>
+<div class="tl"><i></i><i></i><i></i></div>
+<div class="scr mono" id="scr"></div>
+<div class="t num">12.93</div>
+<div class="net" id="net"></div>
+<div class="bar"><div><b>Session 1</b> &nbsp;·&nbsp; 3×3 &nbsp;·&nbsp; 19,043 solves</div>
+<div class="nav"><span class="on">Timer</span><span>History</span><span>Analytics</span><span>Training</span><span>Sessions</span></div>
+<div><span class="kbd">Tab</span>statistics</div></div>
+<script type="module">import {SCRAMBLE,netSVG} from "./mock.js";scr.textContent=SCRAMBLE;net.innerHTML=netSVG(11);</script>
+</body></html>

@@ -34,6 +34,8 @@ export const CubeNet = memo(function CubeNet({ n, scramble, colors, unit = 13 }:
           height={unit - gap}
           rx={unit * 0.06}
           fill={colors[c] ?? "#888"}
+          stroke="var(--sticker-line, rgba(0,0,0,0.18))"
+          strokeWidth={0.6}
         />,
       );
     });

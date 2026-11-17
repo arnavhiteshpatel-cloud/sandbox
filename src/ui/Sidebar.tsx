@@ -3,8 +3,6 @@ import { liveSessions, useStore } from "../data/store";
 import { getEvent } from "../core/events";
 import { IconChevronDown } from "./icons";
 import { Menu, useMenu } from "./Overlay";
-import { AvgDetail } from "./AvgDetail";
-import { NavIcons, Sparkline, SolveList, StatsBand, StatsTable, SummaryLine, useDetailState, useSessionData } from "./blocks";
 
 export function SessionPicker({ showEvent = true }: { showEvent?: boolean }) {
   const sessions = useStore((s) => s.sessions);
@@ -57,46 +55,3 @@ export function SessionPicker({ showEvent = true }: { showEvent?: boolean }) {
   );
 }
 
-/** Layout "rail": slim icon strip on the left, typographic stats rail on the right. */
-export function NavStrip() {
-  return (
-    <div className="nav-strip fade-when-timing">
-      <NavIcons vertical />
-    </div>
-  );
-}
-
-export function Rail() {
-  const { settings, solves, stats, d } = useSessionData();
-  const [detail, setDetail] = useDetailState();
-  return (
-    <aside className={"rail fade-when-timing" + (settings.showSidebar ? "" : " hidden")} data-testid="sidebar">
-      <div className="rail-head">
-        <SessionPicker />
-      </div>
-      <SummaryLine stats={stats} d={d} />
-      <Sparkline solves={solves} stats={stats} />
-      <StatsTable solves={solves} stats={stats} d={d} onDetail={setDetail} />
-      <SolveList solves={solves} stats={stats} d={d} columns={settings.listColumns} />
-      {detail && <AvgDetail solves={solves} label={detail.label} end={detail.end} onClose={() => setDetail(null)} />}
-    </aside>
-  );
-}
-
-/** Layout "stage": no side panels; a full-width instrument band at the bottom. */
-export function StageFooter() {
-  const { solves, stats, d } = useSessionData();
-  const [detail, setDetail] = useDetailState();
-  return (
-    <div className="stage-footer fade-when-timing">
-      <div className="stage-footer-top">
-        <SummaryLine stats={stats} d={d} />
-        <div style={{ flex: 1, maxWidth: 520 }}>
-          <Sparkline solves={solves} stats={stats} height={40} />
-        </div>
-      </div>
-      <StatsBand solves={solves} stats={stats} d={d} onDetail={setDetail} />
-      {detail && <AvgDetail solves={solves} label={detail.label} end={detail.end} onClose={() => setDetail(null)} />}
-    </div>
-  );
-}

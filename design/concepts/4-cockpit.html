@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="base.css"><style>
+.top{position:absolute;top:18px;left:96px;right:24px;display:flex;align-items:center;gap:18px;font-size:13px;color:#8e8e93}.top b{color:#fff;font-weight:600;font-size:14px}
+.top .sp{flex:1}.top .ic{width:30px;height:30px;border-radius:9px;background:#111113;display:inline-block;margin-left:6px}
+.scr{position:absolute;top:84px;left:48px;width:880px;font-size:28px;line-height:1.45;letter-spacing:.03em;word-spacing:.3em;color:#ececf0}
+.t{position:absolute;top:330px;left:40px;width:900px;text-align:center;font-size:270px;font-weight:400;letter-spacing:-.045em;line-height:1}
+.net{position:absolute;left:60px;bottom:40px}
+.panel{position:absolute;right:24px;top:72px;bottom:24px;width:520px;background:#0c0c0e;border:1px solid #1c1c1f;border-radius:20px;padding:20px 22px;display:flex;flex-direction:column;gap:16px}
+.chips{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.chip{background:#141417;border-radius:12px;padding:10px 12px}.chip .l{font-size:11px;color:#6e6e73;text-transform:uppercase;letter-spacing:.08em;font-weight:600}.chip .v{font-size:22px;font-weight:500;margin-top:2px}.chip .b{font-size:12px;color:#6e6e73}
+.h{font-size:11px;color:#6e6e73;text-transform:uppercase;letter-spacing:.1em;font-weight:600;display:flex;justify-content:space-between}
+.list{display:grid;grid-template-columns:repeat(2,1fr);gap:2px 24px;font-size:14px}.list div{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #161618}.list span{color:#555}
+</style></head><body>
+<div class="tl"><i></i><i></i><i></i></div>
+<div class="top"><b>Session 1</b><span>3×3 · WCA</span><span class="sp"></span><span class="ic"></span><span class="ic"></span><span class="ic"></span><span class="ic"></span><span class="ic"></span></div>
+<div class="scr mono" id="scr"></div>
+<div class="t num">12.93</div>
+<div class="net" id="net"></div>
+<div class="panel"><div class="chips" id="chips"></div><div class="h"><span>Last 200 solves</span><span>ao12 line</span></div><div id="ch"></div>
+<div class="h"><span>Recent</span><span>ao5</span></div><div class="list num" id="list"></div></div>
+<script type="module">import {SCRAMBLE,STATS,RECENT,netSVG,chartSVG} from "./mock.js";scr.textContent=SCRAMBLE;net.innerHTML=netSVG(12);
+chips.innerHTML=[STATS[0],STATS[2],STATS[3],STATS[6]].map(([l,c,b])=>`<div class="chip"><div class="l">${l}</div><div class="v num">${c}</div><div class="b num">best ${b}</div></div>`).join("");
+ch.innerHTML=chartSVG(474,300,{dot:"rgba(255,255,255,.22)",line:"#fff"});
+list.innerHTML=RECENT.map((t,i)=>`<div><span>${19043-i}</span>${t}</div>`).join("");</script>
+</body></html>

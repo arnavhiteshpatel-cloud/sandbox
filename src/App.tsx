@@ -1,12 +1,11 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { liveSessions, sessionSolves, useStore, type View } from "./data/store";
-import { NavStrip, Rail } from "./ui/Sidebar";
 import { TimerView, engine } from "./views/TimerView";
 import { SolveSheet } from "./ui/SolveSheet";
 import { THEMES, TIMER_FONTS } from "./data/settings";
 import { layersOpen, Modal } from "./ui/Overlay";
 import { useScramble } from "./scramble/useScramble";
-import { NavIcons } from "./ui/blocks";
+import { HudTopBar } from "./ui/hud";
 
 const HistoryView = lazy(() => import("./views/HistoryView"));
 const AnalyticsView = lazy(() => import("./views/AnalyticsView"));
@@ -43,7 +42,7 @@ const SHORTCUTS: [string, string][] = [
   ["Esc", "Cancel inspection / close panels / back to timer"],
   ["⌘Z / ⇧⌘Z", "Undo / redo"],
   ["⌘1 / ⌘2 / ⌘3", "Last solve: OK / +2 / DNF"],
-  ["⌘⌫", "Delete last solve"],
+  ["⌥Z  or  ⌘⌫", "Delete last solve"],
   ["⌘E", "Comment on last solve"],
   ["← / →", "Previous / next scramble"],
   ["⌥↑ / ⌥↓", "Previous / next session"],
@@ -71,12 +70,14 @@ export default function App() {
   // theme / typography
   useEffect(() => {
     const root = document.documentElement;
-    const t = THEMES[settings.theme] ?? THEMES.oled;
+    const t = THEMES[settings.theme] ?? THEMES.hud;
     for (const [k, v] of Object.entries(t.vars)) root.style.setProperty(k, v);
-    root.style.setProperty("--accent", settings.accent);
+    if (settings.accent) root.style.setProperty("--accent", settings.accent);
     root.style.setProperty("--font-timer", TIMER_FONTS[settings.timerFont]?.stack ?? TIMER_FONTS.inter.stack);
     root.style.setProperty("--timer-weight", String(settings.timerWeight));
-    root.style.colorScheme = settings.theme === "paper" ? "light" : "dark";
+    root.style.colorScheme = "dark";
+    document.documentElement.style.background = t.vars["--bg"];
+    document.body.style.background = t.vars["--bg"];
     document.body.classList.toggle("no-anim", !settings.animations);
   }, [settings.theme, settings.accent, settings.timerFont, settings.timerWeight, settings.animations]);
 
@@ -93,6 +94,12 @@ export default function App() {
         e.preventDefault();
         st.setView(v);
       };
+      if (e.altKey && !mod && e.code === "KeyZ") {
+        const l = lastSolve();
+        e.preventDefault();
+        if (l) st.deleteSolves([l.id]);
+        return;
+      }
       if (e.altKey && !mod) {
         const map: Record<string, View> = { Digit1: "timer", Digit2: "history", Digit3: "analytics", Digit4: "train", Digit5: "sessions", Comma: "settings" };
         if (map[e.code]) return go(map[e.code]);
@@ -183,28 +190,26 @@ export default function App() {
   if (!ready) return <div className="splash">facelet</div>;
 
   return (
-    <div className={"app" + (timing ? " timing" : "")} data-testid="app">
+    <div className={"app theme-" + settings.theme + (timing ? " timing" : "")} data-testid="app">
+      <div className="bg-layer" />
+      <div className="grid-layer" />
       <div className="drag-strip" data-tauri-drag-region />
-      {settings.layout === "rail" && <NavStrip />}
-      {view === "timer" ? (
-        <TimerView layout={settings.layout} />
-      ) : (
-        <Suspense fallback={<div className="main" />}>
-          <div className="main" key={view}>
-            {settings.layout === "stage" && (
-              <div className="topbar-left" style={{ top: 22, position: "absolute" }}>
-                <NavIcons />
-              </div>
-            )}
-            {view === "history" && <HistoryView />}
-            {view === "analytics" && <AnalyticsView />}
-            {view === "train" && <TrainView />}
-            {view === "sessions" && <SessionsView />}
-            {view === "settings" && <SettingsView />}
-          </div>
-        </Suspense>
-      )}
-      {settings.layout === "rail" && view === "timer" && <Rail />}
+      <HudTopBar />
+      <main className="content">
+        {view === "timer" ? (
+          <TimerView />
+        ) : (
+          <Suspense fallback={<div className="page" />}>
+            <div className="page-host" key={view}>
+              {view === "history" && <HistoryView />}
+              {view === "analytics" && <AnalyticsView />}
+              {view === "train" && <TrainView />}
+              {view === "sessions" && <SessionsView />}
+              {view === "settings" && <SettingsView />}
+            </div>
+          </Suspense>
+        )}
+      </main>
       {openSolveId && <SolveSheet />}
       {help && (
         <Modal title="Keyboard shortcuts" onClose={() => setHelp(false)}>

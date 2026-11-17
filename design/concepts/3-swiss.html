@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="base.css"><style>
+:root{--acc:#ff5a1f}
+.lab{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--acc);font-weight:600}
+.grid{position:absolute;inset:64px 56px 40px 56px;display:grid;grid-template-columns:1fr 360px;column-gap:64px}
+.left{display:flex;flex-direction:column;border-top:1px solid #222}
+.scrbox{padding-top:14px}.scr{font-size:30px;line-height:1.45;letter-spacing:.02em;word-spacing:.3em;color:#eaeaea;margin-top:12px;max-width:900px}
+.timebox{margin-top:auto;border-top:1px solid #222;padding-top:14px}
+.t{font-size:300px;font-weight:500;letter-spacing:-.06em;line-height:.86;margin:14px 0 0 -12px}
+.right{border-top:1px solid #222;padding-top:14px;display:flex;flex-direction:column}
+.sg{display:grid;grid-template-columns:1fr 1fr;margin-top:12px}
+.sg>div{border-bottom:1px solid #1d1d1d;padding:10px 0}
+.sg .l{font-size:12px;color:#777}.sg .v{font-size:22px;font-weight:500;letter-spacing:-.01em}.sg .b{font-size:12px;color:#777;margin-left:6px}
+.foot{position:absolute;left:56px;right:56px;bottom:14px;display:flex;justify-content:space-between;font-size:12px;color:#666}
+.net{margin-top:auto}
+.top{position:absolute;left:56px;right:56px;top:22px;display:flex;justify-content:flex-end;gap:28px;font-size:13px;color:#777}.top .on{color:#fff}
+</style></head><body>
+<div class="tl"><i></i><i></i><i></i></div>
+<div class="top"><span class="on">Timer</span><span>History</span><span>Analytics</span><span>Training</span><span>Sessions</span><span>Settings</span></div>
+<div class="grid">
+ <div class="left">
+  <div class="scrbox"><div class="lab">01 — Scramble · 3×3</div><div class="scr mono" id="scr"></div></div>
+  <div class="timebox"><div class="lab">02 — Time</div><div class="t num">12.93</div></div>
+ </div>
+ <div class="right"><div class="lab">03 — Averages · current / best</div><div class="sg" id="sg"></div><div class="net" id="net"></div></div>
+</div>
+<div class="foot"><span>Session 1 — 19,043 solves — mean 17.47</span><span>Hold space</span></div>
+<script type="module">import {SCRAMBLE,STATS,netSVG} from "./mock.js";scr.textContent=SCRAMBLE;net.innerHTML=netSVG(13);
+sg.innerHTML=STATS.slice(0,12).map(([l,c,b])=>`<div><div class="l">${l}</div><div class="v num">${c}<span class="b">${b}</span></div></div>`).join("");</script>
+</body></html>

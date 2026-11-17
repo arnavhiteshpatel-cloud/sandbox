@@ -1,0 +1,3 @@
+*{box-sizing:border-box}html,body{margin:0;height:100%}body{width:1512px;height:945px;overflow:hidden;font-family:'Inter Variable',sans-serif;-webkit-font-smoothing:antialiased;font-feature-settings:"tnum","cv11","ss01";color:#fff;background:#000;position:relative}
+.mono{font-family:'JetBrains Mono Variable',monospace}.num{font-variant-numeric:tabular-nums}
+.tl{position:absolute;left:18px;top:16px;display:flex;gap:8px}.tl i{width:12px;height:12px;border-radius:50%;background:#3a3a3c;display:block}

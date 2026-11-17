@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="base.css"><style>
+.scr{position:absolute;top:56px;left:0;right:0;text-align:center;font-size:26px;letter-spacing:.04em;word-spacing:.3em;color:#e5e5ea;padding:0 260px;line-height:1.5}
+.ring{position:absolute;left:50%;top:520px;transform:translate(-50%,-50%)}
+.t{position:absolute;left:0;right:0;top:440px;text-align:center;font-size:158px;font-weight:300;letter-spacing:-.045em;line-height:1}
+.corner{position:absolute;font-size:13px;color:#8e8e93}
+.tl2{left:32px;top:56px}.tl2 b{display:block;color:#fff;font-size:16px;font-weight:600;margin-bottom:4px}
+.bl{left:32px;bottom:30px;display:grid;grid-template-columns:auto auto auto;gap:5px 18px}.bl .l{color:#6e6e73}.bl .c{color:#fff}
+.br{right:32px;bottom:30px;text-align:right}.tr{right:32px;top:56px}
+.nav{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);display:flex;gap:10px}.nav span{width:7px;height:7px;border-radius:50%;background:#3a3a3c}.nav span.on{background:#fff}
+</style></head><body>
+<div class="tl"><i></i><i></i><i></i></div>
+<div class="scr mono" id="scr"></div>
+<svg class="ring" width="560" height="560"><circle cx="280" cy="280" r="268" fill="none" stroke="#1a1a1c" stroke-width="2"/><circle cx="280" cy="280" r="268" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="1684" stroke-dashoffset="520" transform="rotate(-90 280 280)" stroke-linecap="round"/></svg>
+<div class="t num">12.93</div>
+<div class="corner tl2"><b>Session 1</b>3×3 · 19,043 solves</div>
+<div class="corner tr" id="net"></div>
+<div class="corner bl num" id="bl"></div>
+<div class="corner br"><div id="ch"></div><div style="margin-top:6px">last 100 · ao12</div></div>
+<div class="nav"><span class="on"></span><span></span><span></span><span></span><span></span></div>
+<script type="module">import {SCRAMBLE,STATS,netSVG,chartSVG} from "./mock.js";scr.textContent=SCRAMBLE;net.innerHTML=netSVG(11);
+bl.innerHTML=[STATS[0],STATS[2],STATS[3],STATS[6],STATS[9]].map(([l,c,b])=>`<span class="l">${l}</span><span class="c">${c}</span><span class="l">${b}</span>`).join("");
+ch.innerHTML=chartSVG(300,80,{n:100,dot:"rgba(255,255,255,.25)"});</script>
+</body></html>
