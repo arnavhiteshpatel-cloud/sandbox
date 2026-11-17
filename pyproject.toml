@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jarvis-assistant"
+version = "0.1.0"
+description = "JARVIS: a local-first, voice-controlled macOS assistant (no cloud AI required)"
+requires-python = ">=3.11"
+dependencies = [
+  "aiohttp>=3.9",
+  "numpy>=1.26",
+  "rapidfuzz>=3.6",
+]
+
+[project.optional-dependencies]
+# Voice: wake word, speech recognition, speech synthesis
+voice = [
+  "sounddevice>=0.4.6",
+  "openwakeword>=0.6",
+  "onnxruntime>=1.17",
+  "kokoro-onnx>=0.4",
+  "soundfile>=0.12",
+]
+stt-mlx = ["mlx-whisper>=0.4"]          # Apple Silicon (Metal) Whisper
+stt-cpu = ["faster-whisper>=1.0"]        # portable CPU Whisper (used for Linux tests)
+# File search extractors
+files = ["pypdf>=4", "python-docx>=1.1", "python-pptx>=0.6", "openpyxl>=3.1"]
+# macOS native bridges
+macos = [
+  "pyobjc-core>=10",
+  "pyobjc-framework-Cocoa>=10",
+  "pyobjc-framework-Quartz>=10",
+  "pyobjc-framework-ApplicationServices>=10",
+  "pyobjc-framework-Vision>=10",
+  "pyobjc-framework-AVFoundation>=10",
+]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+jarvis = "jarvis.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["jarvis*"]
+
+[tool.setuptools.package-data]
+jarvis = ["ui/*", "ui/**/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

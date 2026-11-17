@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+.jarvis-dev/
+models/
+*.gguf
+*.onnx
+*.wav

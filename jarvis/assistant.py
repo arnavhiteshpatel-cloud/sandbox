@@ -1,0 +1,645 @@
+"""The assistant: routes each request to the cheapest capable level and keeps the conversation.
+
+Level 1  deterministic built-ins and your shortcuts (no LLM)
+Level 2/3 the local LLM agent with tools (bounded observe-act-verify loop)
+"""
+from __future__ import annotations
+
+import asyncio
+import datetime as dt
+import logging
+import re
+import subprocess
+import sys
+import time
+import uuid
+from dataclasses import dataclass, field
+
+from . import router
+from .agent import Agent, ToolContext
+from .agent import policy
+from .agent.prompts import context_block
+from .config import Settings
+from .db import Database
+from .events import EventBus
+from .llm import LLMError, make_client
+from .memory import Memory
+from .platform import get_computer
+from .platform.base import ActionResult
+from .power import PROFILES, PowerManager
+from .search import Search, keywords
+from .shortcuts import CancelToken, ShortcutEngine, ShortcutStore, match as match_shortcut
+from .shortcuts import builder
+from .shortcuts.engine import Cancelled, RunResult
+from .shortcuts.model import ShortcutError
+
+log = logging.getLogger("jarvis")
+
+YES = re.compile(r"^(yes|yeah|yep|yup|sure|ok|okay|go ahead|do it|confirm|confirmed|affirmative|please do|proceed|"
+                 r"correct|that's right|right|save it|absolutely|of course|yes please)\b", re.I)
+BROWSERS = {"Arc", "Google Chrome", "Safari", "Brave Browser", "Microsoft Edge", "Vivaldi", "Chromium"}
+PROGRESS_PHRASES = {"open_url": "Opening the page.", "read_page": "Reading the page.", "search_files": "Searching your files.",
+                    "look_at_screen": "Looking at the screen.", "find_duplicates": "Checking for duplicates.",
+                    "list_folder": "Going through the folder.", "read_file": "Reading the document.",
+                    "move_file": "Organizing the files.", "click": "Working through the page."}
+
+
+@dataclass
+class Session:
+    id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
+    history: list[dict] = field(default_factory=list)
+    last_active: float = field(default_factory=time.time)
+    browser: str | None = None
+    browser_active: bool = False
+    last_results: list = field(default_factory=list)
+
+
+class Assistant:
+    def __init__(self, settings: Settings | None = None, db: Database | None = None, computer=None, events: EventBus | None = None):
+        self.settings = settings or Settings()
+        self.db = db or Database()
+        self.events = events or EventBus()
+        self.computer = computer or get_computer(self.settings.get("browser.default", "Arc"))
+        self.memory = Memory(self.db)
+        self.shortcuts = ShortcutStore(self.db)
+        self.llm = make_client(self.settings)
+        self.search = Search(self.db, self.settings, embed=self._embed)
+        self.power = PowerManager(self.settings, self.events, on_mode_change=self._on_mode_change)
+        self.engine = ShortcutEngine(self.computer, self.shortcuts, self.settings, speak=self.say, confirm=self.confirm,
+                                     agent=self._agent_for_shortcut, on_step=lambda t, d: self.events.emit(t, **d))
+        self.agent = Agent(self.llm, self.settings, confirm=self.confirm, progress=self._agent_progress)
+        self.voice = None
+        self.session = Session()
+        self.current: dict | None = None        # {"task": asyncio.Task, "cancel": CancelToken, "id": int, "text": str}
+        self.pending_question: dict | None = None
+        self.last_activity = time.time()
+        self.llm_ok: bool | None = None
+        self._last_progress_spoken = 0.0
+        self._lock = asyncio.Lock()
+
+    # --- lifecycle --------------------------------------------------------------------------
+    async def start(self, voice: bool = True) -> None:
+        loop = asyncio.get_running_loop()
+        self.events.bind_loop(loop)
+        if self.settings.get("power.auto_switch", True):
+            self.power.power_source_changed()
+        if voice and self.settings.get("voice.enabled", True):
+            try:
+                from .voice.pipeline import VoiceLoop
+
+                self.voice = VoiceLoop(self.settings, self.events, loop, self.handle_utterance, on_wake=self._on_wake)
+                self._apply_voice_profile()
+                self.voice.start()
+            except Exception as e:  # missing audio libs or no microphone: keep running text-only
+                log.warning("voice disabled: %s", e)
+                self.db.log("voice", f"Voice unavailable: {e}", level="warn")
+                self.voice = None
+        asyncio.create_task(self._check_llm())
+        asyncio.create_task(self.power.maintenance_loop(lambda: self.last_activity, self.db))
+        asyncio.create_task(self._janitor())
+        self.db.log("system", "JARVIS started", data={"platform": self.computer.name, "mode": self.power.mode})
+        self.events.emit("status", status="idle")
+
+    async def shutdown(self) -> None:
+        self.stop("shutdown")
+        if self.voice:
+            self.voice.shutdown()
+        self.power.stop_indexing("shutdown")
+        await self.llm.close()
+
+    async def _check_llm(self) -> bool:
+        ok = await self.llm.available()
+        if not ok and sys.platform == "darwin" and self.settings.get("llm.provider") == "ollama":
+            subprocess.run(["open", "-g", "-a", "Ollama"], capture_output=True)  # start Ollama.app in the background
+            for _ in range(20):
+                await asyncio.sleep(0.5)
+                if await self.llm.available():
+                    ok = True
+                    break
+        self.llm_ok = ok
+        self.events.emit("llm", available=ok, model=self.model)
+        return ok
+
+    async def _janitor(self) -> None:
+        """Release voice models after the idle period set by the power mode. Wakes once a minute
+        only while something is loaded; otherwise sleeps for 10 minutes."""
+        while True:
+            loaded = self.voice and (self.voice.stt._model is not None or self.voice.tts._kokoro is not None)
+            await asyncio.sleep(60 if loaded else 600)
+            if self.voice:
+                self.voice.release_idle_models(PROFILES[self.power.mode]["unload_voice_models_after_s"])
+            if time.time() - self.session.last_active > 60 * float(self.settings.get("assistant.session_idle_minutes", 10)):
+                if self.session.history:
+                    self.session = Session()
+
+    @property
+    def model(self) -> str:
+        return self.settings.per_mode("llm.models", self.power.mode, "qwen3.5:9b")
+
+    def _on_mode_change(self, mode: str) -> None:
+        self._apply_voice_profile()
+        self.db.log("power", f"Mode: {PROFILES[mode]['label']}")
+
+    def _apply_voice_profile(self) -> None:
+        if not self.voice:
+            return
+        size = self.settings.get("voice.stt_model", "auto")
+        self.voice.stt.set_size(PROFILES[self.power.mode]["stt_model"] if size == "auto" else size)
+        self.voice.set_wake_enabled(self.power.wake_word_allowed())
+
+    def _on_wake(self) -> None:
+        """Called on the voice thread when the wake word fires: start loading the LLM while
+        the user is still speaking (Balanced / Max Performance only)."""
+        self.last_activity = time.time()
+        if PROFILES[self.power.mode]["prewarm_on_wake"] and self.llm_ok and self.events._loop:
+            asyncio.run_coroutine_threadsafe(self._warm(), self.events._loop)
+
+    async def _warm(self) -> None:
+        try:
+            await self.llm.warm(self.model, PROFILES[self.power.mode]["keep_alive"])
+        except LLMError:
+            pass
+
+    async def _embed(self, texts: list[str]) -> list[list[float]]:
+        return await self.llm.embed(texts, self.settings.get("llm.embed_model"))
+
+    # --- speaking / asking --------------------------------------------------------------------
+    async def say(self, text: str, followup: bool = False) -> None:
+        if not text:
+            return
+        self.events.emit("response", text=text)
+        if self.voice:
+            completed = await self.voice.speak(text)
+            if completed and followup:
+                self.voice.request_followup()
+
+    async def ask(self, question: str, timeout: float = 15.0) -> str | None:
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future = loop.create_future()
+        self.pending_question = {"question": question, "future": fut}
+        self.events.emit("question", text=question)
+        try:
+            await self.say(question)
+            if self.voice:
+                vf = self.voice.listen_once(timeout)
+
+                def done(f):
+                    r = f.result()
+                    if r and not fut.done():
+                        loop.call_soon_threadsafe(lambda: fut.done() or fut.set_result(r))
+
+                vf.add_done_callback(done)
+            try:
+                ans = await asyncio.wait_for(fut, timeout=timeout + 30)
+            except asyncio.TimeoutError:
+                ans = None
+            if ans:
+                self.events.emit("transcript", text=ans, source="answer")
+                self._remember_turn("user", ans)
+            return ans
+        finally:
+            self.pending_question = None
+            self.events.emit("question", text=None)
+
+    def answer(self, text: str) -> bool:
+        """Answer a pending question from the UI."""
+        q = self.pending_question
+        if q and not q["future"].done():
+            q["future"].set_result(text)
+            if self.voice:
+                self.voice.stop_all()
+            return True
+        return False
+
+    async def confirm(self, question: str) -> bool:
+        ans = await self.ask(question)
+        ok = bool(ans and YES.match(router.normalize(ans)))
+        self.db.log("confirm", f"{question} -> {'approved' if ok else 'declined'}", data={"answer": ans})
+        return ok
+
+    # --- entry points --------------------------------------------------------------------------
+    async def handle_utterance(self, text: str, meta: dict | None = None) -> None:
+        await self.handle_text(text, source=(meta or {}).get("source", "voice"))
+
+    def stop(self, reason: str = "stopped") -> bool:
+        stopped = False
+        if self.current and not self.current["task"].done():
+            self.current["cancel"].cancel(reason)
+            stopped = True
+        if self.pending_question and not self.pending_question["future"].done():
+            self.pending_question["future"].set_result(None)
+        if self.voice:
+            self.voice.stop_all()
+        self.events.emit("stopped", reason=reason)
+        self.events.emit("status", status="idle")
+        self.db.log("system", f"Emergency stop ({reason})" if reason != "shutdown" else "Shutdown")
+        return stopped
+
+    async def handle_text(self, text: str, source: str = "text") -> dict:
+        """Process one request. Returns a summary dict (also used by tests and the CLI)."""
+        t0 = time.monotonic()
+        self.last_activity = time.time()
+        text = text.strip()
+        intent = router.route(text, {"browser_active": self.session.browser_active})
+        if intent and intent.name == "stop":
+            was = self.stop("voice command" if source != "text" else "command")
+            if was:
+                await self.say("Stopped.")
+            return {"route": "builtin", "intent": "stop", "ok": True, "message": "Stopped."}
+        if intent and intent.name == "empty":
+            return {"route": "none", "ok": False, "message": ""}
+        # A typed message while a question is pending is the answer to it.
+        if self.pending_question and source in ("text", "ui"):
+            self.answer(text)
+            return {"route": "answer", "ok": True, "message": ""}
+        # A new instruction replaces the running one ("change its instructions").
+        if self.current and not self.current["task"].done():
+            self.current["cancel"].cancel("replaced by a new instruction")
+            try:
+                await asyncio.wait_for(asyncio.shield(self.current["task"]), timeout=3)
+            except Exception:
+                pass
+        if time.time() - self.session.last_active > 60 * float(self.settings.get("assistant.session_idle_minutes", 10)):
+            self.session = Session()
+        self.session.last_active = time.time()
+        self._remember_turn("user", text)
+        self.events.emit("transcript", text=text, source=source)
+        cancel = CancelToken()
+        task = asyncio.create_task(self._dispatch(text, intent, cancel))
+        tid = self.db.task_start(text, "pending")
+        self.current = {"task": task, "cancel": cancel, "id": tid, "text": text}
+        self.power.task_started()
+        self.events.emit("task", id=tid, status="running", text=text)
+        try:
+            result = await task
+        except Cancelled as e:
+            result = {"route": "cancelled", "ok": False, "message": f"Stopped ({e})."}
+        except asyncio.CancelledError:
+            result = {"route": "cancelled", "ok": False, "message": "Stopped."}
+        except Exception as e:
+            log.exception("request failed")
+            result = {"route": "error", "ok": False, "message": f"Something went wrong on my side: {e}"}
+            await self.say("Something went wrong on my side. The details are in the activity log.")
+        finally:
+            self.power.task_finished()
+        ms = int((time.monotonic() - t0) * 1000)
+        result["ms"] = ms
+        status = "ok" if result.get("ok") else ("cancelled" if result.get("route") == "cancelled" else "failed")
+        self.db.execute("UPDATE tasks SET route=? WHERE id=?", (result.get("route", "?"), tid))
+        self.db.task_finish(tid, status, result.get("message", ""), result.get("steps"), ms)
+        self.events.emit("task", id=tid, status=status, text=text, route=result.get("route"), message=result.get("message"), ms=ms)
+        self.events.emit("status", status="idle")
+        if self.current and self.current["id"] == tid:
+            self.current = None
+        return result
+
+    def _remember_turn(self, role: str, content: str) -> None:
+        self.session.history.append({"role": role, "content": content})
+        self.session.history = self.session.history[-20:]
+        self.db.execute("INSERT INTO conversation(session_id, role, content, ts) VALUES (?,?,?,?)",
+                        (self.session.id, role, content, time.time()))
+
+    async def _reply(self, text: str, ok: bool = True, route: str = "builtin", followup: bool = True, **extra) -> dict:
+        self._remember_turn("assistant", text)
+        await self.say(text, followup=followup)
+        return {"route": route, "ok": ok, "message": text, **extra}
+
+    # --- routing ----------------------------------------------------------------------------------
+    async def _dispatch(self, text: str, intent, cancel: CancelToken) -> dict:
+        self.events.emit("status", status="thinking")
+        if intent and intent.name == "shortcut_create":
+            return await self._create_shortcut_dialog(intent.args.get("name"), intent.args.get("description"))
+        m = match_shortcut(text, self.shortcuts.list())
+        if m:
+            return await self._run_shortcut(m.shortcut, m.params, cancel)
+        if intent:
+            res = await self._builtin(intent, cancel)
+            if res is not None:
+                return res
+        return await self._run_agent(text, cancel)
+
+    async def _run_shortcut(self, sc: dict, params: dict, cancel: CancelToken) -> dict:
+        self.events.emit("status", status="acting", detail=sc["name"])
+        res: RunResult = await self.engine.run(sc, params, cancel)
+        if res.browser:
+            self.session.browser = res.browser
+            self.session.browser_active = any(s["action"] in ("open_url",) for s in sc["steps"]) or self.session.browser_active
+        msg = res.message if res.ok else f"The {sc['name']} shortcut didn't finish: {res.message}"
+        return await self._reply(msg, res.ok, "shortcut", steps=res.log)
+
+    async def _call(self, fn, *a, **k) -> ActionResult:
+        return await asyncio.to_thread(fn, *a, **k)
+
+    async def _builtin(self, intent, cancel: CancelToken) -> dict | None:
+        n, a, c = intent.name, intent.args, self.computer
+        if n == "open":
+            app = c.resolve_app(a["target"])
+            if app:
+                self.events.emit("status", status="acting", detail=app)
+                r = await self._call(c.open_app, app)
+                if app in BROWSERS:
+                    self.session.browser, self.session.browser_active = app, True
+                return await self._reply(f"Opening {app}." if r.ok else r.message, r.ok)
+            site = self._website_from_memory(a["target"])
+            if site:
+                return await self._open_url(site, True)
+            sc = self.shortcuts.find_by_name(a["target"])
+            if sc and sc.get("enabled", True):
+                return await self._run_shortcut(sc, {}, cancel)
+            if self.session.browser_active and await self._is_browser_front():
+                return await self._click_on_page(a["target"], intent.text, cancel, allow_agent=True)
+            return None
+        if n == "goto":
+            app = c.resolve_app(a["target"])
+            if app:
+                r = await self._call(c.focus_app, app)
+                return await self._reply(f"{app}." if r.ok else r.message, r.ok)
+            if self.session.browser_active:
+                return await self._click_on_page(a["target"], intent.text, cancel, allow_agent=True)
+            site = self._website_from_memory(a["target"])
+            if site:
+                return await self._open_url(site, True)
+            return None
+        if n == "open_url":
+            return await self._open_url(a["url"], a.get("new_tab", True))
+        if n == "quit_app":
+            if a["name"] in ("tab", "this tab", "the tab"):
+                r = await self._call(c.browser_nav, "close_tab", self.session.browser)
+                return await self._reply("Closed." if r.ok else r.message, r.ok)
+            app = c.resolve_app(a["name"])
+            if not app:
+                return None
+            r = await self._call(c.quit_app, app)
+            return await self._reply(f"Closed {app}." if r.ok else r.message, r.ok)
+        if n == "click":
+            return await self._click_on_page(a["target"], intent.text, cancel, allow_agent=True)
+        if n == "browser_scroll":
+            r = await self._call(c.browser_scroll, a["direction"], 0.8, self.session.browser)
+            self.session.browser_active = True
+            if r.ok:
+                return {"route": "builtin", "ok": True, "message": r.message} | await self._quiet_ok()
+            return await self._reply(r.message, False)
+        if n == "browser_nav":
+            r = await self._call(c.browser_nav, a["action"], self.session.browser)
+            self.session.browser_active = True
+            if r.ok:
+                return {"route": "builtin", "ok": True, "message": r.message} | await self._quiet_ok()
+            return await self._reply(r.message, False)
+        if n == "keys":
+            r = await self._call(c.press_keys, a["combo"])
+            return {"route": "builtin", "ok": r.ok, "message": r.message} | await self._quiet_ok()
+        if n == "type":
+            r = await self._call(c.type_text, a["text"])
+            return {"route": "builtin", "ok": r.ok, "message": r.message} | await self._quiet_ok()
+        if n == "volume":
+            r = await self._call(c.set_volume, a.get("level"), a.get("delta"), a.get("mute"))
+            return await self._reply(r.message, r.ok, followup=False)
+        if n == "lock_screen":
+            r = await self._call(c.lock_screen)
+            return {"route": "builtin", "ok": r.ok, "message": r.message}
+        if n == "display_sleep":
+            r = await self._call(c.display_sleep)
+            return {"route": "builtin", "ok": r.ok, "message": r.message}
+        if n == "time":
+            return await self._reply(dt.datetime.now().strftime("It's %-I:%M %p."))
+        if n == "date":
+            return await self._reply(dt.datetime.now().strftime("It's %A, %B %-d."))
+        if n == "battery":
+            b = await self._call(c.battery)
+            pct = b.get("percent")
+            msg = f"Battery at {pct} percent" + (", charging." if b.get("source") == "ac" else ".") if pct is not None else "I can't read the battery."
+            return await self._reply(msg + f" {PROFILES[self.power.mode]['label']} mode.")
+        if n == "power_mode":
+            self.power.set_mode(a["mode"])
+            pending = self.power.pending_mode
+            return await self._reply(f"{PROFILES[a['mode']]['label']} mode" + (" after the current task." if pending else "."))
+        if n == "mute_mic":
+            if self.voice:
+                self.voice.set_muted(True)
+            return await self._reply("Microphone off. Hold the hotkey when you need me.", followup=False)
+        if n == "remember":
+            m = self.memory.add(a["content"], source="explicit")
+            return await self._reply("Noted.", extra_memory=m)
+        if n == "forget":
+            gone = self.memory.forget(a["query"])
+            return await self._reply(f"Forgotten: {gone[0]['content']}." if gone else "I had nothing stored about that.")
+        if n == "recall":
+            rows = self.memory.search(a["query"], 5)
+            if not rows:
+                return await self._reply("I don't have anything saved about that.")
+            return await self._reply(" ".join(r["content"].rstrip(".") + "." for r in rows[:3]))
+        if n == "shortcut_list":
+            names = [s["name"] for s in self.shortcuts.list()]
+            return await self._reply(("Your shortcuts: " + ", ".join(names) + ".") if names else "You have no shortcuts yet.")
+        if n == "shortcut_delete":
+            sc = self.shortcuts.find_by_name(a["name"])
+            if not sc:
+                return await self._reply(f"I couldn't find a shortcut called {a['name']}.", False)
+            if await self.confirm(f"Delete the shortcut “{sc['name']}”?"):
+                self.shortcuts.delete(sc["id"])
+                return await self._reply("Deleted.")
+            return await self._reply("Kept it.")
+        return None
+
+    async def _quiet_ok(self) -> dict:
+        """Routine follow-up actions (scroll, back) don't need a spoken reply; keep listening."""
+        if self.voice:
+            self.voice.request_followup()
+        return {}
+
+    async def _is_browser_front(self) -> bool:
+        front = await asyncio.to_thread(self.computer.frontmost_app)
+        if front in BROWSERS:
+            self.session.browser = front
+            return True
+        return False
+
+    def _website_from_memory(self, target: str) -> str | None:
+        for r in self.memory.search(target, 5):
+            if r["kind"] == "website" or "http" in r["content"]:
+                m = re.search(r"https?://\S+", r["content"])
+                if m and all(w in r["content"].lower() for w in keywords(target)):
+                    return m.group(0).rstrip(".,)")
+        return None
+
+    async def _open_url(self, url: str, new_tab: bool = True) -> dict:
+        b = self.session.browser or self.settings.get("browser.default", "Arc")
+        r = await self._call(self.computer.browser_open_url, url, b, new_tab)
+        if not r.ok:
+            return await self._reply(r.message, False)
+        w = await self._call(self.computer.browser_wait_ready, b, self.settings.get("browser.page_load_timeout_s", 20), None, url)
+        self.session.browser, self.session.browser_active = b, True
+        title = (w.data or {}).get("title") or url
+        return await self._reply(f"{title} is open." if w.ok and not w.data.get("redirected") else w.message, w.ok)
+
+    async def _click_on_page(self, target: str, user_text: str, cancel: CancelToken, allow_agent: bool) -> dict:
+        b = self.session.browser or self.settings.get("browser.default", "Arc")
+        front = await asyncio.to_thread(self.computer.frontmost_app)
+        if front in BROWSERS:
+            b = front
+        elements = []
+        if front in BROWSERS or self.session.browser_active:
+            try:
+                snap = await asyncio.to_thread(self.computer.browser_snapshot, b)
+                elements = snap.get("elements", [])
+            except Exception:
+                elements = []
+        else:
+            snap = await asyncio.to_thread(self.computer.ui_snapshot, front)
+            elements = snap.get("elements", [])
+        has_ordinal = router.ordinal_in(target) is not None or re.search(r"\b(one|recent|latest|newest|oldest)\b", target)
+        el = None if has_ordinal else router.best_element_match(target, elements)
+        if el:
+            verdict = policy.check("click", {"text": el.get("name")}, user_text=user_text, settings=self.settings,
+                                   element_label=el.get("name", ""))
+            if verdict.confirm and not await self.confirm(f"{verdict.reason} Click it?"):
+                return await self._reply("Left it alone.")
+            self.events.emit("status", status="acting", detail=el.get("name"))
+            if el["id"].startswith("a"):
+                r = await self._call(self.computer.ui_press, el["id"])
+            else:
+                r = await self._call(self.computer.browser_click, el["id"], None, b)
+            if r.ok:
+                self.session.browser, self.session.browser_active = b, True
+                return {"route": "builtin", "ok": True, "message": r.message} | await self._quiet_ok()
+            if not allow_agent:
+                return await self._reply(r.message, False)
+        if not allow_agent:
+            return await self._reply(f"I couldn't find “{target}”.", False)
+        return await self._run_agent(user_text, cancel)
+
+    # --- agent ------------------------------------------------------------------------------------
+    def _agent_progress(self, ev: dict) -> None:
+        self.events.emit(ev.pop("type"), **ev)
+        if ev.get("tool") in PROGRESS_PHRASES and time.time() - self._last_progress_spoken > 25 and self.current:
+            started = self.current.get("started", time.time())
+            if time.time() - started > 8 and self.voice and not self.voice.speaking:
+                self._last_progress_spoken = time.time()
+                asyncio.create_task(self.voice.speak(PROGRESS_PHRASES[ev["tool"]]))
+
+    async def _agent_context(self, text: str) -> str:
+        front = await asyncio.to_thread(self.computer.frontmost_app)
+        bstate = None
+        if front in BROWSERS or self.session.browser_active:
+            try:
+                bstate = await asyncio.to_thread(self.computer.browser_state, self.session.browser)
+            except Exception:
+                bstate = None
+        return context_block(mode=self.power.mode, frontmost=front, browser_state=bstate,
+                             memories=self.memory.context_for(text), shortcuts=[s["name"] for s in self.shortcuts.list()],
+                             recent=self.session.history[:-1], last_results=self.session.last_results)
+
+    def _tool_ctx(self, text: str) -> ToolContext:
+        return ToolContext(computer=self.computer, settings=self.settings, memory=self.memory, search=self.search,
+                           shortcuts=self.shortcuts, engine=self.engine, llm=self.llm, model=self.model,
+                           vision_model=self.settings.get("llm.vision_model") or "",
+                           allow_vision=bool(self.settings.per_mode("agent.allow_vision", self.power.mode, True)),
+                           ask=self.ask, user_text=text,
+                           browser=self.session.browser or self.settings.get("browser.default", "Arc"))
+
+    async def _run_agent(self, text: str, cancel: CancelToken) -> dict:
+        if self.llm_ok is False and not await self._check_llm():
+            return await self._reply("I can't reach my local AI model right now, so I can only run shortcuts and simple commands. "
+                                     "Make sure Ollama is running.", False, "agent")
+        if self.current:
+            self.current["started"] = time.time()
+        self.events.emit("status", status="thinking", detail="local model")
+        ctx = self._tool_ctx(text)
+        think = bool(PROFILES[self.power.mode]["think"] or self.settings.get("llm.think", False))
+        res = await self.agent.run(text, ctx, mode=self.power.mode, model=self.model, cancel=cancel,
+                                   context=await self._agent_context(text), think=think)
+        self.session.browser = ctx.browser
+        if any(s["tool"] in ("open_url", "click", "read_page", "browser_nav") for s in res.steps):
+            self.session.browser_active = True
+        if ctx.last_results:
+            self.session.last_results = ctx.last_results
+        return await self._reply(res.message, res.ok, "agent", steps=res.steps, llm_ms=res.llm_ms, llm_calls=res.llm_calls)
+
+    async def _agent_for_shortcut(self, instruction: str, cancel: CancelToken) -> RunResult:
+        ctx = self._tool_ctx(instruction)
+        res = await self.agent.run(instruction, ctx, mode=self.power.mode, model=self.model, cancel=cancel,
+                                   context=await self._agent_context(instruction))
+        self.session.browser = ctx.browser
+        return RunResult(res.ok, res.message, res.steps, ctx.browser)
+
+    # --- shortcut creation by voice -------------------------------------------------------------
+    async def _create_shortcut_dialog(self, name: str | None, description: str | None) -> dict:
+        if not name:
+            name = await self.ask("What should I call the shortcut?")
+            if not name:
+                return await self._reply("Never mind, then.", False, "dialog", followup=False)
+        name = name.strip().strip(".").strip("'\"")
+        if not description:
+            description = await self.ask("What should the shortcut do?")
+            if not description:
+                return await self._reply("I'll leave it for now. You can also build it in the shortcut editor.", False, "dialog")
+        current_url = None
+        b = self.session.browser or self.settings.get("browser.default", "Arc")
+        try:
+            st = await asyncio.to_thread(self.computer.browser_state, b)
+            current_url = st.get("url") if (st.get("url") or "").startswith("http") else None
+        except Exception:
+            pass
+        clip = await asyncio.to_thread(_clipboard_url)
+        steps, notes = builder.parse_description(description, self.computer.resolve_app, current_url, clip, b)
+        if steps is None and (self.llm_ok or await self._check_llm()):
+            try:
+                r = await self.llm.chat([{"role": "user", "content": builder.llm_prompt(description, b)}],
+                                        model=self.model, json_mode=True, max_tokens=800)
+                data = builder.parse_llm_json(r.content) or {}
+                steps = data.get("steps")
+                if steps and any("ASK_USER" in str(s.get("url", "")) for s in steps):
+                    url = current_url or clip or await self.ask("What's the web address? You can also paste it in the editor.")
+                    if not url:
+                        steps = None
+                    else:
+                        for s in steps:
+                            if s.get("url") == "ASK_USER":
+                                s["url"] = router.spoken_to_url(url) or url
+            except Exception as e:
+                log.warning("LLM shortcut conversion failed: %s", e)
+                steps = None
+        if not steps:
+            self.events.emit("open_editor", name=name, description=description)
+            return await self._reply("I couldn't turn that into reliable steps. I've opened the shortcut editor with your description, sir.",
+                                     False, "dialog")
+        triggers = [name.lower()]
+        low = name.lower()
+        if low.startswith("open my "):
+            triggers.append("open " + low[8:])
+        try:
+            sc = builder.draft(name, triggers, steps)
+        except ShortcutError as e:
+            return await self._reply(f"That draft wasn't valid: {e}", False, "dialog")
+        summary = builder.describe(sc)
+        note = (" " + " ".join(notes)) if notes else ""
+        if not await self.confirm(f"“{sc['name']}” will {summary}.{note} Shall I save it?"):
+            return await self._reply("Discarded.", True, "dialog")
+        saved = self.shortcuts.save(sc, created_by="voice")
+        return await self._reply(f"Saved. Say “{saved['triggers'][0]}” whenever you need it.", True, "dialog", shortcut=saved)
+
+    # --- status -----------------------------------------------------------------------------------
+    def status(self) -> dict:
+        return {
+            "status": self.events.state.get("status", "idle"),
+            "platform": self.computer.name,
+            "power": self.power.status(),
+            "model": self.model,
+            "llm_available": self.llm_ok,
+            "voice": self.voice.status() if self.voice else None,
+            "current_task": {"id": self.current["id"], "text": self.current["text"]} if self.current else None,
+            "question": self.pending_question["question"] if self.pending_question else None,
+            "session": {"browser": self.session.browser, "browser_active": self.session.browser_active,
+                        "turns": len(self.session.history)},
+            "permissions": self.computer.permissions(),
+        }
+
+
+def _clipboard_url() -> str | None:
+    if sys.platform != "darwin":
+        return None
+    try:
+        out = subprocess.run(["pbpaste"], capture_output=True, text=True, timeout=2).stdout.strip()
+    except Exception:
+        return None
+    return out if re.fullmatch(r"https?://\S+", out) else None
