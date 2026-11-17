@@ -19,7 +19,7 @@ _Last updated: 2026-11-17_
 | History, Sessions (create/rename/delete/merge/split/reorder/CSV), Settings, Import wizard | ✅ tested (E2E) |
 | Analytics (11 sections) | ✅ tested (unit + browser) |
 | Training (library, recognition, SRS drill, cross solver, F2L, phases, plan) | ✅ tested (unit + browser) |
-| macOS packaging | ⏳ GitHub Actions workflow `.github/workflows/macos.yml` (builds on Apple Silicon, runs native self-test, uploads .dmg) |
+| macOS packaging | ⏳ Workflow `.github/workflows/macos.yml` is ready, but GitHub stops every job before its first step (2 s, no logs) on this private repo — an account-level Actions restriction (billing/minutes/verification). Either fix that in GitHub Settings → Billing and re-run, or build locally on the Mac (README). |
 | Import of the user's **real** csTimer export | ⏳ awaiting the file — only synthetic data so far |
 
 ## Next steps / open items
