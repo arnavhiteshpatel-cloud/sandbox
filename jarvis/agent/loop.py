@@ -15,7 +15,7 @@ from ..llm import LLMClient, LLMError
 from ..shortcuts.engine import Cancelled, CancelToken
 from . import policy
 from .prompts import context_block, system_prompt
-from .tools import TOOL_MAP, TOOLS, ToolContext, validate_args
+from .tools import TOOL_MAP, TOOLS, ToolContext, select_tools, validate_args
 
 MAX_RESULT_CHARS = 6000
 
@@ -60,7 +60,10 @@ class Agent:
         max_steps = max_steps or int(self.settings.per_mode("agent.max_steps", mode, 20))
         deadline = time.monotonic() + (90 if mode == "battery_saver" else 300 if mode == "balanced" else 900)
         keep_alive = {"battery_saver": "30s", "balanced": "5m", "max_performance": "30m"}.get(mode, "5m")
-        tools = [t.schema() for t in TOOLS if ctx.allow_vision or t.name != "look_at_screen"]
+        offered = select_tools(objective, browser_active=bool(ctx.last_elements) or "Browser tab:" in context,
+                               allow_vision=ctx.allow_vision)
+        offered_names = {t.name for t in offered}
+        tools = [t.schema() for t in offered]
         messages: list[dict] = [
             {"role": "system", "content": system_prompt(self.settings, mode)},
             {"role": "user", "content": (context + "\n\n" if context else "") + f"Request: {objective}"},
@@ -103,13 +106,18 @@ class Agent:
                 # A plain answer counts as completion (conversational replies).
                 res.ok, res.message = True, text or "Done."
                 return res
-            messages.append({"role": "assistant", "content": reply.content or "",
-                             "tool_calls": [{"id": tc.id, "name": tc.name, "arguments": tc.arguments} for tc in reply.tool_calls]})
+            if reply.raw is not None:
+                # Replay exactly what the model generated so the runtime's prompt cache matches
+                # token-for-token (re-rendered tool calls differ and force a full re-evaluation).
+                messages.append({"role": "assistant", "content": reply.raw})
+            else:
+                messages.append({"role": "assistant", "content": reply.content or "",
+                                 "tool_calls": [{"id": tc.id, "name": tc.name, "arguments": tc.arguments} for tc in reply.tool_calls]})
             for tc in reply.tool_calls[:3]:
                 cancel.check()
                 tool = TOOL_MAP.get(tc.name)
                 if tool is None:
-                    out = {"ok": False, "error": f"Unknown tool '{tc.name}'. Available: {', '.join(TOOL_MAP)}"}
+                    out = {"ok": False, "error": f"Unknown tool '{tc.name}'. Available: {', '.join(sorted(offered_names))}"}
                 else:
                     err = validate_args(tool, tc.arguments)
                     out = {"ok": False, "error": err} if err else await self._execute(tool, tc.arguments, ctx, objective)

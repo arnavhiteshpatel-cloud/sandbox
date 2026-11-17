@@ -457,3 +457,33 @@ def validate_args(tool: Tool, args: dict) -> str | None:
         if "enum" in spec and args[k] not in spec["enum"]:
             return f"'{k}' must be one of {spec['enum']}"
     return None
+
+
+# --- tool subsetting -------------------------------------------------------------------------
+# Every tool schema costs prompt tokens on *every* new request (≈70 tokens each). Hybrid models
+# such as Qwen3.5 cannot reuse a partially matching prompt cache, so a smaller tool list directly
+# cuts time-to-first-action and energy. Groups are chosen from the request; when unsure, all.
+import re as _re
+
+CORE = {"observe", "open_app", "open_url", "click", "type_text", "press_keys", "scroll", "browser_nav", "read_page",
+        "wait", "ask_user", "done", "remember", "recall", "run_shortcut"}
+FILES = {"search_files", "list_folder", "read_file", "move_file", "make_folder", "trash_files", "find_duplicates"}
+SCREEN = {"look_at_screen", "click_screen_text", "menu"}
+FILE_WORDS = _re.compile(r"\b(files?|folders?|director(y|ies)|pdfs?|docs?|documents?|downloads?|desktop|resume|cv|papers?|slides?|"
+                         r"spreadsheets?|organi[sz]e|duplicates?|rename|move|delete|trash|lecture|notes|essay|project|~/|/users/)\b", _re.I)
+SCREEN_WORDS = _re.compile(r"\b(screen|see|look|window|menu|button|app|image|picture|photo|chart|showing|displayed|visible)\b", _re.I)
+WEB_WORDS = _re.compile(r"\b(page|site|website|tab|browser|arc|canvas|click|link|assignments?|course|portal|search|google|youtube|url|open|go to)\b", _re.I)
+
+
+def select_tools(objective: str, browser_active: bool = False, allow_vision: bool = True) -> list[Tool]:
+    names = set(CORE)
+    f, sc, web = bool(FILE_WORDS.search(objective)), bool(SCREEN_WORDS.search(objective)), bool(WEB_WORDS.search(objective))
+    if f:
+        names |= FILES
+    if sc or not (f or web or browser_active):
+        names |= SCREEN
+    if not (f or sc or web or browser_active):
+        names |= FILES  # unclear request: offer everything
+    if not allow_vision:
+        names.discard("look_at_screen")
+    return [t for t in TOOLS if t.name in names]

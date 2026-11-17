@@ -52,7 +52,7 @@ final class Daemon {
         try? FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
         let logURL = logDir.appendingPathComponent("daemon.log")
         if !FileManager.default.fileExists(atPath: logURL.path) {
-            FileManager.default.createFile(atPath: logURL.path, contents: nil)
+            _ = FileManager.default.createFile(atPath: logURL.path, contents: nil)
         }
         if let fh = try? FileHandle(forWritingTo: logURL) {
             fh.seekToEndOfFile()

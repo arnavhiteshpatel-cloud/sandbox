@@ -112,3 +112,15 @@ def test_inline_tool_call_formats():
     assert c[0].arguments["paths"] == ["a", "b"]
     text, c = _parse_inline_calls("Just text.")
     assert c == [] and text == "Just text."
+
+
+def test_tool_subsetting():
+    from jarvis.agent.tools import select_tools
+
+    web = {t.name for t in select_tools("open the assignments on canvas", browser_active=True)}
+    assert "click" in web and "trash_files" not in web and "search_files" not in web
+    files = {t.name for t in select_tools("organize the PDFs in my Downloads folder")}
+    assert {"move_file", "find_duplicates", "search_files"} <= files
+    vague = {t.name for t in select_tools("help me with this")}
+    assert "search_files" in vague and "look_at_screen" in vague
+    assert "look_at_screen" not in {t.name for t in select_tools("what's on my screen", allow_vision=False)}

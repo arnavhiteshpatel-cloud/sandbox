@@ -33,6 +33,7 @@ class ChatResult:
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     thinking: str = ""
+    raw: str | None = None   # exact generated text when tool calls were parsed from it (cache-friendly replay)
 
 
 class LLMError(Exception):
@@ -281,14 +282,18 @@ class OpenAICompatClient(LLMClient):
         t0 = time.monotonic()
         data = await self._post("/v1/chat/completions", payload, self._headers())
         choice = (data.get("choices") or [{}])[0].get("message", {})
-        content, thinking = _strip_think(choice.get("content") or "")
+        raw_text = choice.get("content") or ""
+        content, thinking = _strip_think(raw_text)
         calls = [ToolCall(tc["function"]["name"], _coerce_args(tc["function"].get("arguments")), tc.get("id") or "call_" + uuid.uuid4().hex[:10])
                  for tc in choice.get("tool_calls") or []]
+        raw = None
         if not calls:
             content, calls = _parse_inline_calls(content)
+            if calls:
+                raw = raw_text
         usage = data.get("usage") or {}
         return ChatResult(content, calls, int((time.monotonic() - t0) * 1000), model,
-                          usage.get("prompt_tokens"), usage.get("completion_tokens"), choice.get("reasoning_content") or thinking)
+                          usage.get("prompt_tokens"), usage.get("completion_tokens"), choice.get("reasoning_content") or thinking, raw)
 
     async def embed(self, texts, model):
         data = await self._post("/v1/embeddings", {"model": model, "input": texts}, self._headers())
