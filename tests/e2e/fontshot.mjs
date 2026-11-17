@@ -1,0 +1,11 @@
+import { createRequire } from "node:module";
+import { execSync } from "node:child_process";
+const require = createRequire(execSync("npm root -g").toString().trim() + "/");
+const { chromium } = require("playwright");
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1500, height: 960 }, deviceScaleFactor: 2 });
+await p.goto("http://127.0.0.1:1420/design/fonts.html");
+await p.waitForTimeout(2500);
+await p.evaluate(() => document.fonts.ready);
+await p.screenshot({ path: "artifacts/shots/font-specimens.png", fullPage: true });
+await b.close();
