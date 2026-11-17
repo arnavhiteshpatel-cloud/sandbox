@@ -141,7 +141,7 @@ export function ProgressChart({ ds, rolling, metric }: { ds: Dataset; rolling: R
       pb: { stroke: good, width: 1.4 },
     };
     for (const k of ["ao5", "ao12", "ao100", "ao1000"] as LineKey[]) if (em(k)) lineStyle[k] = { ...lineStyle[k], stroke: k === "ao1000" ? fg : accent, width: 2.4 };
-    const full: [number, number] = [prep.xs[0], prep.xs[prep.xs.length - 1] + (effectiveX === "index" ? 0 : 1)];
+    const full: [number, number] = [prep.xs[0], prep.xs[prep.xs.length - 1]];
     const font = `10px ${cssVar("--font-mono", "monospace")}`;
     const fmtX = effectiveX === "index" ? (v: number) => fmtInt(v) : null;
     const opts: uPlot.Options = {
@@ -175,7 +175,7 @@ export function ProgressChart({ ds, rolling, metric }: { ds: Dataset; rolling: R
           font,
           grid: { show: false },
           ticks: { show: true, stroke: grid, size: 4 },
-          size: 30,
+          size: effectiveX === "date" ? 42 : 30,
           ...(fmtX ? { values: (_u: uPlot, vals: number[]) => vals.map((v) => fmtX(v)) } : {}),
           space: 80,
         },
@@ -368,7 +368,7 @@ export function ProgressChart({ ds, rolling, metric }: { ds: Dataset; rolling: R
   const reset = () => {
     const u = plot.current;
     if (!u) return;
-    u.setScale("x", { min: prep.xs[0], max: prep.xs[prep.xs.length - 1] + (effectiveX === "index" ? 0 : 1) });
+    u.setScale("x", { min: prep.xs[0], max: prep.xs[prep.xs.length - 1] });
   };
   const swatch: Record<LineKey, string> = { ao5: "color-mix(in srgb, var(--accent) 40%, transparent)", ao12: "color-mix(in srgb, var(--accent) 45%, transparent)", ao100: "var(--accent)", ao1000: "var(--fg)", pb: "var(--good)" };
 

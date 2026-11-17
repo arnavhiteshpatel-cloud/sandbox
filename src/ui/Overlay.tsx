@@ -14,18 +14,29 @@ function useLayer() {
   }, []);
 }
 
+/** Stack of open modals: Escape closes only the topmost one. */
+const modalStack: number[] = [];
+let modalSeq = 0;
+
 export function Modal({ title, onClose, children, footer, wide, testId }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean; testId?: string }) {
   useLayer();
+  const [myId] = useState(() => ++modalSeq);
+  useEffect(() => {
+    modalStack.push(myId);
+    return () => {
+      const i = modalStack.lastIndexOf(myId);
+      if (i >= 0) modalStack.splice(i, 1);
+    };
+  }, [myId]);
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-      }
+      if (e.key !== "Escape" || modalStack[modalStack.length - 1] !== myId) return;
+      e.stopPropagation();
+      onClose();
     };
     window.addEventListener("keydown", k, true);
     return () => window.removeEventListener("keydown", k, true);
-  }, [onClose]);
+  }, [onClose, myId]);
   return createPortal(
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={"sheet" + (wide ? " wide" : "")} role="dialog" data-testid={testId}>
@@ -78,9 +89,10 @@ export function Menu({ anchor, items, onClose, minWidth }: { anchor: DOMRect; it
         onClose();
       }
     };
-    setTimeout(() => window.addEventListener("mousedown", down), 0);
+    const t = setTimeout(() => window.addEventListener("mousedown", down), 0);
     window.addEventListener("keydown", key, true);
     return () => {
+      clearTimeout(t);
       window.removeEventListener("mousedown", down);
       window.removeEventListener("keydown", key, true);
     };

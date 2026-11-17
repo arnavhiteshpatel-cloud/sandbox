@@ -311,21 +311,30 @@ export function ComparePanel({ ds }: { ds: Dataset }) {
   const n = ds.values.length;
   const [nStr, setN] = useState("1000");
   const N = Math.max(2, Math.min(Math.floor(+nStr) || 1000, 100000));
+  // groups never overlap: N is capped at half of the solves
+  const k = Math.min(N, Math.floor(n / 2));
   const firstLast = useMemo(() => {
-    const k = Math.min(N, n);
     return cached(ds, "fl" + k, () => compareGroups(ds.values.subarray(0, k), ds.values.subarray(n - k), [`First ${fmtInt(k)}`, `Last ${fmtInt(k)}`]));
-  }, [ds, N, n]);
-  // default date ranges: last 90 days of data vs the 90 days before
-  const lastDate = useMemo(() => {
-    let l = -Infinity;
-    for (let i = 0; i < n; i++) if (ds.dates[i] > l) l = ds.dates[i];
-    return Number.isFinite(l) ? l : null;
+  }, [ds, k, n]);
+  // default date ranges: last 90 days of data vs the 90 days before; short histories are split in half
+  const span = useMemo(() => {
+    let f = Infinity,
+      l = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const t = ds.dates[i];
+      if (t > l) l = t;
+      if (t < f) f = t;
+    }
+    return Number.isFinite(l) ? { f, l } : null;
   }, [ds, n]);
   const def = useMemo(() => {
-    if (lastDate == null) return null;
+    if (!span) return null;
     const DAY = 86400000;
-    return { a0: toInput(lastDate - 179 * DAY), a1: toInput(lastDate - 90 * DAY), b0: toInput(lastDate - 89 * DAY), b1: toInput(lastDate) };
-  }, [lastDate]);
+    const { f, l } = span;
+    if (l - f >= 180 * DAY) return { a0: toInput(l - 179 * DAY), a1: toInput(l - 90 * DAY), b0: toInput(l - 89 * DAY), b1: toInput(l) };
+    const mid = f + (l - f) / 2;
+    return { a0: toInput(f), a1: toInput(mid - DAY / 2), b0: toInput(mid + DAY / 2), b1: toInput(l) };
+  }, [span]);
   const [rng, setRng] = useState<{ a0: string; a1: string; b0: string; b1: string } | null>(null);
   const r = rng ?? def;
   const dateCmp = useMemo(() => {
@@ -339,7 +348,7 @@ export function ComparePanel({ ds }: { ds: Dataset }) {
     };
     return compareGroups(pick(r.a0, r.a1), pick(r.b0, r.b1), ["A", "B"]);
   }, [r, ds, n]);
-  const overlap = 2 * N > n;
+  const capped = N > k;
   return (
     <Panel title="Period comparison" sub="Welch's t-test on completed solves (DNFs excluded, their rate shown) · Cohen's d effect size" testId="an-compare">
       <div className="an-cmp-grid">
@@ -351,8 +360,8 @@ export function ComparePanel({ ds }: { ds: Dataset }) {
               <input className="input sm num" style={{ width: 84 }} type="number" min={2} value={nStr} onChange={(e) => setN(e.target.value)} data-testid="an-cmp-n" />
             </label>
           </div>
-          {n >= 4 ? <CompareTable c={firstLast} names={[`First ${fmtInt(Math.min(N, n))}`, `Last ${fmtInt(Math.min(N, n))}`]} /> : <Empty h={120}>Needs at least 4 solves.</Empty>}
-          {overlap && n >= 4 && <div className="an-note">N is more than half of the {fmtInt(n)} solves, so the two groups overlap.</div>}
+          {n >= 4 ? <CompareTable c={firstLast} names={[`First ${fmtInt(k)}`, `Last ${fmtInt(k)}`]} /> : <Empty h={120}>Needs at least 4 solves.</Empty>}
+          {capped && n >= 4 && <div className="an-note">N capped at {fmtInt(k)} (half of the {fmtInt(n)} solves) so the groups don't overlap.</div>}
         </div>
         <div className="an-cmp-card">
           <div className="an-cmp-head">

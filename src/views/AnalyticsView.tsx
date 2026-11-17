@@ -214,7 +214,7 @@ export default function AnalyticsView() {
           {ds.undated > 0 && (
             <span>
               <i className="an-dot" />
-              {fmtInt(ds.undated)} solves have no date: they count in index-based charts (progression by solve #, averages, PBs, distribution) and are left out of date-based ones (calendar, periods, date comparisons).
+              {fmtInt(ds.undated)} {ds.undated === 1 ? "solve has" : "solves have"} no date — counted in index-based charts (progression by solve #, averages, PBs, distribution), left out of date-based ones (calendar, periods, date comparisons).
             </span>
           )}
           {range !== "all" && scoped.length !== filtered.length && (
