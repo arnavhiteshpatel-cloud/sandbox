@@ -1,0 +1,115 @@
+{
+  "date": "2026-11-17T17:53:17.930Z",
+  "results": [
+    {
+      "name": "1. application launches",
+      "ok": true,
+      "detail": "309 ms to interactive"
+    },
+    {
+      "name": "3a. random-state 3x3 scramble generated offline",
+      "ok": true,
+      "detail": "R' U' D2 B R' D F R' D' R B2 R B2 U2 F2 U2 L' B2 L U2 R2"
+    },
+    {
+      "name": "3b. inspection → hold (green) → run → stop records a solve",
+      "ok": true,
+      "detail": "phases inspect/ready/run; time 1518 ms"
+    },
+    {
+      "name": "3c. solve timed accurately from key events (≈1.5 s)",
+      "ok": true,
+      "detail": "1518 ms"
+    },
+    {
+      "name": "3d. time hidden while solving, UI chrome hidden",
+      "ok": true,
+      "detail": "display \"solving\""
+    },
+    {
+      "name": "3e. scramble saved with solve and next scramble shown",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "4. solves persist after restart",
+      "ok": true,
+      "detail": "1 solves"
+    },
+    {
+      "name": "7a. ao5 of 10,11,12,13,14 = 12.00",
+      "ok": true,
+      "detail": "12.00"
+    },
+    {
+      "name": "7b. one DNF is trimmed: DNF,11,12,13,14 → 13.00",
+      "ok": true,
+      "detail": "13.00"
+    },
+    {
+      "name": "7c. +2 applied: DNF,13+,12,13,14 → 13.33",
+      "ok": true,
+      "detail": "13.33"
+    },
+    {
+      "name": "7d. two DNFs → ao5 DNF; mo3 with DNF → DNF",
+      "ok": true,
+      "detail": "DNF / DNF"
+    },
+    {
+      "name": "7e. undo restores previous penalty",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "5a. import preview shows every solve before writing",
+      "ok": true,
+      "detail": "20013 of 20013 (parse+plan 142 ms)"
+    },
+    {
+      "name": "5b. all historical solves imported and verified",
+      "ok": true,
+      "detail": "20013 added in 1717 ms; \"Passed — every source solve is accounted for\""
+    },
+    {
+      "name": "5c. times, penalties, scrambles, comments, dates and order match the source exactly",
+      "ok": true,
+      "detail": "[{\"name\":\"Session 1\",\"n\":19043,\"stored\":19043,\"mism\":0},{\"name\":\"OH\",\"n\":400,\"stored\":400,\"mism\":0},{\"name\":\"2x2\",\"n\":300,\"stored\":300,\"mism\":0},{\"name\":\"Multiphase\",\"n\":120,\"stored\":120,\"mism\":0},{\"name\":\"Old\",\"n\":150,\"stored\":150,\"mism\":0}]"
+    },
+    {
+      "name": "6. repeated import creates no duplicates",
+      "ok": true,
+      "detail": "Import 0 solves"
+    },
+    {
+      "name": "8a. search across 20k+ solves is fast",
+      "ok": true,
+      "detail": "97 ms, 29 rows rendered"
+    },
+    {
+      "name": "8b. timer with ~19k-solve session stats renders quickly",
+      "ok": true,
+      "detail": "221 ms"
+    },
+    {
+      "name": "10a. backup restore brings data back",
+      "ok": true,
+      "detail": "20019 → 19519 → 20019"
+    },
+    {
+      "name": "10b. full export to csTimer format contains every solve",
+      "ok": true,
+      "detail": "20019 exported"
+    },
+    {
+      "name": "11/12. no network access outside the app (offline)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no uncaught page errors",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

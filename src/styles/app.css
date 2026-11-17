@@ -276,3 +276,43 @@ textarea.input { height: auto; padding: 8px 10px; resize: vertical; }
 .splash { height: 100%; display: grid; place-items: center; color: var(--fg3); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.3em; text-transform: uppercase; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 .no-anim * { animation: none !important; transition: none !important; }
+
+/* settings */
+.theme-card { text-align: left; padding: 8px; border-radius: 14px; box-shadow: inset 0 0 0 1px var(--line2); }
+.theme-card.on { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 24px var(--glow); }
+.theme-card .sw { height: 84px; border-radius: 10px; display: grid; place-items: center; position: relative; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+.theme-card .sw span { font-size: 30px; font-weight: 300; letter-spacing: -0.03em; }
+.theme-card .sw i { position: absolute; left: 12px; right: 12px; bottom: 10px; height: 2px; border-radius: 2px; opacity: .8; }
+.theme-card .nm { font-weight: 600; margin: 8px 4px 2px; }
+.theme-card .ds { font-size: 11.5px; color: var(--fg3); margin: 0 4px 4px; }
+.swatch { width: 26px; height: 26px; padding: 0; border: 1px solid var(--line2); border-radius: 7px; background: none; }
+input[type="range"] { accent-color: var(--accent); width: 180px; }
+
+/* history */
+.filters { display: flex; gap: 8px; align-items: center; padding: 10px 12px; flex-wrap: wrap; margin-bottom: 10px; border-radius: 14px !important; }
+.filters .search { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 220px; color: var(--fg3); padding: 0 6px; }
+.filters .search input { background: none; border: 0; outline: none; flex: 1; color: var(--fg); height: 30px; }
+.filters .input[type="date"] { color-scheme: dark; }
+.bulk { display: flex; gap: 6px; align-items: center; margin: 0 0 10px; padding: 6px 10px; border-radius: 12px; background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+.bulk > span { margin-right: 6px; font-weight: 500; }
+.hist-table { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-radius: 16px !important; }
+.hrow { display: grid; grid-template-columns: 70px 100px 80px 150px 140px minmax(0, 1.6fr) minmax(0, 1fr); gap: 12px; align-items: center; height: 34px; padding: 0 16px; font-size: 13.5px; position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--line); cursor: default; }
+.hrow.head { position: static; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fg3); border-bottom: 1px solid var(--line2); height: 38px; }
+.hrow:not(.head):hover { background: var(--accent-soft); }
+.hrow.sel { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.hrow .t { color: var(--fg); font-size: 14.5px; }
+.hrow .scr { font-size: 11.5px; }
+.ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hscroll { flex: 1; overflow-y: auto; position: relative; }
+
+/* sessions */
+.ses-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.ses-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.ses-card.current { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent), 0 20px 50px rgba(0,0,0,.4); }
+.ses-card.selected { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, var(--panel-a)), var(--panel-b)) padding-box, linear-gradient(150deg, var(--edge-a), var(--edge-b) 38%, var(--edge-c)) border-box; }
+.ses-name { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ses-card .ev { text-align: left; color: var(--accent); }
+.ses-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.ses-stats div { display: flex; flex-direction: column; gap: 2px; }
+.ses-stats b { font-weight: 450; font-size: 15px; }
+.ses-stats .cap { font-size: 9.5px; letter-spacing: 0.1em; }
