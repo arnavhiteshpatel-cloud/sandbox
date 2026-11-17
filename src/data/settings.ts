@@ -46,7 +46,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "hud",
   accent: "",
   timerFont: "inter",
-  timerWeight: 450,
+  timerWeight: 300,
   timerScale: 1,
   smallDecimals: false,
   scrambleScale: 1,

@@ -22,6 +22,8 @@ if (import.meta.env.DEV) {
     const parsed = parseBackup(text, "demo.txt");
     const st = useStore.getState();
     const plan = planImport(parsed, st.sessions, st.solves);
+    const ph = st.sessions.filter((s) => (s.opt as any)?.autoCreated && !st.solves.some((x) => x.sessionId === s.id));
+    if (ph.length) await st.backend!.apply([{ t: "hardDeleteSessions", ids: ph.map((s) => s.id) }]);
     await st.backend!.importCommit(importRecordFor(plan, "demo.txt", parsed.format, "demo", text.length, parsed.warnings), plan.sessions, plan.solves, text);
     await st.reload();
     st.setCurrentSession(plan.sessions[0].id);

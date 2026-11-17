@@ -63,6 +63,12 @@ export function ImportFlow({ onClose }: { onClose: () => void }) {
     try {
       const rec = importRecordFor(plan, file.name, parsed.format, file.hash, file.size, parsed.warnings);
       await backend.importCommit(rec, plan.sessions, plan.solves, file.text);
+      // Remove the placeholder session created on first launch if it is still empty.
+      {
+        const s0 = useStore.getState();
+        const placeholders = s0.sessions.filter((s) => (s.opt as any)?.autoCreated && !s.deletedAt && !s0.solves.some((x) => x.sessionId === s.id));
+        if (placeholders.length) await backend.apply([{ t: "hardDeleteSessions", ids: placeholders.map((s) => s.id) }]);
+      }
       await useStore.getState().reload();
       // Verify against what is actually stored in the database now.
       const data = await backend.load();

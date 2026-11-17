@@ -30,6 +30,7 @@ interface Change {
 }
 
 const JOURNAL_KEY = "facelet.journal.v1";
+let initStarted = false;
 
 function readJournal(): { id: string; ops: Op[] }[] {
   try {
@@ -176,6 +177,8 @@ export const useStore = create<AppStore>((set, get) => {
     saving: 0,
 
     async init() {
+      if (initStarted) return;
+      initStarted = true;
       try {
         const backend = await getBackend();
         set({ backend });
@@ -212,7 +215,7 @@ export const useStore = create<AppStore>((set, get) => {
           rank: 1,
           event: "333",
           phases: 1,
-          opt: {},
+          opt: { autoCreated: true },
           createdAt: now,
           updatedAt: now,
           importId: null,
