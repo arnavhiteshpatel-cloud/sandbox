@@ -104,6 +104,17 @@ export function SolveSheet() {
       </div>
       <div className="section-title">Comment</div>
       <textarea className="input" rows={2} style={{ width: "100%" }} value={comment} onChange={(e) => setComment(e.target.value)} onBlur={saveComment} placeholder="Add a note…" data-testid="comment" />
+      <div className="section-title">Date</div>
+      <input
+        className="input"
+        type="datetime-local"
+        style={{ width: "100%", colorScheme: "dark" }}
+        value={solve.date ? new Date(solve.date - new Date(solve.date).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ""}
+        onChange={(e) => {
+          const v = e.target.value ? new Date(e.target.value).getTime() : null;
+          if (v === null || Number.isFinite(v)) updateSolves([solve.id], () => ({ date: v }), "Edit date");
+        }}
+      />
       <div className="section-title">Session</div>
       <select className="input" value={solve.sessionId} onChange={(e) => { moveSolves([solve.id], e.target.value); }} style={{ width: "100%" }}>
         {liveSessions(sessions).map((s) => (

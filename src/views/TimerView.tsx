@@ -177,6 +177,18 @@ export function TimerView() {
     };
   }, [addSolve]);
 
+  // PB notifications (csTimer "logo hint") — only for the solve just completed
+  const pbFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!justSolved || !last || pbFor.current === last.id) return;
+    pbFor.current = last.id;
+    const n = solves.length;
+    const hits: string[] = [];
+    if (n > 1 && stats.pbSingle[n - 1]) hits.push("single " + fmtSingle(stats.values[n - 1], d));
+    for (const r of stats.rows) if (r.bestEnd === n - 1 && n > r.spec.n && Number.isFinite(r.best) && ["ao5", "ao12", "ao50", "ao100", "ao1000"].includes(r.label)) hits.push(r.label);
+    if (hits.length) useStore.getState().toast("New personal best — " + hits.join(" · "), "success");
+  }, [justSolved, last?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!justSolved) return;
     const t = setTimeout(() => setJustSolved(false), 3500);
