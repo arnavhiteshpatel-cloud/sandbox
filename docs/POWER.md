@@ -19,9 +19,9 @@ Further measures:
   model, 3 ms CPU in total, versus 1,598 ms CPU without the gate.
 * **Deterministic first:** about half of everyday commands (apps, volume, scroll, back, click-by-name, shortcuts) never load the LLM.
 * **Prompt-cache friendly agent:** append-only history, and when the runtime returns raw tool-call text, JARVIS replays it
-  verbatim. *Measured (Linux CPU, llama-cpp-python, Qwen3.5-4B, before the verbatim replay):* only 5 of 19 agent calls reused
-  the cache (61–127 new tokens). The other 14 re-read the whole prompt (about 2,400 tokens), because Qwen3.5's hybrid layers
-  can't drop a mismatched tail. Tool subsetting cuts the per-task prompt by about 41% for web tasks. How well Ollama on macOS
+  verbatim. *Measured (Linux CPU, llama-cpp-python, Qwen3.5-4B, same 11 tasks):* before these changes, 5 of 19 calls reused the
+  cache and each call evaluated 1,879 tokens on average. After tool subsetting and verbatim replay, 25 of 36 calls reused it,
+  at 679 tokens on average (2.8× less prompt work, so proportionally less energy), and the median task time halved. How well Ollama on macOS
   reuses the cache must be measured with `jarvis bench` (its "Median LLM call" column).
 * **Pre-warm** the LLM on wake word only in Balanced/Max (overlaps model load with your speech); never in Battery Saver.
 * **Indexing** only while charging, in a separate process at background QoS (`taskpolicy -b`: efficiency cores, throttled

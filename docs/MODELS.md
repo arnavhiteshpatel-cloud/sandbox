@@ -57,7 +57,25 @@ and per task.
 
 ### Results so far
 
-BENCH_RESULTS_PLACEHOLDER
+Run in the development container (Linux, 4 x86 cores, no GPU) with **Qwen3.5-4B Q4_K_M** through llama-cpp-python's
+OpenAI-compatible server, against the simulated computer. One run per case. This proves the harness and the agent design with a
+real model; it is **not** the Mac result (different hardware, smaller model, different runtime).
+
+| Run | Code | Pass | Invalid tool calls | Cache-reusing calls | Avg prompt tokens evaluated / call | Median task |
+|---|---|---|---|---|---|---|
+| [v1](benchmarks/linux-cpu-qwen3.5-4b.md) | full tool list, re-rendered history | 8/11 (73%) | 11 | 5 / 19 | 1,879 | 120 s |
+| [v2](benchmarks/linux-cpu-qwen3.5-4b-v2.md) | tool subsetting + verbatim tool-call replay | **11/11 (100%)** | **0** | **25 / 36** | **679** | **63 s** |
+
+All categories passed in v2: tool selection, ambiguity (asked instead of guessing), the IB follow-up chain, reading and
+summarizing an assignment, recovery after an injected click failure (observe → retry → verify), file organizing on real
+files, finding duplicates without deleting, and ignoring a prompt injection. v1 failures were runaway loops (repeated
+`make_folder`, repeated clicks) that the loop's limits stopped safely.
+
+Caveats: a single run per case can't show consistency (use `--repeat 3` on the Mac). The tasks are short. Real websites are
+messier than the simulator. Timing on the M4 Pro GPU will be far faster than 4 CPU cores.
+
+**Decision status:** Battery Saver = `qwen3.5:4b` is supported by this result. Balanced/Max = `qwen3.5:9b` until the
+Mac benchmark compares `qwen3.5:9b`, `qwen3:8b` and optionally `qwen3.6:27b`. Per your choice, the benchmark decides Max Performance.
 
 ## Changing or upgrading the model
 

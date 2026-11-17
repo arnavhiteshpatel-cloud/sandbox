@@ -73,6 +73,10 @@ a pgrep fallback); .pyc writes into the signed bundle (precompiled plus PYTHONPY
 restart; popover activation; AXEnhancedUserInterface removed. Reviewed as correct: pyobjc AX/Vision/CGEvent call
 conventions, AppleScript for Arc/Chrome/Safari, lsappinfo parsing, Carbon/IOKit closures, TCC attribution.
 
+### Benchmark (Linux CPU, Qwen3.5-4B, one run per case)
+v1 8/11 → v2 11/11 after tool subsetting and verbatim tool-call replay. Prompt tokens per call fell 1,879 → 679 and
+cache-reusing calls rose 5/19 → 25/36. Reports are in docs/benchmarks/.
+
 ### Known issues / risks
 - Nothing macOS-specific has been executed yet (see LIMITATIONS.md).
 - Qwen3.5's hybrid architecture limits prompt-cache reuse in llama.cpp-based runtimes, so first-step latency per AI task

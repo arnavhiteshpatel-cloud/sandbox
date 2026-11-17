@@ -28,7 +28,7 @@ These use `platform/fake.py`, a simulated computer. They prove the logic, **not*
   * Energy gate: 30 s of silence → 0 inferences (3 ms CPU) vs 1,598 ms without the gate.
   * This found and fixed a real bug: openWakeWord 0.4's `reset()` kept about 10 s of audio features, so a previous
     "Hey JARVIS" could re-trigger.
-* **Agent with a real model** (`jarvis bench`): see [MODELS.md](MODELS.md).
+* **Agent with a real model** (`jarvis bench`, Qwen3.5-4B on CPU): **11/11** on the current code, 0 invalid tool calls. See [MODELS.md](MODELS.md).
 
 ## 3. Acceptance tests (must run on the Mac)
 
