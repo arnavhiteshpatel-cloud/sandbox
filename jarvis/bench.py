@@ -140,7 +140,8 @@ async def run_case(case: Case, client, settings, model: str, think: bool) -> dic
             "steps": len(res.steps) if res else 0, "llm_calls": res.llm_calls if res else 0,
             "llm_ms": res.llm_ms if res else 0, "wall_s": round(wall, 2),
             "invalid_calls": sum(1 for st in (res.steps if res else []) if not st["ok"] and ("missing required" in st["result"] or "Unknown tool" in st["result"])),
-            "message": (res.message[:200] if res else "")}
+            "message": (res.message[:200] if res else ""),
+            "trace": [{"tool": st["tool"], "args": st["args"], "ok": st["ok"], "result": st["result"][:200]} for st in (res.steps if res else [])]}
 
 
 async def bench(models: list[str], settings, repeat: int, only: set[str] | None, think: bool) -> dict:
