@@ -1,0 +1,60 @@
+name: Build macOS app
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx tsc -p tsconfig.json --noEmit
+      - run: npx vitest run
+      - name: Rust database tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev
+          mkdir -p dist && echo '<!doctype html>' > dist/index.html
+          cd src-tauri && cargo test --lib
+
+  macos:
+    needs: test
+    runs-on: macos-14   # Apple Silicon (arm64)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: aarch64-apple-darwin }
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: src-tauri }
+      - run: npm ci
+      - name: Build Facelet.app and .dmg
+        run: npx tauri build --target aarch64-apple-darwin
+      - name: Native self-test of the built app (SQLite, restart persistence, import, rollback, restore)
+        run: |
+          APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Facelet.app/Contents/MacOS/facelet"
+          export FACELET_DATA_DIR="$RUNNER_TEMP/facelet-data"
+          for phase in write verify; do
+            FACELET_SELFTEST=$phase FACELET_SELFTEST_OUT="$RUNNER_TEMP/$phase.json" "$APP" &
+            pid=$!; for i in $(seq 1 120); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+            kill $pid 2>/dev/null || true
+            cat "$RUNNER_TEMP/$phase.json"
+            grep -q '"ok": true' "$RUNNER_TEMP/$phase.json"
+          done
+      - name: Package
+        run: |
+          mkdir -p out
+          cp src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg out/ || true
+          ditto -c -k --keepParent src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Facelet.app out/Facelet.app.zip
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Facelet-macOS-arm64
+          path: out/*
+          retention-days: 90

@@ -1,33 +1,3 @@
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import "./styles/app.css";
-import App from "./App";
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
-
-// Development-only helper used by automated screenshots/tests: loads a synthetic csTimer backup.
-if (import.meta.env.DEV) {
-  (window as any).__faceletDemo = async (opts?: any) => {
-    const [{ makeCsTimerBackup }, { parseBackup }, { planImport, importRecordFor }, { useStore }] = await Promise.all([
-      import("./core/testdata"),
-      import("./core/importer"),
-      import("./core/importPlan"),
-      import("./data/store"),
-    ]);
-    const text = JSON.stringify(makeCsTimerBackup(opts));
-    const parsed = parseBackup(text, "demo.txt");
-    const st = useStore.getState();
-    const plan = planImport(parsed, st.sessions, st.solves);
-    await st.backend!.importCommit(importRecordFor(plan, "demo.txt", parsed.format, "demo", text.length, parsed.warnings), plan.sessions, plan.solves, text);
-    await st.reload();
-    st.setCurrentSession(plan.sessions[0].id);
-    return plan.totals;
-  };
-}
-if (import.meta.env.DEV) {
-  import("./data/store").then(({ useStore }) => ((window as any).__faceletStore = useStore));
-}
+// Thin entry: everything (including code shared with cubing.js web workers) lives in
+// separately-loaded chunks, so workers never execute the UI bootstrap.
+import("./boot");

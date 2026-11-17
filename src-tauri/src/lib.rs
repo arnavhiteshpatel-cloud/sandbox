@@ -168,12 +168,29 @@ fn reveal_path(path: String) -> R<()> {
     Ok(())
 }
 
+/// Automated self-test hook: returns the phase name when FACELET_SELFTEST is set (used by CI and
+/// local verification of the packaged app). Normal launches return None.
+#[tauri::command]
+fn selftest_mode() -> Option<String> {
+    std::env::var("FACELET_SELFTEST").ok().filter(|s| !s.is_empty())
+}
+
+#[tauri::command]
+fn selftest_report(app: tauri::AppHandle, report: String, ok: bool) -> R<()> {
+    if let Ok(p) = std::env::var("FACELET_SELFTEST_OUT") {
+        std::fs::write(&p, report.as_bytes()).map_err(|e| e.to_string())?;
+    }
+    app.exit(if ok { 0 } else { 1 });
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let data_dir = app.path().app_data_dir().expect("no app data dir");
+            // FACELET_DATA_DIR lets tests use an isolated data directory.
+            let data_dir = std::env::var("FACELET_DATA_DIR").map(PathBuf::from).unwrap_or_else(|_| app.path().app_data_dir().expect("no app data dir"));
             std::fs::create_dir_all(&data_dir)?;
             let db = Db::open(&data_dir.join("facelet.sqlite")).map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             // Daily automatic backup (kept: newest 30).
@@ -204,7 +221,9 @@ pub fn run() {
             app_paths,
             read_text_file,
             write_text_file,
-            reveal_path
+            reveal_path,
+            selftest_mode,
+            selftest_report
         ])
         .run(tauri::generate_context!())
         .expect("error while running Facelet");
