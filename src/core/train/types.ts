@@ -19,6 +19,8 @@ export interface CaseUser {
   /** preferred algorithm (exact string; one of built-in or custom) */
   preferred?: string;
   notes?: string;
+  /** when the status was last set to "learned" */
+  learnedAt?: number;
 }
 
 export interface Collection {

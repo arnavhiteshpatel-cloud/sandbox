@@ -3,6 +3,7 @@
  * Everything here is derived from the verified OLL/PLL libraries via the facelet simulator.
  */
 import { OLL, PLL, type AlgCase } from "../algs";
+export type { AlgCase };
 import { Cube, FACES, expandRepeats, invertAlg, parseMoves, type Face } from "../cube";
 import { llView, type LLView } from "../llstate";
 
@@ -15,6 +16,8 @@ export const AUFS = ["", "U", "U2", "U'"];
 
 /** Short display label: "Ua", "T", "21". */
 export const shortName = (c: AlgCase) => (c.set === "PLL" ? c.id.slice(4) : c.id.slice(3));
+/** Readable label in lists: "Ua", "OLL 33". */
+export const caseLabel = (c: AlgCase) => (c.set === "PLL" ? shortName(c) : "OLL " + shortName(c));
 
 /** Group order for display (as in the library definition). */
 export function groupsOf(cases: AlgCase[]): { group: string; cases: AlgCase[] }[] {
@@ -30,10 +33,6 @@ export function groupsOf(cases: AlgCase[]): { group: string; cases: AlgCase[] }[
 /** Last-layer view of a case: inverse alg applied to solved, optionally viewed after pre/post AUF. */
 export function caseView(alg: string, pre = "", post = ""): LLView {
   return llView(`${pre} ${invertAlg(expandRepeats(alg))} ${post}`);
-}
-
-function normalizedState(alg: string) {
-  return new Cube().apply(expandRepeats(alg)).normalize();
 }
 
 function f2lIntact(fl: Record<Face, number[]>) {
@@ -150,3 +149,53 @@ export function relabel(alg: string, map: Partial<Record<string, string>>): stri
 }
 
 export const Z2: Record<string, string> = { U: "D", D: "U", R: "L", L: "R", F: "F", B: "B" };
+
+const canonCache = new Map<string, string>();
+/**
+ * Pre-AUF used for a case's reference diagram. For PLL the angle with the fewest moved
+ * stickers is chosen (so e.g. a J perm shows two swaps, not a swap plus a U turn).
+ */
+export function canonicalPre(c: AlgCase): string {
+  if (c.set !== "PLL") return "";
+  let v = canonCache.get(c.id);
+  if (v == null) {
+    let best = Infinity;
+    v = "";
+    for (const pre of AUFS) {
+      const moved = pllArrows(c.algs[0], pre).reduce((n, a) => n + (a.both ? 2 : 1), 0);
+      if (moved < best) {
+        best = moved;
+        v = pre;
+      }
+    }
+    canonCache.set(c.id, v);
+  }
+  return v;
+}
+
+/** Moves that set up the reference diagram's state from solved (yellow-top frame not included). */
+export function canonicalSetup(c: AlgCase): string {
+  return `${canonicalPre(c)} ${invertAlg(expandRepeats(c.algs[0]))}`.trim();
+}
+
+/**
+ * Playback for any (valid) alg of a case, starting exactly from the reference diagram's state:
+ * returns the alg wrapped in the AUFs needed before/after it.
+ */
+export function playbackFor(c: AlgCase, alg: string): { setup: string; alg: string } {
+  const setup = canonicalSetup(c);
+  let flat: string;
+  try {
+    flat = expandRepeats(alg);
+    parseMoves(flat);
+  } catch {
+    return { setup, alg };
+  }
+  for (const x of AUFS)
+    for (const y of c.set === "OLL" ? [""] : AUFS) {
+      const cube = new Cube().apply(`${setup} ${x} ${flat} ${y}`).normalize();
+      const ok = c.set === "OLL" ? f2lIntact(cube.facelets()) && cube.facelets().U.every((s) => s === 0) : cube.isSolved();
+      if (ok) return { setup, alg: `${x} ${alg} ${y}`.replace(/\s+/g, " ").trim() };
+    }
+  return { setup, alg };
+}
