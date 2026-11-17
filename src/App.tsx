@@ -51,6 +51,9 @@ const SHORTCUTS: [string, string][] = [
   ["⌘\\", "Toggle side panel"],
   ["F  or  ⌃⌘F", "Fullscreen"],
   ["⌥1 … ⌥5, ⌥,", "Timer, History, Analytics, Training, Sessions, Settings"],
+  ["[ / ]", "Training: previous / next tab"],
+  ["X / N", "Training drill: mark failed / skip case"],
+  ["Y / N", "Cross practice: rate your plan"],
   ["?", "This list"],
 ];
 

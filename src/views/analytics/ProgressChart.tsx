@@ -137,10 +137,10 @@ export function ProgressChart({ ds, rolling, metric }: { ds: Dataset; rolling: R
       ao5: { stroke: withAlpha(accent, 0.35), width: 1 },
       ao12: { stroke: withAlpha(accent, 0.32), width: 1 },
       ao100: { stroke: accent, width: 1.6 },
-      ao1000: { stroke: withAlpha(fg, 0.9), width: 1.6 },
+      ao1000: { stroke: withAlpha(fg, 0.9), width: 1.6, dash: [7, 4] },
       pb: { stroke: good, width: 1.4 },
     };
-    for (const k of ["ao5", "ao12", "ao100", "ao1000"] as LineKey[]) if (em(k)) lineStyle[k] = { stroke: k === "ao1000" ? fg : accent, width: 2.4 };
+    for (const k of ["ao5", "ao12", "ao100", "ao1000"] as LineKey[]) if (em(k)) lineStyle[k] = { ...lineStyle[k], stroke: k === "ao1000" ? fg : accent, width: 2.4 };
     const full: [number, number] = [prep.xs[0], prep.xs[prep.xs.length - 1] + (effectiveX === "index" ? 0 : 1)];
     const font = `10px ${cssVar("--font-mono", "monospace")}`;
     const fmtX = effectiveX === "index" ? (v: number) => fmtInt(v) : null;
@@ -216,6 +216,7 @@ export function ProgressChart({ ds, rolling, metric }: { ds: Dataset; rolling: R
           show: visRef.current[k],
           stroke: lineStyle[k].stroke,
           width: lineStyle[k].width,
+          dash: lineStyle[k].dash,
           spanGaps: false,
           points: { show: false },
           ...(k === "pb" ? { paths: uPlot.paths.stepped!({ align: 1 }) } : {}),
@@ -391,7 +392,7 @@ export function ProgressChart({ ds, rolling, metric }: { ds: Dataset; rolling: R
               const locked = k === metric;
               return (
                 <button key={k} className={"an-lg" + (visible[k] ? " on" : "")} onClick={() => !locked && setShown((s) => ({ ...s, [k]: !s[k] }))} title={locked ? "Selected curve metric" : "Show / hide"} data-testid={"an-lg-" + k}>
-                  <i className={k === "pb" ? "step" : "ln"} style={{ background: swatch[k] }} /> {label}
+                  <i className={k === "pb" ? "step" : k === "ao1000" ? "ln dash fg" : "ln"} style={{ background: swatch[k] }} /> {label}
                 </button>
               );
             })}

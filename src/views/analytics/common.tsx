@@ -179,7 +179,15 @@ export function withAlpha(color: string, a: number): string {
 export function useThemeKey() {
   const theme = useStore((s) => s.settings.theme);
   const accent = useStore((s) => s.settings.accent);
-  return theme + "|" + accent;
+  const key = theme + "|" + accent;
+  // App applies theme variables in its own effect, which runs after ours: settle a frame later
+  const [settled, setSettled] = useState(key);
+  useEffect(() => {
+    if (settled === key) return;
+    const r = requestAnimationFrame(() => setSettled(key));
+    return () => cancelAnimationFrame(r);
+  }, [key, settled]);
+  return settled;
 }
 
 // ---------------------------------------------------------------- drill-down

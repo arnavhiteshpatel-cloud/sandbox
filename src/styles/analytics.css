@@ -33,7 +33,7 @@ input.input[type="date"] { color-scheme: dark; font-variant-numeric: tabular-num
 /* panel */
 .an-panel { padding: 16px 18px 16px; min-width: 0; position: relative; display: flex; flex-direction: column; }
 /* the page is long: a backdrop blur on every panel costs far more paint time than it adds over a near-black grid */
-.an-panel.glass-edge { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.an-panel.glass-edge { backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.04); }
 .an-ph { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
 .an-ph-l { min-width: 0; flex: 1 1 260px; }
 .an-ph-r { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
@@ -72,6 +72,7 @@ button.an-lg:not(.on) i { opacity: 0.25; }
 .an-lg i { display: inline-block; flex: 0 0 auto; }
 .an-lg i.ln { width: 14px; height: 2px; border-radius: 2px; }
 .an-lg i.ln.dash { background: repeating-linear-gradient(90deg, var(--fg2) 0 4px, transparent 4px 7px) !important; }
+.an-lg i.ln.dash.fg { background: repeating-linear-gradient(90deg, var(--fg) 0 5px, transparent 5px 8px) !important; }
 .an-lg i.step { width: 12px; height: 8px; background: none !important; border-top: 2px solid var(--good); border-right: 2px solid var(--good); border-radius: 0 2px 0 0; transform: translateY(2px); }
 .an-lg i.dot { width: 5px; height: 5px; border-radius: 5px; background: color-mix(in srgb, var(--fg) 45%, transparent); }
 .an-lg i.blk { width: 10px; height: 8px; border-radius: 2px; }
@@ -84,7 +85,7 @@ button.an-lg:not(.on) i { opacity: 0.25; }
 .an-gl.strong { stroke: var(--line2); }
 .an-guide { stroke: color-mix(in srgb, var(--fg) 35%, transparent); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; }
 .an-ref { stroke: color-mix(in srgb, var(--fg) 30%, transparent); stroke-dasharray: 3 4; }
-.an-line { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 5px var(--glow)); }
+.an-line { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
 .an-line2 { fill: none; stroke: color-mix(in srgb, var(--fg) 62%, transparent); stroke-width: 1.2; stroke-dasharray: 4 3; stroke-linejoin: round; }
 .an-band { fill: color-mix(in srgb, var(--accent) 13%, transparent); stroke: none; }
 .an-pt { fill: var(--bg-elev); stroke: var(--accent); stroke-width: 1.4; }

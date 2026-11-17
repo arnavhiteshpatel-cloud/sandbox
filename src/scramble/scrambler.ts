@@ -119,7 +119,7 @@ async function solveToScramble(alg: string | null, st?: ReturnType<typeof random
     pattern = kp.defaultPattern().applyAlg(alg!);
   }
   const sol = await experimentalSolve3x3x3IgnoringCenters(pattern);
-  return sol.invert().toString();
+  return tidy(sol.invert().toString());
 }
 
 const AUFS = ["", "U", "U2", "U'"];
@@ -149,10 +149,15 @@ function randomMoves(faces: string[], len: number, size = 3) {
   return out.join(" ");
 }
 
+/** cubing.js writes half turns as "R2'"; speedcubers write "R2". */
+export function tidy(s: string) {
+  return s.replace(/(\b[A-Za-z]+w?2)'/g, "$1");
+}
+
 async function cubingScramble(eventId: string): Promise<string> {
   const { randomScrambleForEvent } = await import("cubing/scramble");
   const alg = await randomScrambleForEvent(eventId);
-  return alg.toString();
+  return tidy(alg.toString());
 }
 
 /** Generate one scramble for a csTimer-style event id. */
@@ -186,7 +191,7 @@ export async function generateScramble(eventId: string): Promise<string> {
     data.CORNERS.orientation = st.co;
     try {
       const sol = await experimentalSolve2x2x2(new KPattern(kp, data));
-      return sol.invert().toString();
+      return tidy(sol.invert().toString());
     } catch {
       return cubingScramble("222");
     }

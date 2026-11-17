@@ -230,6 +230,7 @@ export const useStore = create<AppStore>((set, get) => {
         current = [...sessions].filter((s) => !s.deletedAt).sort((a, b) => a.rank - b.rank)[0].id;
       }
       set({ sessions, solves: data.solves, settings, imports: data.imports, currentSessionId: current, undoStack: [], redoStack: [] });
+      import("./trainStore").then((m) => (m as any).reloadTrainState?.()).catch(() => {});
     },
 
     setView(v) {

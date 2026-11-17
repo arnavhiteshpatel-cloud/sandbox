@@ -130,8 +130,8 @@ export function HeatLegend() {
 }
 
 /** Tiny sparkline of times (failed entries drawn as red dots). */
-export function Spark({ values, width = 120, height = 28 }: { values: { ms: number; bad?: boolean }[]; width?: number; height?: number }) {
-  if (values.length < 2) return <svg width={width} height={height} />;
+export function Spark({ values, width = 300, height = 28, fluid = true }: { values: { ms: number; bad?: boolean }[]; width?: number; height?: number; fluid?: boolean }) {
+  if (values.length < 2) return <svg width={fluid ? "100%" : width} height={height} />;
   const fin = values.map((v) => v.ms);
   const lo = Math.min(...fin),
     hi = Math.max(...fin);
@@ -139,9 +139,9 @@ export function Spark({ values, width = 120, height = 28 }: { values: { ms: numb
   const Y = (v: number) => 3 + (1 - (v - lo) / Math.max(1, hi - lo)) * (height - 6);
   const d = values.map((v, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(v.ms).toFixed(1)}`).join("");
   return (
-    <svg width={width} height={height} className="tr-spark">
-      <path d={d} />
-      {values.map((v, i) => (v.bad ? <circle key={i} cx={X(i)} cy={Y(v.ms)} r={2} className="bad" /> : null))}
+    <svg width={fluid ? "100%" : width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="tr-spark">
+      <path d={d} vectorEffect="non-scaling-stroke" />
+      {values.map((v, i) => (v.bad ? <rect key={i} x={X(i) - 0.5} y={Y(v.ms) - 2} width={1} height={4} className="bad" vectorEffect="non-scaling-stroke" /> : null))}
     </svg>
   );
 }

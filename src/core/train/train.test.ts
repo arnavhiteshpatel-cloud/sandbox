@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Cube, invertAlg } from "../cube";
 import { OLL, PLL } from "../algs";
 import { solveCross, solveAllColours, crossDistanceHistogram, CROSS_ROTATION } from "./cross";
-import { validateAlg, pllArrows, relabel, Z2, caseView } from "./cases";
+import { validateAlg, pllArrows, relabel, Z2, caseView, canonicalPre, playbackFor, getCase } from "./cases";
 import { review, gradeExecution, newCard, DAY } from "./srs";
 import { drillWeights, pickWeighted, recogWeights } from "./select";
 import { caseStat } from "./caseStats";
@@ -125,11 +125,31 @@ describe("case verification", () => {
     expect(o.U.filter((x) => x === 0).length).toBe(5);
   });
 
+  it("reference PLL diagrams use the angle with the fewest moved pieces", () => {
+    const jb = getCase("PLL-Jb")!;
+    const arrows = pllArrows(jb.algs[0], canonicalPre(jb));
+    expect(arrows.length).toBe(2);
+    expect(arrows.every((a) => a.both)).toBe(true);
+    for (const c of PLL) expect(pllArrows(c.algs[0], canonicalPre(c)).length).toBeLessThanOrEqual(pllArrows(c.algs[0]).length);
+  });
+
+  it("playback from the reference state solves the case for any valid alg", () => {
+    for (const c of [...PLL, ...OLL]) {
+      for (const alg of [...c.algs, `U2 ${c.algs[0]} U'`]) {
+        const pb = playbackFor(c, alg);
+        const cube = new Cube().apply(`${pb.setup} ${pb.alg}`).normalize();
+        if (c.set === "PLL") expect(cube.isSolved(), c.id).toBe(true);
+        else expect(cube.facelets().U.every((x) => x === 0), c.id).toBe(true);
+      }
+    }
+  });
+
   it("z2 relabelling keeps a white cross solved for F2L scrambles", () => {
     // a scramble that keeps the D (yellow) cross solved, relabelled, keeps the U (white) cross solved
     const scr = "R U R' U' F' U F L U2 L'";
     const c = new Cube().apply(relabel(scr, Z2)).facelets();
     expect([1, 3, 5, 7].every((i) => c.U[i] === 0)).toBe(true);
+    expect([c.F[1], c.R[1], c.B[1], c.L[1]]).toEqual([2, 1, 5, 4]);
     expect(relabel("R U' D2 F", Z2)).toBe("L D' U2 F");
     expect(invertAlg("R U")).toBe("U' R'");
   });

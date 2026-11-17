@@ -22,6 +22,7 @@ export function CaseModal({ id, onClose }: { id: string; onClose: () => void }) 
   const [draft, setDraft] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [notes, setNotes] = useState(cu.notes ?? "");
+  const [newCol, setNewCol] = useState<string | null>(null);
   const st = useMemo(() => caseStat(id, s.drill[id], s.recog[id], s.srs[id], targetFor(s, id)), [s, id]);
   const all = [...c.algs.map((a) => ({ alg: a, custom: false })), ...(cu.custom ?? []).map((a) => ({ alg: a, custom: true }))];
   const toast = useStore((x) => x.toast);
@@ -161,15 +162,29 @@ export function CaseModal({ id, onClose }: { id: string; onClose: () => void }) 
                     </button>
                   );
                 })}
-                <button
-                  className="chip"
-                  onClick={() => {
-                    const name = window.prompt("New collection name", c.set === "OLL" ? "2-look OLL" : "Weak PLLs");
-                    if (name?.trim()) t.createCollection(name.trim(), [id]);
-                  }}
-                >
-                  <IconPlus size={12} /> New
-                </button>
+                {newCol == null ? (
+                  <button className="chip" onClick={() => setNewCol("")} data-testid="case-new-collection">
+                    <IconPlus size={12} /> New
+                  </button>
+                ) : (
+                  <input
+                    className="input cm-newcol"
+                    autoFocus
+                    placeholder="Name, Enter"
+                    value={newCol}
+                    onChange={(e) => setNewCol(e.target.value)}
+                    onBlur={() => setNewCol(null)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newCol.trim()) {
+                        t.createCollection(newCol.trim(), [id]);
+                        setNewCol(null);
+                      } else if (e.key === "Escape") {
+                        e.stopPropagation();
+                        setNewCol(null);
+                      }
+                    }}
+                  />
+                )}
               </div>
             </div>
           </div>
