@@ -19,7 +19,19 @@ xattr -dr com.apple.quarantine /Applications/Facelet.app
 
 > Artifacts on GitHub expire after 90 days — keep the `.dmg`, or build from source below.
 
-## Build from source on your Mac
+## Easiest: one-step setup
+
+In Terminal, inside this folder:
+
+```bash
+bash scripts/setup-mac.sh
+```
+
+It installs the free build tools (only if missing, no admin password), builds Facelet, runs its
+self-test, installs it to Applications and opens it. The only click needed is "Install" if macOS asks
+for its command-line tools.
+
+## Build from source on your Mac (manual)
 
 One-time setup (free tools):
 
