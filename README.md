@@ -21,8 +21,9 @@ the Anthropic API, cloud inference or any paid service, so it keeps working afte
 | 3 Agent | "open Canvas and list my next three assignments" | bounded observe → act → verify loop | tens of seconds |
 
 * **Voice:** openWakeWord "hey_jarvis" (behind an energy gate) · Whisper (MLX on Apple Silicon) · Kokoro `bm_george` voice.
-* **Computer control:** your real Arc via AppleScript + injected JavaScript (keeps your logins), the Accessibility tree for
-  native apps, and screenshots + Apple Vision OCR as a last resort.
+* **Every app:** your real Arc (AppleScript + injected JavaScript, keeps your logins). Any native or Electron app goes through
+  the Accessibility tree and menus. Any scriptable app can be scripted directly. Built in: Notes, Reminders, Calendar, Mail, Messages,
+  media keys, dark mode, Wi-Fi, Settings panes and windows. Screenshots + Apple Vision OCR are the last resort.
 * **Memory & search:** SQLite + FTS5, semantic vectors, Spotlight. Everything stays in `~/Library/Application Support/JARVIS`.
 * **Power:** three modes, wake word only on AC (your choice), models unloaded on idle timers, indexing only while charging.
 * **Safety:** delete, submit, send and buy actions require confirmation, enforced in code. Web/file content is treated as untrusted data.

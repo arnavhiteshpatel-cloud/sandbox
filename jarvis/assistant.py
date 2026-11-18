@@ -379,6 +379,15 @@ class Assistant:
             return await self._reply(f"Closed {app}." if r.ok else r.message, r.ok)
         if n == "click":
             return await self._click_on_page(a["target"], intent.text, cancel, allow_agent=True)
+        if n in ("browser_scroll", "browser_nav") and not await self._is_browser_front():
+            # Same words, any app: scroll the front window or use the standard shortcuts.
+            if n == "browser_scroll":
+                r = await self._call(c.scroll, "up" if a["direction"] in ("up", "top") else "down", 25 if a["direction"] in ("top", "bottom") else 6)
+            else:
+                r = await self._call(c.window_action, a["action"])
+            if r.ok:
+                return {"route": "builtin", "ok": True, "message": r.message} | await self._quiet_ok()
+            return await self._reply(r.message, False)
         if n == "browser_scroll":
             r = await self._call(c.browser_scroll, a["direction"], 0.8, self.session.browser)
             self.session.browser_active = True
@@ -391,6 +400,10 @@ class Assistant:
             if r.ok:
                 return {"route": "builtin", "ok": True, "message": r.message} | await self._quiet_ok()
             return await self._reply(r.message, False)
+        if n in ("keys", "type"):
+            front = await asyncio.to_thread(c.frontmost_app)
+            if policy.sensitive_app(front, self.settings) and not await self.confirm(f"{front} is a sensitive app. Go ahead?"):
+                return await self._reply("Left it alone.")
         if n == "keys":
             r = await self._call(c.press_keys, a["combo"])
             return {"route": "builtin", "ok": r.ok, "message": r.message} | await self._quiet_ok()
@@ -406,6 +419,62 @@ class Assistant:
         if n == "display_sleep":
             r = await self._call(c.display_sleep)
             return {"route": "builtin", "ok": r.ok, "message": r.message}
+        if n == "media":
+            r = await self._call(c.media_key, a["key"])
+            return {"route": "builtin", "ok": r.ok, "message": r.message} | await self._quiet_ok()
+        if n == "spotify_search":
+            from urllib.parse import quote
+
+            r = await self._call(c.open_location, "spotify:search:" + quote(a["query"]))
+            if not r.ok:
+                return await self._reply(r.message, False)
+            if self.llm_ok:  # Spotify can't be told to play a search result by script; let the agent click it
+                await asyncio.sleep(1.5)
+                return await self._run_agent(f"Spotify is showing search results for “{a['query']}”. Play the top result.", cancel)
+            return await self._reply(f"Searching Spotify for {a['query']}.")
+        if n == "appearance":
+            r = await self._call(c.set_appearance, a.get("dark"))
+            return await self._reply(r.message, r.ok, followup=False)
+        if n == "wifi":
+            if not a["on"] and not await self.confirm("Turning Wi-Fi off disconnects you from the internet. Go ahead?"):
+                return await self._reply("Leaving Wi-Fi on.")
+            r = await self._call(c.set_wifi, a["on"])
+            return await self._reply(r.message, r.ok, followup=False)
+        if n == "settings":
+            r = await self._call(c.open_settings, a["pane"])
+            return await self._reply(r.message, r.ok)
+        if n == "screenshot":
+            r = await self._call(c.take_screenshot)
+            return await self._reply(r.message, r.ok, followup=False)
+        if n == "window":
+            app = c.resolve_app(a["app"]) if a.get("app") else None
+            if a.get("app") and not app:
+                return None
+            r = await self._call(c.window_action, a["action"], app)
+            return {"route": "builtin", "ok": r.ok, "message": r.message} | await self._quiet_ok()
+        if n == "note":
+            r = await self._call(c.create_note, a["body"])
+            return await self._reply("Noted in Notes." if r.ok else r.message, r.ok)
+        if n == "reminder":
+            r = await self._call(c.create_reminder, a["text"], a.get("due_in_s"))
+            return await self._reply(r.message, r.ok)
+        if n == "calendar":
+            offset, days = {"today": (0, 1), "tomorrow": (1, 1), "this week": (0, 7)}.get(a["when"], (0, 1))
+            r = await self._call(c.calendar_events, offset, days)
+            if not r.ok:
+                return await self._reply(r.message, False)
+            evs = r.data.get("events", [])
+            if not evs:
+                return await self._reply(f"Nothing on your calendar {a['when']}.")
+            def fmt(e):
+                try:
+                    t = dt.datetime.fromisoformat(e["start"]).strftime("%-I:%M %p" if days == 1 else "%A %-I:%M %p")
+                except ValueError:
+                    t = e["start"]
+                return f"{e['title']} at {t}"
+            items = [fmt(e) for e in evs[:8]]
+            more = f", and {len(evs) - 8} more" if len(evs) > 8 else ""
+            return await self._reply(f"{len(evs)} {'event' if len(evs) == 1 else 'events'} {a['when']}: " + "; ".join(items) + more + ".")
         if n == "time":
             return await self._reply(dt.datetime.now().strftime("It's %-I:%M %p."))
         if n == "date":
@@ -498,7 +567,7 @@ class Assistant:
         el = None if has_ordinal else router.best_element_match(target, elements)
         if el:
             verdict = policy.check("click", {"text": el.get("name")}, user_text=user_text, settings=self.settings,
-                                   element_label=el.get("name", ""))
+                                   element_label=el.get("name", ""), front_app=front)
             if verdict.confirm and not await self.confirm(f"{verdict.reason} Click it?"):
                 return await self._reply("Left it alone.")
             self.events.emit("status", status="acting", detail=el.get("name"))

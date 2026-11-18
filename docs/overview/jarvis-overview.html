@@ -86,7 +86,7 @@
       Built for: 14-inch MacBook Pro (Nov 2024), Apple M4 Pro, 24 GB, macOS Sequoia 15.7.3<br>
       Runs entirely on-device: no Claude, no Anthropic API, no cloud AI, no subscriptions<br>
       Source: github.com/arnavhiteshpatel-cloud/sandbox, branch <span style="font-family:'DejaVu Sans Mono'">claude/project-jarvis-ai-assistant-rddtrw</span><br>
-      Document date: 18 November 2026 · version 0.1.0
+      Document date: 18 November 2026 · version 0.2.0
     </div>
     <div class="status">Status: built and tested off-Mac. Not yet run on your MacBook. See “What has been verified”.</div>
   </div>
@@ -104,7 +104,7 @@
     <li>Capabilities: instant commands</li>
     <li>Capabilities: voice shortcuts</li>
     <li>Capabilities: the AI agent</li>
-    <li>Capabilities: controlling your Mac</li>
+    <li>Capabilities: every app on your Mac</li>
     <li>Capabilities: memory and file search</li>
     <li>Battery and performance modes</li>
     <li>Safety and privacy</li>
@@ -126,7 +126,8 @@
 
   <div class="grid2">
     <div class="card"><h3>What it’s for</h3>
-      <ul><li>Hands-free control: “Open Spotify”, “Lock my screen”, “Scroll down”.</li>
+      <ul><li>Hands-free control of <b>any app</b>: “Open Spotify”, “Pause”, “Turn on dark mode”, “Scroll down”, “Minimize this window”.</li>
+      <li>Your Mac’s own apps: “Remind me to submit my IA tomorrow at 9”, “What’s on my calendar?”, “Make a note…”.</li>
       <li>Your own voice shortcuts: “Open my IB” runs a saved routine instantly.</li>
       <li>Unfamiliar multistep tasks: “Open the most recent assignment and tell me what I need to do.”</li>
       <li>Finding things: “Find the paper I downloaded about Parkinson’s.”</li></ul></div>
@@ -207,8 +208,8 @@
       If the build stops with a Swift compiler error, open a Claude Code session in <code>~/JARVIS</code> and give it the error. That
       part could not be compiled before it reached your Mac.</li>
     <li><b>Grant permissions.</b> JARVIS opens Settings → Permissions. Allow <b>Microphone</b>, <b>Accessibility</b> (needed for clicking and
-      typing and for the <kbd>⌥⇧C</kbd> talk key) and <b>Screen &amp; System Audio Recording</b>. Click <b>Allow</b> when asked whether JARVIS may control
-      Arc, Finder and System Events. Then quit JARVIS (right-click the menu-bar icon → Quit) and open it again from Applications.</li>
+      typing and for the <kbd>⌥⇧C</kbd> talk key) and <b>Screen &amp; System Audio Recording</b>. The first time JARVIS uses each app (Arc, Finder, Notes, Reminders, Calendar, Mail,
+      Messages, Music…), macOS asks whether it may control it. Click <b>Allow</b>. Also allow Calendars, Reminders and Contacts when asked. Then quit JARVIS (right-click the menu-bar icon → Quit) and open it again from Applications.</li>
     <li><b>Start at login.</b> Right-click the menu-bar icon → <b>Launch at Login</b>.</li>
     <li><b>Create “open my IB”.</b> Open your IB course page in Arc. Hold <kbd>⌥⇧C</kbd> and say “Create a shortcut called open my IB.” When asked
       what it should do, hold <kbd>⌥⇧C</kbd> again and say “Open Arc and go to this URL,” then say “yes.” (Or: Command Center → Shortcuts → New,
@@ -289,7 +290,7 @@
     <tr><td>“Open <i>name</i>” for a site you told it to remember</td><td>Opens that saved website.</td></tr>
     <tr><td>“Click <i>assignments</i>”, “go to the <i>grades</i> tab”</td><td>Finds the link or button on the current page and clicks it, but only if the match is unambiguous.
       Otherwise the AI takes over.</td></tr>
-    <tr><td>“Scroll down / up”, “scroll to the top / bottom”, “page down”</td><td>Scrolls the page, including pages that scroll an inner panel.</td></tr>
+    <tr><td>“Scroll down / up”, “scroll to the top / bottom”, “page down”</td><td>Scrolls the page (including inner panels) or, in other apps, the front window.</td></tr>
     <tr><td>“Go back”, “go forward”, “refresh”, “new tab”, “close this tab”</td><td>Browser navigation.</td></tr>
     <tr><td>“Type <i>Hello, world</i>”</td><td>Types the text (keeps capitals and punctuation).</td></tr>
     <tr><td>“Press command T”</td><td>Presses that key combination.</td></tr>
@@ -300,6 +301,17 @@
     <tr><td>“Remember that …”, “What do you remember about …”, “Forget …”</td><td>Saves, recalls or deletes a memory.</td></tr>
     <tr><td>“Create a shortcut called …”, “Whenever I say X, do Y”</td><td>Starts the shortcut-creation conversation.</td></tr>
     <tr><td>“List my shortcuts”, “Delete the shortcut called …”</td><td>Lists them, or deletes one after you confirm.</td></tr>
+    <tr><td>“Pause”, “play”, “next song”, “previous track”</td><td>Controls whatever is playing, in any app.</td></tr>
+    <tr><td>“Play <i>lo-fi beats</i> on Spotify”</td><td>Searches Spotify and plays the top result.</td></tr>
+    <tr><td>“Brightness up / down”, “make the screen dimmer”</td><td>Display brightness.</td></tr>
+    <tr><td>“Turn on dark mode”, “switch to light mode”</td><td>Appearance.</td></tr>
+    <tr><td>“Turn Wi-Fi on / off”</td><td>Wi-Fi (asks before turning it off).</td></tr>
+    <tr><td>“Open Bluetooth / sound / display / battery… settings”</td><td>Opens that System Settings pane.</td></tr>
+    <tr><td>“Take a screenshot”</td><td>Saves the screen to your Desktop.</td></tr>
+    <tr><td>“Minimize this window”, “full screen”, “hide Spotify”, “new window”, “close this window”, “show the desktop”, “Mission Control”</td><td>Window control in any app.</td></tr>
+    <tr><td>“Make a note saying …”</td><td>Creates an Apple Note.</td></tr>
+    <tr><td>“Remind me to … at 5 / tomorrow at 9am / in 20 minutes”</td><td>Creates a Reminder with that time.</td></tr>
+    <tr><td>“What’s on my calendar today / tomorrow / this week?”</td><td>Reads your events.</td></tr>
     <tr><td>“Stop listening”</td><td>Turns the microphone off. The talk key still works.</td></tr>
     <tr><td>“Stop”, “cancel”, “never mind”</td><td>Halts the current task and speech immediately.</td></tr>
   </table>
@@ -345,6 +357,8 @@
     <tr><td>arrange_windows</td><td>Tile apps: halves, thirds, columns, maximize, left, right.</td></tr>
     <tr><td>macos_shortcut</td><td>Run a Shortcuts-app shortcut, e.g. to turn on Do Not Disturb/Focus (macOS has no other way).</td></tr>
     <tr><td>volume · say · notify</td><td>Set volume; speak a sentence; show a notification.</td></tr>
+    <tr><td>media · system · note · reminder · open_location</td><td>Media keys; dark/light mode, Wi-Fi, Settings panes, screenshots, window actions; create a note or a
+      timed reminder; open any URL scheme (e.g. join a Zoom meeting). Lets “study mode” pause music, switch to dark mode and tile your windows.</td></tr>
     <tr><td>applescript · shell</td><td>Run a script or command. Allowed directly only in shortcuts you wrote in the editor. Ones created by voice, AI or import
       ask you first. Shell commands outside a short read-only allow-list always ask.</td></tr>
   </table>
@@ -373,7 +387,7 @@
       <li>The recent conversation and the last list of results (for “open the second one”).</li>
       <li>Only the tools the request plausibly needs (smaller prompt, faster, less energy).</li></ul></div>
   </div>
-  <h3>The agent’s 25 tools</h3>
+  <h3>The agent’s 34 tools</h3>
   <table>
     <tr><th style="width:26%">Area</th><th>Tools</th></tr>
     <tr><td>Seeing</td><td><b>observe</b> (page or app: address, visible text, interactive elements) · <b>read_page</b> (full page text) ·
@@ -382,6 +396,9 @@
       <b>browser_nav</b> · <b>menu</b> · <b>click_screen_text</b> (last resort, via on-screen text) · <b>wait</b></td></tr>
     <tr><td>Files</td><td><b>search_files</b> · <b>list_folder</b> · <b>read_file</b> (PDF, Word, PowerPoint, Excel, text, code) · <b>move_file</b> ·
       <b>make_folder</b> · <b>find_duplicates</b> · <b>trash_files</b> (always confirms; uses the Trash, never permanent delete)</td></tr>
+    <tr><td>Any app and the system</td><td><b>app_dictionary</b> (what an app can be scripted to do) · <b>script_app</b> (AppleScript/JavaScript; risky scripts ask first) ·
+      <b>media</b> · <b>system</b> (dark mode, Wi-Fi, Settings panes, screenshots, window actions, URL schemes, lock) · <b>create_note</b> · <b>create_reminder</b> ·
+      <b>calendar</b> · <b>compose_email</b> (draft only) · <b>send_message</b> (always asks)</td></tr>
     <tr><td>You and memory</td><td><b>ask_user</b> · <b>remember</b> · <b>recall</b> · <b>run_shortcut</b> · <b>done</b></td></tr>
   </table>
   <h3>Examples it is built for</h3>
@@ -397,20 +414,39 @@
 <!-- ======================= MAC CONTROL + MEMORY ======================= -->
 <section class="section">
   <div class="kicker">Section 9</div>
-  <h1>Capabilities: controlling your Mac</h1>
+  <h1>Capabilities: every app on your Mac</h1>
+  <p>JARVIS isn’t limited to Arc. Every app is reachable, and nothing is blocked. For each request it picks the most reliable way in:</p>
+  <div class="flow">
+    <div><b>1 · Built-in</b>Notes, Reminders, Calendar, Mail, Messages, system controls</div>
+    <div><b>2 · Scripting</b>apps with an AppleScript dictionary (Music, Finder, Keynote, Pages, Numbers, Photos, Mail…)</div>
+    <div><b>3 · Accessibility</b>any native or Electron app (Slack, Discord, VS Code, Notion, Spotify…): buttons, fields, menus</div>
+    <div><b>4 · Screen</b>anything visible: screenshot + text recognition, click by position</div>
+  </div>
   <table>
-    <tr><th style="width:24%">Area</th><th>How JARVIS does it</th></tr>
-    <tr><td>Your browser</td><td>Drives <b>your real Arc</b> (so you stay logged in to school portals): new tabs, navigation, waiting for pages, reading
-      text, listing every clickable element (including inside web components), clicking, filling fields (works with modern web apps), scrolling the right
-      panel. Also supports Chrome, Brave, Edge and Safari.</td></tr>
-    <tr><td>Native apps</td><td>Reads the app’s Accessibility tree (buttons, fields, lists) and presses, fills or selects by name. Navigates menus. Positions and resizes windows.</td></tr>
-    <tr><td>Keyboard and mouse</td><td>Key combinations, typing any text (including emoji), clicks and scrolling.</td></tr>
-    <tr><td>Screen</td><td>Screenshots (deleted immediately after use), on-device text recognition with positions, and visual questions answered by the model.</td></tr>
-    <tr><td>System</td><td>Volume and mute, lock screen, display sleep, battery status, notifications, running Shortcuts-app shortcuts, opening and revealing files.</td></tr>
-    <tr><td>Fallback order</td><td>Structured page/app data first → Accessibility tree → screenshot + text recognition. If an app blocks automation, JARVIS reports it.</td></tr>
+    <tr><th style="width:22%">Area</th><th>What JARVIS can do</th></tr>
+    <tr><td>Any app</td><td>Open, quit, switch to, hide; read its window (buttons, fields, lists, text) and press, fill or select things by name; choose any
+      menu-bar command (“File &gt; Export…”); type, press shortcuts, scroll, click. Chromium/Electron apps are asked to expose their full interface.
+      The same follow-ups work everywhere: “scroll down”, “go back”, “new tab”, “close tab”, “new window”.</td></tr>
+    <tr><td>Scriptable apps</td><td>The AI reads an app’s scripting dictionary, then controls it directly (e.g. <code>tell application "Music" to play playlist "Focus"</code>),
+      which is faster and more reliable than clicking. Tested with the real model.</td></tr>
+    <tr><td>Your browser</td><td>Drives <b>your real Arc</b> (stays logged in to school portals): tabs, navigation, waiting for pages, reading text, every clickable element
+      (including inside web components), clicking, filling modern web forms, scrolling the right panel. Also Chrome, Brave, Edge and Safari.</td></tr>
+    <tr><td>Notes · Reminders · Calendar</td><td>Create notes; create reminders with times (“at 5”, “tomorrow at 9am”, “in 20 minutes”); read today’s, tomorrow’s or this week’s events.</td></tr>
+    <tr><td>Mail · Messages</td><td>Open an email draft with recipients, subject and body (never sent by itself). Send an iMessage to a contact, number or email, <b>always after your “yes”</b>.</td></tr>
+    <tr><td>Media</td><td>Play/pause, next, previous for whatever is playing (Music, Spotify, a video in a browser); “play … on Spotify” searches and plays the top result.</td></tr>
+    <tr><td>System</td><td>Volume and mute, brightness, dark/light mode, Wi-Fi on/off, open any Settings pane (“open Bluetooth settings”), screenshots to the Desktop,
+      lock screen, display sleep, battery status, notifications, Shortcuts-app shortcuts, any URL scheme (spotify:, zoommtg:…).</td></tr>
+    <tr><td>Windows</td><td>Minimize, full screen, hide, new or close window, show desktop, Mission Control, tile apps side by side.</td></tr>
+    <tr><td>Keyboard, mouse, screen</td><td>Any key combination, typing any text (including emoji), clicks, scrolling; screenshots (deleted right after use), on-device text
+      recognition with positions, and visual questions answered by the model.</td></tr>
+    <tr><td>Files</td><td>Open, reveal, read, move, rename, organize, find duplicates, move to the Trash (with confirmation). See section 10.</td></tr>
   </table>
+  <p class="muted">What can’t be operated: games, remote-desktop windows, canvas-only apps and secure password fields. If an app refuses automation, JARVIS says so.</p>
+</section>
 
-  <h1 style="margin-top:14pt">Capabilities: memory and file search</h1>
+<section class="section">
+  <div class="kicker">Section 10</div>
+  <h1>Capabilities: memory and file search</h1>
   <div class="grid2">
     <div class="card"><h3>Memory</h3><ul>
       <li>Remembers what you explicitly tell it (“Remember that…”): preferences, projects, file locations, websites, standing instructions.</li>
@@ -459,8 +495,10 @@
     <li><b>Always asks first</b> before purchases or payments, moving files to the Trash, and running scripts it didn’t get from you.</li>
     <li><b>Asks unless you said it yourself</b> before submit, send, post, delete, confirm and similar buttons. “Click submit” from you runs directly; the AI
     deciding to click Submit asks first.</li>
-    <li><b>Never</b> controls blocked apps (Terminal, Keychain Access, iTerm by default), opens <code>javascript:</code>/<code>file:</code> links, or
-    overwrites files.</li>
+    <li><b>Every app is reachable, and sensitive ones ask first.</b> In Terminal, iTerm, Keychain Access, Passwords, System Settings, password managers, Disk Utility
+    and Activity Monitor, any click, typing or script by JARVIS needs your “yes”. Scripts that delete, send, run shell commands or quit things ask first.
+    Sending a message always asks. You can also block apps entirely in Settings.</li>
+    <li><b>Never</b> opens <code>javascript:</code>/<code>file:</code> links or overwrites files.</li>
     <li><b>Websites and documents can’t give orders.</b> Their content is marked as untrusted data, and the safety rules are enforced in code, so a malicious
     page can at most suggest an action that still needs your approval. This was tested: an injected “delete ~/Documents” on a page was ignored.</li>
     <li><b>Local only.</b> The control channel accepts only your Mac and requires a secret that changes on every launch, so websites can’t control JARVIS. No
@@ -506,10 +544,10 @@
   Everything that needs macOS is written but <b>not yet run</b>. No simulated result is counted as a pass.</p>
   <table>
     <tr><th style="width:42%">Area</th><th style="width:14%">Status</th><th>Evidence</th></tr>
-    <tr><td>Routing, shortcuts, agent loop, memory, safety, power logic</td><td><span class="tag t-ok">tested</span></td><td>78 automated tests pass, including “open my IB” → “go to the assignments” → “scroll down” → “go back” with zero AI calls.</td></tr>
+    <tr><td>Routing, shortcuts, agent loop, memory, safety, power logic</td><td><span class="tag t-ok">tested</span></td><td>100 automated tests pass, including “open my IB” → “go to the assignments” → “scroll down” → “go back” with zero AI calls.</td></tr>
     <tr><td>Arc page-control code (find, click, type, scroll, read)</td><td><span class="tag t-ok">tested</span></td><td>8/8 in a real Chromium browser (the engine Arc uses).</td></tr>
     <tr><td>Voice pipeline with real models</td><td><span class="tag t-ok">tested</span></td><td>6/6: wake word detected for 4 different voices, no false triggers, exact transcripts, correct commands. Silence filter: 0 of 375 frames processed.</td></tr>
-    <tr><td>AI agent with a real local model</td><td><span class="tag t-ok">tested</span></td><td>Qwen3.5-4B: 11/11 JARVIS tasks, 0 invalid actions (one run per case, on a simulated computer).</td></tr>
+    <tr><td>AI agent with a real local model</td><td><span class="tag t-ok">tested</span></td><td>Qwen3.5-4B: 11/11 JARVIS tasks plus 3/3 app tasks (reminder + calendar, scripting Music, message correctly held for confirmation), 0 invalid actions (one run per case, on a simulated computer).</td></tr>
     <tr><td>File indexing and search</td><td><span class="tag t-ok">tested</span></td><td>Real files: relevance, recency, duplicates, exclusions, incremental updates.</td></tr>
     <tr><td>Interface</td><td><span class="tag t-ok">tested</span></td><td>Rendered and checked in a browser (screenshots in this document).</td></tr>
     <tr><td>Native Mac app (Swift)</td><td><span class="tag t-part">partial</span></td><td>Passes the Swift syntax check; supervisor code type-checks. An independent review found 13 possible issues; 11 were fixed, and 2 low-confidence notes remain to check on the Mac. Full compile needs your Mac.</td></tr>
@@ -533,6 +571,8 @@
     noticeably longer than follow-up steps.</li>
     <li><b>Some web content is unreachable</b> by page control: other-site embedded frames, canvas-drawn apps. Screenshot fallback is slower.</li>
     <li><b>Main display only</b> for screenshots and text recognition.</li>
+    <li><b>Unverified on the Mac:</b> brightness keys on the built-in display, Wi-Fi toggling without an admin prompt, and exact Settings pane names on 15.7
+    (an unknown pane opens Settings’ main page).</li>
     <li><b>Do Not Disturb</b> requires a one-time Shortcuts-app shortcut named “JARVIS Focus On”.</li>
     <li><b>Rebuilding the app resets macOS permissions</b> unless you sign it with a fixed local certificate (explained in docs/SETUP.md).</li>
     <li><b>Arc is in maintenance mode</b> from its maker. JARVIS also supports Chrome, Brave, Edge and Safari.</li>

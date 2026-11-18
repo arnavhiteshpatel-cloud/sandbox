@@ -34,7 +34,7 @@ JARVIS opens **Settings → Permissions**. Allow each when macOS asks, or turn t
 - **Microphone**: listening.
 - **Accessibility**: clicking and typing in apps, **and the ⌥⇧C talk key**. Until this is granted, the talk key is ⌃⌥C.
 - **Screen & System Audio Recording**: "what's on my screen".
-- **Automation**: click **Allow** when asked "JARVIS wants to control Arc" (and Finder, System Events).
+- **Automation**: the first time JARVIS uses each app (Arc, Finder, Notes, Reminders, Calendar, Mail, Messages, Music…), macOS asks "JARVIS wants to control …". Click **Allow**. Also allow Calendars, Reminders and Contacts when asked.
 
 Then **quit and reopen JARVIS** (menu-bar icon → right-click → Quit JARVIS; open it from Applications) so ⌥⇧C activates.
 

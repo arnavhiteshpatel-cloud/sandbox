@@ -249,3 +249,31 @@ class FakeComputer(Computer):
 
     def permissions(self):
         return {"accessibility": None, "screen_recording": None, "microphone": None, "simulated": True}
+
+    # system & app integrations (simulated)
+    def _ok(self, entry, msg, **data):
+        self.log.append(entry)
+        return ActionResult(True, msg, data, verified=True)
+
+    def media_key(self, key): return self._ok(f"media:{key}", key)
+    def set_appearance(self, dark):
+        self.dark = (not getattr(self, "dark", False)) if dark is None else dark
+        return self._ok(f"appearance:{'dark' if self.dark else 'light'}", "Dark mode on." if self.dark else "Light mode on.")
+    def set_wifi(self, on): return self._ok(f"wifi:{on}", f"Wi-Fi {'on' if on else 'off'}.")
+    def open_settings(self, pane): return self._ok(f"settings:{pane}", f"{pane} settings.")
+    def take_screenshot(self, path=None): return self._ok("screenshot", "Screenshot saved to your Desktop.")
+    def window_action(self, action, app=None): return self._ok(f"window:{action}", action)
+    def app_script(self, script, language="AppleScript"):
+        self.scripts = getattr(self, "scripts", []) + [script]
+        return self._ok("script", "Done.", output="")
+    def app_dictionary(self, app, max_chars=6000):
+        return "[Notes Suite]\n  command show\n  class note: properties name, body, creation date"
+    def create_note(self, body, title=None): return self._ok(f"note:{body}", "Note created.")
+    def create_reminder(self, text, due_in_s=None): return self._ok(f"reminder:{text}:{int(due_in_s or 0)}", "Reminder set.")
+    def calendar_events(self, day_offset=0, days=1):
+        return self._ok(f"calendar:{day_offset}", "2 event(s).", events=[
+            {"start": "2026-11-18T09:00:00", "title": "Biology HL", "calendar": "School"},
+            {"start": "2026-11-18T15:30:00", "title": "Study group", "calendar": "Personal"}])
+    def compose_email(self, to, subject, body): return self._ok(f"email:{','.join(to)}", "Draft open in Mail. It has not been sent.")
+    def send_message(self, to, text): return self._ok(f"message:{to}:{text}", f"Message sent to {to}.")
+    def open_location(self, url): return self._ok(f"location:{url}", "Opened.")

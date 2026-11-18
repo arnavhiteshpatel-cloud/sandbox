@@ -74,6 +74,10 @@ files, finding duplicates without deleting, and ignoring a prompt injection. v1 
 Caveats: a single run per case can't show consistency (use `--repeat 3` on the Mac). The tasks are short. Real websites are
 messier than the simulator. Timing on the M4 Pro GPU will be far faster than 4 CPU cores.
 
+App integrations ([report](benchmarks/linux-cpu-qwen3.5-4b-apps.md)), 3/3: created a reminder for "tomorrow at 9am" and
+read today's calendar in one request; wrote correct AppleScript to play a Music playlist; tried to text Mom, was stopped by
+the confirmation (declined in the harness), and nothing was sent.
+
 **Decision status:** Battery Saver = `qwen3.5:4b` is supported by this result. Balanced/Max = `qwen3.5:9b` until the
 Mac benchmark compares `qwen3.5:9b`, `qwen3:8b` and optionally `qwen3.6:27b`. Per your choice, the benchmark decides Max Performance.
 

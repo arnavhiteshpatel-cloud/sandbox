@@ -88,6 +88,14 @@ def test_policy(settings):
     v = policy.check("click", {}, user_text="click buy now", settings=settings, element_label="Buy now")
     assert v.confirm   # purchases always confirm, even when asked
     assert not policy.check("open_url", {"url": "javascript:alert(1)"}, user_text="", settings=settings).allow
+    assert policy.check("open_app", {"name": "Terminal"}, user_text="", settings=settings).allow   # every app reachable
+    assert policy.check("type_text", {"text": "ls"}, user_text="", settings=settings, front_app="Terminal").confirm
+    assert not policy.check("type_text", {"text": "hi"}, user_text="", settings=settings, front_app="Notes").confirm
+    assert policy.check("script_app", {"script": 'tell application "Finder" to delete file "x"'}, user_text="", settings=settings).confirm
+    assert policy.check("script_app", {"script": 'do shell script "rm x"'}, user_text="", settings=settings).confirm
+    assert not policy.check("script_app", {"script": 'tell application "Music" to play playlist "Focus"'}, user_text="", settings=settings).confirm
+    assert policy.check("send_message", {"to": "Mom", "text": "hi"}, user_text="text mom hi", settings=settings).confirm
+    settings.set("security.blocked_apps", ["Terminal"])
     assert not policy.check("open_app", {"name": "Terminal"}, user_text="", settings=settings).allow
     assert policy.check("move_file", {"src": "/etc/hosts", "dst": "~/Documents/x"}, user_text="", settings=settings).confirm
     assert not policy.check("move_file", {"src": "~/Downloads/a.pdf", "dst": "~/Documents/Papers/"}, user_text="", settings=settings).confirm

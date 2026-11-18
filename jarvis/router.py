@@ -212,6 +212,58 @@ def route(text: str, ctx: dict | None = None) -> Intent | None:
     if re.fullmatch(r"unmute(?: the)?(?: volume| sound| audio| computer)?", s):
         return I("volume", mute=False)
 
+    # --- media, system and window control (any app) ------------------------------------
+    if re.fullmatch(r"(?:play|pause|resume|stop the music|pause the music|play the music|pause (?:the )?(?:song|video|music)|resume (?:the )?(?:song|video|music)|play pause)", s):
+        return I("media", key="play")
+    if re.fullmatch(r"(?:next|skip)(?: (?:song|track|this song|this track|one))?|play the next (?:song|track)", s):
+        return I("media", key="next")
+    if re.fullmatch(r"(?:previous|last|go back a) (?:song|track)|play the previous (?:song|track)", s):
+        return I("media", key="previous")
+    m = re.fullmatch(r"play (.+?) on spotify", s)
+    if m:
+        return I("spotify_search", query=m.group(1))
+    if re.fullmatch(r"(?:turn (?:the )?)?brightness up|(?:make (?:the )?screen |screen )?brighter|increase (?:the )?brightness", s):
+        return I("media", key="brightness_up")
+    if re.fullmatch(r"(?:turn (?:the )?)?brightness down|(?:make (?:the )?screen |screen )?(?:dimmer|darker)|(?:decrease|lower|dim) (?:the )?(?:brightness|screen)", s):
+        return I("media", key="brightness_down")
+    m = re.fullmatch(r"(?:turn |switch )?(on|off|enable|disable)? ?(?:the )?dark mode ?(on|off)?|(?:switch to|use|enable) (dark|light) mode|toggle dark mode", s)
+    if m:
+        word = m.group(1) or m.group(2) or m.group(3)
+        dark = None if word is None and "toggle" in s else (word in ("on", "enable", "dark") if word else True)
+        return I("appearance", dark=dark)
+    m = re.fullmatch(r"(?:turn |switch )?(on|off) (?:the )?wi-?fi|(?:turn |switch )?(?:the )?wi-?fi (on|off)|(enable|disable) (?:the )?wi-?fi", s)
+    if m:
+        return I("wifi", on=(m.group(1) or m.group(2) or m.group(3)) in ("on", "enable"))
+    m = re.fullmatch(r"(?:open|show|go to)(?: the| my)? (.+?) settings|(?:open )?settings for (.+)", s)
+    if m:
+        return I("settings", pane=(m.group(1) or m.group(2)).strip())
+    if re.fullmatch(r"(?:take|grab|capture) (?:a )?screen ?shot(?: of (?:the|my) screen)?|screenshot", s):
+        return I("screenshot")
+    for pat, action in ((r"minimi[sz]e(?: (?:this|the) window| this| it)?", "minimize"),
+                        (r"(?:make (?:this|it|the window) )?full ?screen|(?:enter|exit|toggle) full ?screen", "fullscreen"),
+                        (r"(?:open )?(?:a )?new window", "new_window"),
+                        (r"close (?:this|the) window", "close_window"),
+                        (r"show (?:me )?(?:the )?desktop", "show_desktop"),
+                        (r"(?:open |show )?mission control|show (?:me )?all (?:my )?windows", "mission_control")):
+        if re.fullmatch(pat, s):
+            return I("window", action=action)
+    m = re.fullmatch(r"hide (?:the )?(.+?)(?: app)?", s)
+    if m:
+        return I("window", action="hide", app=None if m.group(1) in ("this", "it", "this app", "this window") else m.group(1))
+
+    # --- built-in apps ----------------------------------------------------------------------
+    m = re.fullmatch(r"(?:make|create|take|write|add) (?:a )?(?:new )?note(?: (?:that says|saying|that|about|:))? (.+)|note (?:down|that) (.+)", s)
+    if m:
+        return I("note", body=raw_after(text, r"(?:note(?:\s+(?:that says|saying|that|about|:))?|note\s+(?:down|that))\s+") or (m.group(1) or m.group(2)))
+    m = re.fullmatch(r"remind me (?:to |about )?(.+)", s)
+    if m:
+        body, due = parse_reminder(raw_after(text, r"remind\s+me\s+(?:to\s+|about\s+)?") or m.group(1))
+        return I("reminder", text=body, due_in_s=due)
+    m = re.fullmatch(r"what(?:'s| is| do i have) (?:on )?(?:my )?(?:calendar|schedule|agenda)?(?: on)? ?(today|tomorrow|this week)?|(?:what do i have|what's on) (today|tomorrow|this week)|(?:read|show) (?:me )?my (?:calendar|schedule)(?: for)? ?(today|tomorrow|this week)?", s)
+    if m and re.search(r"calendar|schedule|agenda|have (today|tomorrow|this week)|on (today|tomorrow|this week)", s):
+        when = m.group(1) or m.group(2) or m.group(3) or "today"
+        return I("calendar", when=when)
+
     # --- browser follow-ups (cheap, deterministic) -----------------------------------
     browser_ctx = ctx.get("browser_active", False)
     m = re.fullmatch(r"scroll(?: the page)?\s*(down|up)?(?:\s+(?:a bit|a little|more|some))?|page (down|up)", s)
@@ -282,3 +334,40 @@ def ordinal_in(s: str) -> int | None:
             return n
     m = re.search(r"\bnumber (\d+)\b", s)
     return int(m.group(1)) if m else None
+
+
+_NUM = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "ten": 10, "fifteen": 15, "twenty": 20,
+        "thirty": 30, "forty five": 45, "half an": 0.5}
+
+
+def parse_reminder(text: str, now=None) -> tuple[str, float | None]:
+    """Split "call mom at 5pm" / "do homework tomorrow at 7" / "stretch in 20 minutes" into (text, seconds from now)."""
+    import datetime as _dt
+
+    now = now or _dt.datetime.now()
+    t = text.strip().rstrip(".")
+    m = re.search(r"\s+in (\d+|a|an|one|two|three|four|five|ten|fifteen|twenty|thirty|forty five|half an) (minutes?|mins?|hours?)$", t)
+    if m:
+        n = float(m.group(1)) if m.group(1).isdigit() else _NUM[m.group(1)]
+        return t[:m.start()].strip(), n * (3600 if m.group(2).startswith("h") else 60)
+    m = re.search(r"\s+(?:(today|tonight|tomorrow)\s*)?(?:at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?)?\s*(today|tonight|tomorrow)?$", t)
+    if m and (m.group(1) or m.group(2) or m.group(5)):
+        day = m.group(1) or m.group(5) or ""
+        hour = int(m.group(2)) if m.group(2) else (20 if day == "tonight" else 9)
+        minute = int(m.group(3) or 0)
+        ampm = (m.group(4) or "").replace(".", "")
+        if ampm == "pm" and hour < 12:
+            hour += 12
+        elif ampm == "am" and hour == 12:
+            hour = 0
+        elif not ampm and m.group(2) and hour < 8:
+            hour += 12        # "at 5" means 5 pm
+        if day == "tonight" and hour < 12:
+            hour += 12
+        target = now.replace(hour=hour % 24, minute=minute, second=0, microsecond=0)
+        if day == "tomorrow":
+            target += _dt.timedelta(days=1)
+        elif target <= now:
+            target += _dt.timedelta(days=1)
+        return t[:m.start()].strip(), (target - now).total_seconds()
+    return t, None

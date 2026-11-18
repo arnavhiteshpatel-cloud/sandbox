@@ -389,6 +389,78 @@ async def done(ctx, a):
     return {"ok": True, "final": True}
 
 
+# --- any app / system ------------------------------------------------------------------------
+async def app_dictionary(ctx, a):
+    text = await _t(ctx.computer.app_dictionary, a["app"], 6000)
+    return {"ok": True, "app": a["app"], "dictionary": text}
+
+
+async def script_app(ctx, a):
+    r = await _t(ctx.computer.app_script, a["script"], a.get("language", "AppleScript"))
+    out = _res(r)
+    if r.ok and r.data.get("output"):
+        out["output"] = wrap_untrusted("app", r.data["output"])
+    if not r.ok:
+        out["hint"] = "Check the app's dictionary with app_dictionary, or use observe/click/menu instead."
+    return out
+
+
+async def media(ctx, a):
+    return _res(await _t(ctx.computer.media_key, a["key"]))
+
+
+async def system(ctx, a):
+    act = a["action"]
+    c = ctx.computer
+    if act in ("dark_mode", "light_mode", "toggle_appearance"):
+        r = await _t(c.set_appearance, {"dark_mode": True, "light_mode": False}.get(act))
+    elif act in ("wifi_on", "wifi_off"):
+        r = await _t(c.set_wifi, act == "wifi_on")
+    elif act == "open_settings":
+        r = await _t(c.open_settings, a.get("value") or "")
+    elif act == "screenshot":
+        r = await _t(c.take_screenshot)
+    elif act == "open_location":
+        r = await _t(c.open_location, a.get("value") or "")
+    elif act in ("minimize", "fullscreen", "hide", "new_window", "close_window", "show_desktop", "mission_control"):
+        r = await _t(c.window_action, act, a.get("value") or None)
+    elif act in ("lock_screen", "display_sleep"):
+        r = await _t(getattr(c, act))
+    else:
+        return {"ok": False, "error": f"unknown system action {act}"}
+    return _res(r)
+
+
+async def create_note(ctx, a):
+    return _res(await _t(ctx.computer.create_note, a["body"], a.get("title")))
+
+
+async def create_reminder(ctx, a):
+    due = None
+    if a.get("when"):
+        from ..router import parse_reminder
+
+        _, due = parse_reminder("x " + a["when"])
+    return _res(await _t(ctx.computer.create_reminder, a["text"], due))
+
+
+async def calendar(ctx, a):
+    r = await _t(ctx.computer.calendar_events, int(a.get("day_offset", 0)), int(a.get("days", 1)))
+    out = _res(r)
+    if r.ok:
+        out["events"] = wrap_untrusted("calendar", json.dumps(r.data.get("events", []))[:4000])
+    return out
+
+
+async def compose_email(ctx, a):
+    to = a.get("to") or []
+    return _res(await _t(ctx.computer.compose_email, to if isinstance(to, list) else [to], a.get("subject", ""), a.get("body", "")))
+
+
+async def send_message(ctx, a):
+    return _res(await _t(ctx.computer.send_message, a["to"], a["text"]))
+
+
 S = {"type": "string"}
 TOOLS: list[Tool] = [
     Tool("observe", "See the current app/web page: URL, title, visible text and interactive elements with ids. Call this before clicking and after actions to verify.",
@@ -424,6 +496,27 @@ TOOLS: list[Tool] = [
     Tool("recall", "Look up saved memories.", {"query": S}, ["query"], "read", recall),
     Tool("run_shortcut", "Run one of the user's saved voice shortcuts by name.", {"name": S}, ["name"], "low", run_shortcut),
     Tool("ask_user", "Ask the user a question when required information is missing or a choice is ambiguous.", {"question": S}, ["question"], "low", ask_user),
+    Tool("app_dictionary", "List what an app can be scripted to do (its AppleScript commands and objects). Use before script_app on an unfamiliar app.",
+         {"app": S}, ["app"], "read", app_dictionary),
+    Tool("script_app", "Run AppleScript (or JXA with language='JavaScript') to control a scriptable app directly, e.g. "
+         "'tell application \"Music\" to play playlist \"Focus\"'. Prefer this over clicking when the app supports it.",
+         {"script": S, "language": {"type": "string", "enum": ["AppleScript", "JavaScript"]}}, ["script"], "medium", script_app, True),
+    Tool("media", "Media and hardware keys for whatever is playing or the display.",
+         {"key": {"type": "string", "enum": ["play", "next", "previous", "brightness_up", "brightness_down", "keyboard_light_up", "keyboard_light_down"]}},
+         ["key"], "low", media),
+    Tool("system", "System actions. value = Settings pane name (open_settings), URL like spotify:… (open_location) or app (window actions).",
+         {"action": {"type": "string", "enum": ["dark_mode", "light_mode", "toggle_appearance", "wifi_on", "wifi_off", "open_settings",
+                                                 "screenshot", "open_location", "minimize", "fullscreen", "hide", "new_window", "close_window",
+                                                 "show_desktop", "mission_control", "lock_screen", "display_sleep"]}, "value": S},
+         ["action"], "low", system),
+    Tool("create_note", "Create a note in Apple Notes.", {"body": S, "title": S}, ["body"], "low", create_note),
+    Tool("create_reminder", "Create a reminder in Apple Reminders. when: e.g. 'at 5pm', 'tomorrow at 9am', 'in 20 minutes'.",
+         {"text": S, "when": S}, ["text"], "low", create_reminder),
+    Tool("calendar", "Read Calendar events. day_offset 0 = today, 1 = tomorrow; days = how many days.",
+         {"day_offset": {"type": "integer"}, "days": {"type": "integer"}}, [], "read", calendar, True),
+    Tool("compose_email", "Open a Mail draft (not sent).", {"to": {"type": "array", "items": S}, "subject": S, "body": S}, ["subject", "body"], "low", compose_email),
+    Tool("send_message", "Send an iMessage to a contact name, phone number or email (the user is always asked first).",
+         {"to": S, "text": S}, ["to", "text"], "high", send_message),
     Tool("done", "Finish the task. summary = what you did and the answer, in one to three spoken sentences. success=false if you could not complete it.",
          {"summary": S, "success": {"type": "boolean"}}, ["summary"], "low", done),
 ]
@@ -467,8 +560,13 @@ import re as _re
 
 CORE = {"observe", "open_app", "open_url", "click", "type_text", "press_keys", "scroll", "browser_nav", "read_page",
         "wait", "ask_user", "done", "remember", "recall", "run_shortcut"}
+CORE |= {"menu", "media", "system"}
 FILES = {"search_files", "list_folder", "read_file", "move_file", "make_folder", "trash_files", "find_duplicates"}
-SCREEN = {"look_at_screen", "click_screen_text", "menu"}
+SCREEN = {"look_at_screen", "click_screen_text"}
+APPS = {"app_dictionary", "script_app", "create_note", "create_reminder", "calendar", "compose_email", "send_message"}
+APP_WORDS = _re.compile(r"\b(app|application|notes?|reminders?|remind|calendar|schedule|meeting|events?|mail|email|e-mail|message|text|imessage|"
+                        r"music|spotify|song|playlist|podcast|finder|slack|discord|notion|word|excel|powerpoint|keynote|pages|numbers|"
+                        r"xcode|vs ?code|zoom|teams|photos|preview|terminal|settings|window|dock|script)\b", _re.I)
 FILE_WORDS = _re.compile(r"\b(files?|folders?|director(y|ies)|pdfs?|docs?|documents?|downloads?|desktop|resume|cv|papers?|slides?|"
                          r"spreadsheets?|organi[sz]e|duplicates?|rename|move|delete|trash|lecture|notes|essay|project|~/|/users/)\b", _re.I)
 SCREEN_WORDS = _re.compile(r"\b(screen|see|look|window|menu|button|app|image|picture|photo|chart|showing|displayed|visible)\b", _re.I)
@@ -480,10 +578,13 @@ def select_tools(objective: str, browser_active: bool = False, allow_vision: boo
     f, sc, web = bool(FILE_WORDS.search(objective)), bool(SCREEN_WORDS.search(objective)), bool(WEB_WORDS.search(objective))
     if f:
         names |= FILES
+    ap = bool(APP_WORDS.search(objective))
+    if ap:
+        names |= APPS | SCREEN
     if sc or not (f or web or browser_active):
         names |= SCREEN
-    if not (f or sc or web or browser_active):
-        names |= FILES  # unclear request: offer everything
+    if not (f or sc or web or browser_active or ap):
+        names |= FILES | APPS  # unclear request: offer everything
     if not allow_vision:
         names.discard("look_at_screen")
     return [t for t in TOOLS if t.name in names]

@@ -32,7 +32,9 @@ macOS asks for each on first use; you can also open **Command Center → Setting
 | Microphone | wake word and push-to-talk | Privacy & Security → Microphone |
 | Accessibility | clicking/typing in apps, reading native UIs, window arrangement, ⌃⌘Q lock | Privacy & Security → Accessibility |
 | Screen Recording | screenshots for "what's on my screen" and OCR fallback | Privacy & Security → Screen & System Audio Recording |
-| Automation (per app) | controlling Arc, Finder, System Events | prompted per app ("JARVIS wants to control Arc") |
+| Automation (per app) | controlling Arc, Finder, System Events, Notes, Reminders, Calendar, Mail, Messages, Music, Contacts… | prompted the first time JARVIS controls each app ("JARVIS wants to control Notes"); click Allow |
+| Calendars / Reminders / Contacts | reading your schedule, creating reminders, finding who to message | prompted on first use |
+| Full Disk Access (optional) | lets file search and file tools reach protected locations (Mail data, other users' shared folders) | Privacy & Security → Full Disk Access → add JARVIS |
 
 Hot keys: **⌃⌥⌘.** (stop) is a Carbon hot key and needs no permission. **Hold ⌥⇧C** (talk) needs **Accessibility**,
 because macOS 15 no longer lets apps register Option/Option+Shift-only shortcuts the normal way. JARVIS reads that one

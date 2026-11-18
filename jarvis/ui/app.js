@@ -210,6 +210,12 @@ const ACTIONS = {
   agent: [F("instruction", "text", "what the AI should figure out")],
   if: [F("condition.type", "select", CONDS), F("condition.value", "text"), F("then", "json"), F("else", "json")],
   set: [F("var", "text"), F("value", "text")],
+  media: [F("key", "select", ["play", "next", "previous", "brightness_up", "brightness_down"])],
+  system: [F("command", "select", ["dark_mode", "light_mode", "toggle_appearance", "wifi_on", "wifi_off", "open_settings", "screenshot",
+    "minimize", "fullscreen", "hide", "new_window", "close_window", "show_desktop", "mission_control"]), F("value", "text", "settings pane or app (optional)")],
+  note: [F("text", "text", "note text"), F("title", "text", "title (optional)")],
+  reminder: [F("text", "text"), F("when", "text", "e.g. tomorrow at 9am (optional)")],
+  open_location: [F("url", "text", "spotify:… zoommtg:… etc.")],
   applescript: [F("script", "textarea")], shell: [F("command", "text")],
 };
 const getp = (o, k) => k.split(".").reduce((a, p) => a?.[p], o);

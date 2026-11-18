@@ -241,6 +241,28 @@ class ShortcutEngine:
             return ActionResult(True, st["text"])
         if a == "notify":
             return await self._call(c.notify, st.get("title", "JARVIS"), st["text"])
+        if a == "media":
+            return await self._call(c.media_key, st["key"])
+        if a == "system":
+            cmd, val = st["command"], st.get("value")
+            if cmd in ("dark_mode", "light_mode", "toggle_appearance"):
+                return await self._call(c.set_appearance, {"dark_mode": True, "light_mode": False}.get(cmd))
+            if cmd in ("wifi_on", "wifi_off"):
+                return await self._call(c.set_wifi, cmd == "wifi_on")
+            if cmd == "open_settings":
+                return await self._call(c.open_settings, val or "")
+            if cmd == "screenshot":
+                return await self._call(c.take_screenshot)
+            return await self._call(c.window_action, cmd, val)
+        if a == "note":
+            return await self._call(c.create_note, st["text"], st.get("title"))
+        if a == "reminder":
+            from ..router import parse_reminder
+
+            due = parse_reminder("x " + st["when"])[1] if st.get("when") else None
+            return await self._call(c.create_reminder, st["text"], due)
+        if a == "open_location":
+            return await self._call(c.open_location, st["url"])
         if a == "set":
             ctx["vars"][st["var"]] = st["value"]
             return ActionResult(True, f"{st['var']} = {st['value']}")

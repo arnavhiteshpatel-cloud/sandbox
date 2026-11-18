@@ -18,6 +18,13 @@ CONFIRM_UNLESS_ASKED = re.compile(
 DANGEROUS_KEYS = {"cmd+delete", "cmd+backspace", "cmd+shift+delete", "cmd+opt+esc", "cmd+q", "ctrl+cmd+q", "cmd+shift+q"}
 
 
+RISKY_SCRIPT = re.compile(
+    r"\b(delete|remove|erase|empty (?:the )?trash|move .{0,80} to (?:the )?trash|send|reply|forward|post|purchase|buy|"
+    r"do shell script|doShellScript|keystroke|key code|quit|restart|shut ?down|log ?out|sleep|password|set volume|"
+    r"make new outgoing message|duplicate|overwrite|format|unmount|eject)\b", re.I)
+APP_ACTION_TOOLS = {"click", "type_text", "press_keys", "menu", "click_screen_text", "script_app"}
+
+
 @dataclass
 class Verdict:
     allow: bool
@@ -45,7 +52,30 @@ def within(path: str, roots: list[str]) -> bool:
     return False
 
 
-def check(tool: str, args: dict, *, user_text: str, settings, element_label: str = "") -> Verdict:
+def sensitive_app(app: str | None, settings) -> bool:
+    if not app:
+        return False
+    return app.lower() in {a.lower() for a in settings.get("security.sensitive_apps", [])}
+
+
+def check(tool: str, args: dict, *, user_text: str, settings, element_label: str = "", front_app: str | None = None) -> Verdict:
+    target_app = args.get("app") if tool in ("menu",) else front_app
+    if tool in APP_ACTION_TOOLS and sensitive_app(target_app, settings):
+        return Verdict(True, confirm=True, reason=f"{target_app} is a sensitive app.")
+    if tool == "script_app":
+        script = str(args.get("script", ""))
+        tells = re.findall(r'application\s+(?:id\s+)?"([^"]+)"|Application\(["\']([^"\']+)', script)
+        apps = [a or b for a, b in tells]
+        if any(sensitive_app(a, settings) for a in apps):
+            return Verdict(True, confirm=True, reason="The script controls a sensitive app.")
+        m = RISKY_SCRIPT.search(script)
+        if m:
+            return Verdict(True, confirm=True, reason=f"The script can {m.group(0).lower()} things.")
+        return Verdict(True)
+    if tool == "send_message":
+        return Verdict(True, confirm=True, reason=f"This sends “{str(args.get('text', ''))[:80]}” to {args.get('to')}.")
+    if tool == "set_wifi" and not args.get("on", True):
+        return Verdict(True, confirm=True, reason="Turning Wi-Fi off disconnects the internet.")
     if tool in ("open_url",):
         url = str(args.get("url", "")).strip().lower()
         if url.startswith(("javascript:", "data:", "file:", "vbscript:")):

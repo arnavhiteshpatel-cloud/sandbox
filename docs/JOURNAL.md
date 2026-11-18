@@ -20,6 +20,7 @@ Recorded 2026-11-17, answers given directly by the user:
 | Autonomy | **Confirm only high-impact actions**: delete, submit/send, buy/pay, system changes. Opening, navigating, clicking, reading, moving and renaming files are automatic. |
 | File indexing | **Entire home folder** authorized. Hidden folders, ~/Library, keychains and password-manager vaults, app bundles and media libraries are excluded. Heavy indexing runs while charging. |
 | Max Performance model | **Benchmark decides.** Ship Qwen3.5 9B; `jarvis bench` on the Mac compares candidates. |
+| App access (2026-11-18) | **Every app reachable**, not just Arc. Nothing is blocked by default. Terminal, iTerm, Keychain Access, Passwords, System Settings, password managers, Disk Utility and Activity Monitor are "sensitive": any click, typing or script there asks first. Sending messages always asks. |
 | Subscription | Claude access ends **2026-12-05**. Nothing at runtime may depend on Claude or Anthropic. |
 
 ## Environment facts
@@ -76,6 +77,13 @@ conventions, AppleScript for Arc/Chrome/Safari, lsappinfo parsing, Carbon/IOKit 
 ### Benchmark (Linux CPU, Qwen3.5-4B, one run per case)
 v1 8/11 → v2 11/11 after tool subsetting and verbatim tool-call replay. Prompt tokens per call fell 1,879 → 679 and
 cache-reusing calls rose 5/19 → 25/36. Reports are in docs/benchmarks/.
+
+### Every-app control (session 2, 2026-11-18)
+Added universal follow-ups (scroll/back/new tab/close tab in any app), a system layer (media keys, brightness, dark mode,
+Wi-Fi, Settings panes, screenshots, window actions), built-in integrations (Notes, Reminders, Calendar, Mail drafts, Messages
+with confirmation, Spotify search, any URL scheme), agent tools `app_dictionary` + `script_app` (script any scriptable app,
+risky scripts confirmed), AXManualAccessibility for all apps (Electron apps expose their UI), and 5 new shortcut step types.
+100 tests pass. Real model (Qwen3.5-4B, CPU): the 3 app cases passed 3/3.
 
 ### Known issues / risks
 - Nothing macOS-specific has been executed yet (see LIMITATIONS.md).

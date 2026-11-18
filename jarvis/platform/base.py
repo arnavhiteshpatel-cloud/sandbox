@@ -106,3 +106,21 @@ class Computer:
     def reveal_in_finder(self, path: str) -> ActionResult: raise NotImplementedError
     def arrange_windows(self, layout: str, apps: list[str]) -> ActionResult: raise NotImplementedError
     def permissions(self) -> dict: return {}
+
+    # --- system & app integrations (work with every app) -----------------------------------
+    def media_key(self, key: str) -> ActionResult: raise NotImplementedError
+    """play | next | previous | brightness_up | brightness_down | keyboard_light_up | keyboard_light_down"""
+    def set_appearance(self, dark: bool | None) -> ActionResult: raise NotImplementedError   # None = toggle
+    def set_wifi(self, on: bool) -> ActionResult: raise NotImplementedError
+    def open_settings(self, pane: str) -> ActionResult: raise NotImplementedError
+    def take_screenshot(self, path: str | None = None) -> ActionResult: raise NotImplementedError
+    def window_action(self, action: str, app: str | None = None) -> ActionResult: raise NotImplementedError
+    """minimize | fullscreen | hide | new_window | close_window | show_desktop | mission_control"""
+    def app_script(self, script: str, language: str = "AppleScript") -> ActionResult: raise NotImplementedError
+    def app_dictionary(self, app: str, max_chars: int = 6000) -> str: raise NotImplementedError
+    def create_note(self, body: str, title: str | None = None) -> ActionResult: raise NotImplementedError
+    def create_reminder(self, text: str, due_in_s: float | None = None) -> ActionResult: raise NotImplementedError
+    def calendar_events(self, day_offset: int = 0, days: int = 1) -> ActionResult: raise NotImplementedError
+    def compose_email(self, to: list[str], subject: str, body: str) -> ActionResult: raise NotImplementedError
+    def send_message(self, to: str, text: str) -> ActionResult: raise NotImplementedError
+    def open_location(self, url: str) -> ActionResult: raise NotImplementedError   # any URL scheme (spotify:, music:, zoommtg:, …)

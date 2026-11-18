@@ -17,6 +17,12 @@ Honest list, newest understanding first. "Unverified" means designed and written
 
 ## By design / platform limits
 
+* **Every app is reachable, but not every app is equally controllable.** Order of reliability: built-in integrations
+  (Notes, Reminders, Calendar, Mail, Messages) → AppleScript for scriptable apps → the accessibility tree (most native and
+  Electron apps) → screenshot + OCR clicking (anything visible, slowest). Games, remote desktops, canvas-only apps and secure
+  input fields (passwords) can't be operated. Unverified on the Mac: brightness media keys on the built-in display, Wi-Fi
+  toggling without an admin prompt, and the exact System Settings pane identifiers on 15.7 (unknown panes open Settings' main page).
+
 * **⌥⇧C needs Accessibility.** macOS 15 blocks Option/Option+Shift-only global shortcuts via `RegisterEventHotKey`, so
   push-to-talk uses a keyboard event tap (it sees key events system-wide but only acts on ⌥⇧C). Without
   Accessibility it falls back to ⌃⌥C.

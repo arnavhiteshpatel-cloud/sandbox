@@ -6,7 +6,7 @@
 JARVIS_PLATFORM=fake python -m pytest -q
 ```
 
-78 tests, all passing (Linux, Python 3.12, 2026-11-17). They cover:
+100 tests, all passing (Linux, Python 3.12, 2026-11-18). They cover:
 
 | File | What |
 |---|---|
@@ -15,6 +15,7 @@ JARVIS_PLATFORM=fake python -m pytest -q
 | `test_assistant_flow.py` | **"open my IB" → "go to the assignments" → "scroll down" → "go back" with zero LLM calls**; ordinal follow-ups handed to the agent with page context; memory surviving a restart; stop and replace-instruction; full voice shortcut-creation dialog; submit confirmation; shortcuts working with the LLM down |
 | `test_agent.py` | invalid/unknown tool recovery, failed-click recovery, step limits, repeated-failure abort, mid-task cancellation, Trash confirmation, untrusted-content wrapping, Qwen JSON/XML tool-call parsing, tool subsetting |
 | `test_memory_search_policy.py` | explicit vs inferred memory, indexing (hidden/Library folders excluded), relevance, recency, duplicates, incremental re-index, deletions, Office extraction, safety policy, power-mode policy (wake word only on AC, task-aware switching) |
+| `test_any_app.py` | media/system/window/app commands with zero LLM calls, reminder time parsing, calendar summaries, follow-ups in non-browser apps, Wi-Fi-off and Terminal confirmations, script and message gating in the agent |
 | `test_browser_js.py` | the JavaScript injected into Arc, run in **real Chromium**: discovery including shadow DOM, stable ids, clicks, React-style inputs, inner scroll containers, page reading |
 
 These use `platform/fake.py`, a simulated computer. They prove the logic, **not** that macOS automation works.

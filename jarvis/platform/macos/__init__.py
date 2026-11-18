@@ -176,17 +176,14 @@ class MacComputer(Computer):
         pid = self._pid(app)
         if pid is None:
             return {"error": f"{app} isn't running."}
-        if app in BROWSERS:
-            # Chromium only exposes web content to AX when asked to.
-            try:
-                from ApplicationServices import AXUIElementSetAttributeValue  # type: ignore
+        # Chromium and Electron apps (Arc, Slack, Discord, VS Code, Notion, Spotify…) only expose their
+        # full UI to accessibility when asked; native apps ignore this attribute.
+        try:
+            from ApplicationServices import AXUIElementSetAttributeValue  # type: ignore
 
-                el = self.ax.app_element(pid)
-                # AXManualAccessibility is enough for Chromium; AXEnhancedUserInterface would persist
-                # and make window moves/resizes slow.
-                AXUIElementSetAttributeValue(el, "AXManualAccessibility", True)
-            except Exception:
-                pass
+            AXUIElementSetAttributeValue(self.ax.app_element(pid), "AXManualAccessibility", True)
+        except Exception:
+            pass
         return self.ax.snapshot(pid, app, max_elements)
 
     def ui_press(self, element_id):
@@ -324,6 +321,81 @@ class MacComputer(Computer):
                 done.append(app)
         ok = len(done) == len(apps[:len(frames)])
         return ActionResult(ok, f"Arranged {', '.join(done) or 'nothing'}.", verified=ok)
+
+    # --- system & app integrations -------------------------------------------------------------
+    def media_key(self, key):
+        from . import integrations as I
+        return I.media_key(key)
+
+    def set_appearance(self, dark):
+        from . import integrations as I
+        return I.set_appearance(dark)
+
+    def set_wifi(self, on):
+        from . import integrations as I
+        return I.set_wifi(on)
+
+    def open_settings(self, pane):
+        from . import integrations as I
+        return I.open_settings(pane)
+
+    def take_screenshot(self, path=None):
+        from . import integrations as I
+        return I.take_screenshot(path)
+
+    def window_action(self, action, app=None):
+        from . import integrations as I
+
+        if action == "show_desktop":
+            return self.press_keys("f11")
+        if action == "mission_control":
+            subprocess.run(["open", "-a", "Mission Control"], timeout=5)
+            return ActionResult(True, "Mission Control.")
+        combo = I.WINDOW_KEYS.get(action)
+        if not combo:
+            return ActionResult.fail(f"Unknown window action {action}.")
+        if app:
+            self.focus_app(app)
+            time.sleep(0.2)
+        return self.press_keys(combo)
+
+    def app_script(self, script, language="AppleScript"):
+        from . import integrations as I
+        return I.app_script(script, language)
+
+    def app_dictionary(self, app, max_chars=6000):
+        from . import integrations as I
+
+        name = self.resolve_app(app) or app
+        for d in APP_DIRS:
+            p = os.path.join(d, name + ".app")
+            if os.path.isdir(p):
+                return I.app_dictionary(p, max_chars)
+        return f"{app} isn't installed."
+
+    def create_note(self, body, title=None):
+        from . import integrations as I
+        return I.create_note(body, title)
+
+    def create_reminder(self, text, due_in_s=None):
+        from . import integrations as I
+        return I.create_reminder(text, due_in_s)
+
+    def calendar_events(self, day_offset=0, days=1):
+        from . import integrations as I
+        return I.calendar_events(day_offset, days)
+
+    def compose_email(self, to, subject, body):
+        from . import integrations as I
+        return I.compose_email(to, subject, body)
+
+    def open_location(self, url):
+        p = subprocess.run(["open", url], capture_output=True, text=True, timeout=15)
+        return ActionResult(p.returncode == 0, "Opened." if p.returncode == 0 else p.stderr.strip()[:200])
+
+    def send_message(self, to, text):
+        from . import integrations as I
+        return I.send_message(to, text)
 
     def permissions(self):
         perms = {"accessibility": self.ax.trusted()}

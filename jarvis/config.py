@@ -99,7 +99,10 @@ DEFAULTS: dict[str, Any] = {
     },
     "security": {
         "allowed_apps": [],            # empty = all apps allowed
-        "blocked_apps": ["Keychain Access", "Terminal", "iTerm"],
+        "blocked_apps": [],            # user choice (2026-11-18): every app is reachable
+        # Apps where any click/type/keypress/script by JARVIS asks first (consistent with "confirm high-impact").
+        "sensitive_apps": ["Terminal", "iTerm", "iTerm2", "Keychain Access", "Passwords", "System Settings",
+                           "1Password", "Bitwarden", "Disk Utility", "Activity Monitor"],
         "shell_allowlist": ["ls", "du", "mdfind", "mdls", "file", "wc", "head", "stat", "sw_vers", "pmset", "system_profiler"],
         "file_write_roots": ["~/Downloads", "~/Documents", "~/Desktop"],
     },

@@ -54,6 +54,11 @@ ACTIONS: dict[str, tuple[tuple[str, ...], str]] = {
     "applescript": (("script",), "high"),
     "shell": (("command",), "high"),
     "set": (("var", "value"), "low"),
+    "media": (("key",), "low"),                  # play | next | previous | brightness_up | brightness_down
+    "system": (("command",), "low"),             # dark_mode | light_mode | wifi_on | wifi_off | open_settings | screenshot | minimize | …
+    "note": (("text",), "low"),                  # Apple Notes
+    "reminder": (("text",), "low"),              # Apple Reminders, optional "when": "tomorrow at 9am"
+    "open_location": (("url",), "low"),          # any URL scheme: spotify:, zoommtg:, music:, …
 }
 
 CONDITIONS = {"page_ready", "url_contains", "title_contains", "text_present", "element_present", "app_running",

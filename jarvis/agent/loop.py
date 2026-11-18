@@ -158,7 +158,13 @@ class Agent:
             label = args.get("text", "")
         elif tool.name == "type_text" and args.get("element_id"):
             label = (ctx.last_elements.get(args["element_id"]) or {}).get("name", "")
-        verdict = policy.check(tool.name, args, user_text=objective, settings=self.settings, element_label=label)
+        front = None
+        if tool.name in policy.APP_ACTION_TOOLS:
+            try:
+                front = await asyncio.to_thread(ctx.computer.frontmost_app)
+            except Exception:
+                front = None
+        verdict = policy.check(tool.name, args, user_text=objective, settings=self.settings, element_label=label, front_app=front)
         if not verdict.allow:
             return {"ok": False, "error": f"Blocked by safety policy: {verdict.reason}"}
         if verdict.confirm and self.settings.get("agent.confirm_high_risk", True):
