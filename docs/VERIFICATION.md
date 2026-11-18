@@ -12,7 +12,7 @@ been imported yet.**
   (truncate singles, round averages), time parsing.
 - Importer: penalties, multi-phase conversion, extra-field preservation, invalid-entry reporting,
   exact field preservation for all 20,013 solves, csTimer cached count/mean match for every session,
-  re-import = 0 added, incremental re-import adds only new solves, csTimer and Facelet export round trips
+  re-import = 0 added, incremental re-import adds only new solves, csTimer and Parity export round trips
   are lossless, CSV round trip.
 - Cube/algorithms: simulator agrees with cubing.js's solver; all 21 PLL and 57 OLL algorithms preserve
   F2L, orient/permute correctly and are pairwise distinct; training scramblers produce the requested states.

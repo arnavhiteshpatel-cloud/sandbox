@@ -1,4 +1,4 @@
-"""Generates the Facelet app icon (1024x1024): a black squircle with a refined 3x3 facelet grid,
+"""Generates the Parity app icon (1024x1024): a black squircle with a refined 3x3 facelet grid,
 one facelet lit in white — echoing a timer's precision and csTimer's black/white identity."""
 from PIL import Image, ImageDraw, ImageFilter
 import sys

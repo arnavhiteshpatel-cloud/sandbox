@@ -3,7 +3,7 @@
 Status legend: ✅ implemented & tested · 🟡 partial · ⛔ not implemented (reason given) · ➖ intentionally out of scope
 
 This list was compiled from csTimer's source (`src/js/**`, studied Nov 2026), not from memory alone.
-Facelet does **not** claim full parity until every row is ✅ or ➖.
+Parity does **not** claim full parity until every row is ✅ or ➖.
 
 ## Timer
 | csTimer feature | Status | Notes |

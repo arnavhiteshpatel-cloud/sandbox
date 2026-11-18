@@ -1,8 +1,13 @@
-export type ThemeId = "hud" | "vision" | "telemetry" | "black";
+export type ThemeId = "hud" | "vision" | "telemetry" | "black" | "nebula" | "ember" | "aurora" | "sakura" | "mono" | "synthwave" | "ocean" | "gold" | "matrix";
+export type BackgroundId = "theme" | "glow" | "black" | "grid" | "starfield" | "aurora" | "constellation" | "image";
 export type TimerFont = "inter" | "system" | "helvetica" | "mono" | "rounded" | "serif";
 
 export interface Settings {
   showCube3d: boolean;
+  background: BackgroundId;
+  bgDim: number;
+  bgPauseWhileSolving: boolean;
+  bgImage: string;
   celebrate: "big" | "subtle" | "off";
   celebrateSound: boolean;
   /** ignore accidental stops: "auto" = faster than shortRatio × your best single */
@@ -47,6 +52,10 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   showCube3d: true,
+  background: "theme",
+  bgDim: 0,
+  bgPauseWhileSolving: true,
+  bgImage: "",
   celebrate: "big",
   celebrateSound: true,
   shortFilter: "auto",
@@ -93,6 +102,43 @@ export const TIMER_FONTS: Record<TimerFont, { label: string; stack: string }> = 
   serif: { label: "New York", stack: "ui-serif, 'New York', Georgia, serif" },
 };
 
+function rgba([r, g, b]: number[], a: number) {
+  return `rgba(${r},${g},${b},${a})`;
+}
+function hexRgb(h: string) {
+  const n = parseInt(h.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+/** Build a full theme from a background, glow, accent and a tint used for text/edges. */
+function makeTheme(label: string, desc: string, bg: string, glow: string, accent: string, tint: number[]) {
+  const ac = hexRgb(accent);
+  const gl = hexRgb(glow);
+  return {
+    label,
+    desc,
+    vars: {
+      "--bg": bg, "--bg-glow": glow,
+      "--panel-a": rgba(gl.map((v) => Math.min(255, v + 10)), 0.72), "--panel-b": rgba(gl.map((v) => Math.round(v * 0.45)), 0.74),
+      "--edge-a": rgba(tint, 0.3), "--edge-b": rgba(tint, 0.05), "--edge-c": rgba(tint, 0.16), "--grid": rgba(tint, 0.04),
+      "--fg": "#f6f6fa", "--fg2": rgba(tint, 0.74), "--fg3": rgba(tint, 0.5), "--fg4": rgba(tint, 0.22),
+      "--line": rgba(tint, 0.08), "--line2": rgba(tint, 0.16),
+      "--accent": accent, "--accent-soft": rgba(ac, 0.13), "--glow": rgba(ac, 0.2),
+      "--bg-elev": glow, "--bg-elev2": rgba(gl.map((v) => Math.min(255, v + 14)), 1),
+    },
+  };
+}
+
+export const BACKGROUNDS: Record<BackgroundId, { label: string; desc: string; animated?: boolean }> = {
+  theme: { label: "Theme", desc: "Soft centre glow with a faint grid" },
+  glow: { label: "Glow", desc: "Centre glow, no grid" },
+  black: { label: "Black", desc: "Pure black, nothing else" },
+  grid: { label: "Blueprint", desc: "A crisper full-screen grid" },
+  starfield: { label: "Starfield", desc: "Slowly drifting stars", animated: true },
+  aurora: { label: "Aurora", desc: "Slow-moving coloured light", animated: true },
+  constellation: { label: "Constellation", desc: "Drifting points linked by faint lines", animated: true },
+  image: { label: "Your image", desc: "Any picture, dimmed behind the interface" },
+};
+
 export const THEMES: Record<ThemeId, { label: string; desc: string; vars: Record<string, string> }> = {
   hud: {
     label: "HUD",
@@ -109,6 +155,15 @@ export const THEMES: Record<ThemeId, { label: string; desc: string; vars: Record
     desc: "Amber instrument panel",
     vars: { "--bg": "#050403", "--bg-glow": "#16120c", "--panel-a": "rgba(22,19,14,.8)", "--panel-b": "rgba(10,9,7,.8)", "--edge-a": "rgba(255,190,100,.34)", "--edge-b": "rgba(255,190,100,.05)", "--edge-c": "rgba(255,190,100,.18)", "--grid": "rgba(255,190,100,.045)", "--fg": "#fff7ec", "--fg2": "rgba(255,236,210,.72)", "--fg3": "rgba(255,205,140,.5)", "--fg4": "rgba(255,205,140,.22)", "--line": "rgba(255,190,100,.08)", "--line2": "rgba(255,190,100,.16)", "--accent": "#ffb547", "--accent-soft": "rgba(255,181,71,.13)", "--glow": "rgba(255,181,71,.2)", "--bg-elev": "#110e0a", "--bg-elev2": "#1a1610" },
   },
+  nebula: makeTheme("Nebula", "Violet deep space with magenta light", "#06040c", "#1a0f2e", "#c48bff", [210, 190, 255]),
+  ember: makeTheme("Ember", "Warm black with glowing coal-orange", "#070403", "#1f0d07", "#ff6a3d", [255, 200, 180]),
+  aurora: makeTheme("Aurora", "Polar night with mint-green light", "#020807", "#08201c", "#5ef2c2", [180, 255, 230]),
+  sakura: makeTheme("Sakura", "Dark plum with soft cherry-blossom pink", "#08040a", "#22101e", "#ff8fc8", [255, 205, 230]),
+  mono: makeTheme("Mono", "Pure greyscale, white light", "#050505", "#141414", "#ffffff", [235, 235, 235]),
+  synthwave: makeTheme("Synthwave", "Retro-future indigo, hot pink", "#07031a", "#1c0a3a", "#ff4fd8", [220, 200, 255]),
+  ocean: makeTheme("Deep Ocean", "Abyssal navy with sky-blue light", "#020611", "#071a33", "#4fb3ff", [190, 220, 255]),
+  gold: makeTheme("Gold", "Black and champagne gold", "#050403", "#17120a", "#f5c46b", [255, 235, 200]),
+  matrix: makeTheme("Matrix", "Terminal black with phosphor green", "#010401", "#06160a", "#39ff88", [190, 255, 210]),
   black: {
     label: "Pure Black",
     desc: "Flat OLED black, no glow or grid",

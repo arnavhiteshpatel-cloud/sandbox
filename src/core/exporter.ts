@@ -1,7 +1,7 @@
 /**
  * Exporters:
- *  - csTimer-compatible JSON backup (can be imported back into csTimer, or into Facelet)
- *  - Facelet full backup (every field, ids, settings, import history)
+ *  - csTimer-compatible JSON backup (can be imported back into csTimer, or into Parity)
+ *  - Parity full backup (every field, ids, settings, import history)
  *  - csTimer-style CSV for a single session
  */
 import type { ImportRecord, Session, Solve, SettingsMap } from "./types";
@@ -57,9 +57,9 @@ export function exportCsTimer(sessions: Session[], solves: Solve[]): string {
   return JSON.stringify(out);
 }
 
-export function exportFacelet(sessions: Session[], solves: Solve[], settings: SettingsMap, imports: ImportRecord[]): string {
+export function exportParity(sessions: Session[], solves: Solve[], settings: SettingsMap, imports: ImportRecord[]): string {
   return JSON.stringify({
-    app: "facelet",
+    app: "parity",
     version: 1,
     exportedAt: new Date().toISOString(),
     counts: { sessions: sessions.length, solves: solves.length },

@@ -443,7 +443,7 @@ impl Db {
     }
 }
 
-/// Validate that a file is a readable Facelet database before restoring it.
+/// Validate that a file is a readable Parity database before restoring it.
 pub fn validate_db_file(path: &Path) -> Result<i64> {
     let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(e)?;
     let msg: String = conn.query_row("PRAGMA integrity_check", [], |r| r.get(0)).map_err(e)?;
@@ -452,14 +452,14 @@ pub fn validate_db_file(path: &Path) -> Result<i64> {
     }
     let n: i64 = conn
         .query_row("SELECT COUNT(*) FROM solves", [], |r| r.get(0))
-        .map_err(|_| "file is not a Facelet database (no solves table)".to_string())?;
+        .map_err(|_| "file is not a Parity database (no solves table)".to_string())?;
     Ok(n)
 }
 
 pub fn backup_file_name(reason: &str) -> String {
     let ts = chrono::Local::now().format("%Y%m%d-%H%M%S%.3f");
     let safe: String = reason.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
-    format!("facelet-{ts}-{safe}.sqlite")
+    format!("parity-{ts}-{safe}.sqlite")
 }
 
 pub fn list_backups(dir: &Path) -> Vec<BackupInfo> {
@@ -468,7 +468,7 @@ pub fn list_backups(dir: &Path) -> Vec<BackupInfo> {
         for ent in rd.flatten() {
             let p = ent.path();
             let name = ent.file_name().to_string_lossy().to_string();
-            if !name.starts_with("facelet-") || !name.ends_with(".sqlite") {
+            if !(name.starts_with("parity-") || name.starts_with("facelet-")) || !name.ends_with(".sqlite") {
                 continue;
             }
             let meta = match ent.metadata() {

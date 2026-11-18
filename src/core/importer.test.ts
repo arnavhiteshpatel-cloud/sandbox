@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { convertCsSolve, parseBackup, verifyAgainstCsStat } from "./importer";
 import { planImport } from "./importPlan";
-import { exportCsTimer, exportFacelet, exportSessionCsv, toCsTimerEntry } from "./exporter";
+import { exportCsTimer, exportParity, exportSessionCsv, toCsTimerEntry } from "./exporter";
 import { makeCsTimerBackup } from "./testdata";
 import type { Session, Solve } from "./types";
 
@@ -104,10 +104,10 @@ describe("full backup import", () => {
     expect(p3.totals.toAdd).toBe(0);
   });
 
-  it("Facelet backup round trip", () => {
+  it("Parity backup round trip", () => {
     const plan = planImport(parsed, [], []);
-    const fb = parseBackup(exportFacelet(plan.sessions, plan.solves, {}, []));
-    expect(fb.format).toBe("facelet");
+    const fb = parseBackup(exportParity(plan.sessions, plan.solves, {}, []));
+    expect(fb.format).toBe("parity");
     expect(fb.totalSolves).toBe(parsed.totalSolves);
   });
 

@@ -1,9 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useStore } from "../data/store";
-import { THEMES, TIMER_FONTS, DEFAULT_SETTINGS, type Settings, type ThemeId, type TimerFont } from "../data/settings";
+import { THEMES, TIMER_FONTS, DEFAULT_SETTINGS, BACKGROUNDS, type BackgroundId, type Settings, type ThemeId, type TimerFont } from "../data/settings";
+import { pickBackgroundImage } from "../ui/Background";
 import { Seg, Toggle, confirmDialog } from "../ui/Overlay";
 import { ImportFlow } from "../ui/ImportFlow";
-import { exportCsTimer, exportFacelet } from "../core/exporter";
+import { exportCsTimer, exportParity } from "../core/exporter";
 import { parseAvgLabel } from "../core/stats";
 import { fmtDate } from "../core/time";
 import type { BackupInfo } from "../core/types";
@@ -74,6 +75,30 @@ function Appearance() {
           );
         })}
       </div>
+      <div className="section-title">Background</div>
+      <div className="grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+        {(Object.keys(BACKGROUNDS) as BackgroundId[]).map((id) => (
+          <button key={id} className={"theme-card bg-card" + (s.background === id ? " on" : "")} data-testid={"bg-" + id}
+            onClick={async () => {
+              if (id === "image") {
+                const img = await pickBackgroundImage();
+                if (img) set({ background: "image", bgImage: img, bgDim: Math.max(s.bgDim, 45) });
+                else if (s.bgImage) set({ background: "image" });
+                return;
+              }
+              set({ background: id });
+            }}>
+            <div className={"sw bgsw-" + id} style={id === "image" && s.bgImage ? { backgroundImage: `url(${s.bgImage})`, backgroundSize: "cover" } : undefined} />
+            <div className="nm">{BACKGROUNDS[id].label}{BACKGROUNDS[id].animated ? <span className="tag" style={{ marginLeft: 6 }}>animated</span> : null}</div>
+            <div className="ds">{BACKGROUNDS[id].desc}</div>
+          </button>
+        ))}
+      </div>
+      <Row t="Dim background" d="Darkens the background behind everything">
+        <input type="range" min={0} max={85} step={5} value={s.bgDim} onChange={(e) => set({ bgDim: +e.target.value })} />
+        <span className="num dim" style={{ width: 34 }}>{s.bgDim}%</span>
+      </Row>
+      <Row t="Freeze animated backgrounds while solving"><Toggle on={s.bgPauseWhileSolving} onChange={(v) => set({ bgPauseWhileSolving: v })} /></Row>
       <div className="section-title">Timer typography</div>
       <Row t="Typeface">
         <select className="input" value={s.timerFont} onChange={(e) => set({ timerFont: e.target.value as TimerFont })}>
@@ -192,14 +217,14 @@ function DataSettings() {
   return (
     <>
       <div className="section-title" style={{ marginTop: 4 }}>Import & export</div>
-      <Row t="Import solves" d="csTimer backup (.txt), csTimer CSV, Twisty Timer, Facelet backup — with preview, duplicate detection and verification">
+      <Row t="Import solves" d="csTimer backup (.txt), csTimer CSV, Twisty Timer, Parity backup — with preview, duplicate detection and verification">
         <button className="btn primary" onClick={() => setImporting(true)} data-testid="open-import"><IconImport size={15} /> Import…</button>
       </Row>
       <Row t="Export for csTimer" d="A csTimer-format backup you can import back into csTimer">
-        <button className="btn" onClick={async () => { const p = await backend.saveTextFile(`facelet_cstimer_${stamp}.txt`, exportCsTimer(sessions, solves), [{ name: "csTimer backup", extensions: ["txt"] }]); if (p) toast("Exported " + live.toLocaleString() + " solves", "success"); }} data-testid="export-cstimer"><IconExport size={15} /> Export…</button>
+        <button className="btn" onClick={async () => { const p = await backend.saveTextFile(`parity_cstimer_${stamp}.txt`, exportCsTimer(sessions, solves), [{ name: "csTimer backup", extensions: ["txt"] }]); if (p) toast("Exported " + live.toLocaleString() + " solves", "success"); }} data-testid="export-cstimer"><IconExport size={15} /> Export…</button>
       </Row>
-      <Row t="Full Facelet backup" d="Every field, including deleted solves, settings and import history (JSON)">
-        <button className="btn" onClick={async () => { const p = await backend.saveTextFile(`facelet_backup_${stamp}.json`, exportFacelet(sessions, solves, settings as any, imports), [{ name: "Facelet backup", extensions: ["json"] }]); if (p) toast("Backup exported", "success"); }} data-testid="export-facelet"><IconExport size={15} /> Export…</button>
+      <Row t="Full Parity backup" d="Every field, including deleted solves, settings and import history (JSON)">
+        <button className="btn" onClick={async () => { const p = await backend.saveTextFile(`parity_backup_${stamp}.json`, exportParity(sessions, solves, settings as any, imports), [{ name: "Parity backup", extensions: ["json"] }]); if (p) toast("Backup exported", "success"); }} data-testid="export-facelet"><IconExport size={15} /> Export…</button>
       </Row>
       <div className="section-title">Automatic backups</div>
       <Row t="Backups" d={`A snapshot is taken daily at launch and before every import, rollback and restore (newest 30 automatic kept). ${paths ? "Folder: " + paths.backupDir : ""}`}>
@@ -295,7 +320,7 @@ function Shortcuts() {
 function About() {
   return (
     <div style={{ lineHeight: 1.7 }} className="muted">
-      <p style={{ marginTop: 4 }}><b style={{ color: "var(--fg)" }}>Facelet</b> — a local-first speedcubing timer. Works fully offline; no account, subscription, cloud service or AI is used.</p>
+      <p style={{ marginTop: 4 }}><b style={{ color: "var(--fg)" }}>Parity</b> — a local-first speedcubing timer. Works fully offline; no account, subscription, cloud service or AI is used.</p>
       <p>Data lives in a SQLite database on this Mac (WAL journal, synchronous writes) with automatic backups. Every solve is written before it is shown.</p>
       <p className="dim" style={{ fontSize: 12.5 }}>
         Open-source components: cubing.js (MPL-2.0) for scrambles and 3D puzzles · Tauri (MIT/Apache-2.0) · React (MIT) · zustand (MIT) · uPlot (MIT) · SQLite (public domain) via rusqlite (MIT) · Inter and JetBrains Mono fonts (SIL OFL 1.1). Statistics conventions follow csTimer (GPL-3.0); no csTimer code is included.

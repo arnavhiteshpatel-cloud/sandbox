@@ -1,9 +1,9 @@
 #!/bin/bash
-# One-step setup for Facelet on an Apple Silicon Mac.
-# Installs the free build tools (only what's missing), builds Facelet, installs it to
+# One-step setup for Parity on an Apple Silicon Mac.
+# Installs the free build tools (only what's missing), builds Parity, installs it to
 # /Applications and clears the "unidentified developer" flag. Safe to run again (it updates).
 #
-# Usage, from inside the Facelet folder:   bash scripts/setup-mac.sh
+# Usage, from inside the Parity folder:   bash scripts/setup-mac.sh
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -26,14 +26,14 @@ fi
 export PATH="$HOME/.cargo/bin:$PATH"
 rustup target add aarch64-apple-darwin >/dev/null 2>&1 || true
 
-# 3. Node.js 22 LTS (user-local copy in ~/.facelet-tools, no admin password needed)
+# 3. Node.js 22 LTS (user-local copy in ~/.parity-tools, no admin password needed)
 NODE_VER="v22.12.0"
-NODE_DIR="$HOME/.facelet-tools/node-$NODE_VER-darwin-arm64"
+NODE_DIR="$HOME/.parity-tools/node-$NODE_VER-darwin-arm64"
 if ! command -v node >/dev/null 2>&1 || [[ "$(node -v | cut -d. -f1)" < "v20" ]]; then
   if [[ ! -x "$NODE_DIR/bin/node" ]]; then
     say "Installing Node.js $NODE_VER"
-    mkdir -p "$HOME/.facelet-tools"
-    curl -fsSL "https://nodejs.org/dist/$NODE_VER/node-$NODE_VER-darwin-arm64.tar.gz" | tar -xz -C "$HOME/.facelet-tools"
+    mkdir -p "$HOME/.parity-tools"
+    curl -fsSL "https://nodejs.org/dist/$NODE_VER/node-$NODE_VER-darwin-arm64.tar.gz" | tar -xz -C "$HOME/.parity-tools"
   fi
   export PATH="$NODE_DIR/bin:$PATH"
 fi
@@ -41,17 +41,17 @@ fi
 # 4. Build
 say "Installing project dependencies"
 npm ci --no-audit --no-fund
-say "Building Facelet (first build takes ~5–10 minutes)"
+say "Building Parity (first build takes ~5–10 minutes)"
 npx tauri build --target aarch64-apple-darwin
 
-APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Facelet.app"
+APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Parity.app"
 [[ -d "$APP" ]] || { echo "Build did not produce $APP"; exit 1; }
 
 # 5. Self-test the built app on an isolated temporary database (your real data is untouched)
 say "Running the built-in self-test"
 TMP="$(mktemp -d)"
 for phase in write verify; do
-  FACELET_DATA_DIR="$TMP/data" FACELET_SELFTEST=$phase FACELET_SELFTEST_OUT="$TMP/$phase.json" "$APP/Contents/MacOS/facelet" &
+  PARITY_DATA_DIR="$TMP/data" PARITY_SELFTEST=$phase PARITY_SELFTEST_OUT="$TMP/$phase.json" "$APP/Contents/MacOS/parity" &
   pid=$!
   for _ in $(seq 1 120); do kill -0 $pid 2>/dev/null || break; sleep 1; done
   kill $pid 2>/dev/null || true
@@ -61,10 +61,10 @@ rm -rf "$TMP"
 
 # 6. Install
 say "Installing to /Applications"
-rm -rf /Applications/Facelet.app
+rm -rf /Applications/Parity.app
 cp -R "$APP" /Applications/
-xattr -dr com.apple.quarantine /Applications/Facelet.app 2>/dev/null || true
+xattr -dr com.apple.quarantine /Applications/Parity.app 2>/dev/null || true
 cp src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg "$HOME/Desktop/" 2>/dev/null || true
 
-say "Done. Facelet is in Applications (a .dmg copy is on your Desktop)."
-open /Applications/Facelet.app
+say "Done. Parity is in Applications (a .dmg copy is on your Desktop)."
+open /Applications/Parity.app

@@ -34,14 +34,14 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with: { workspaces: src-tauri }
       - run: npm ci
-      - name: Build Facelet.app and .dmg
+      - name: Build Parity.app and .dmg
         run: npx tauri build --target aarch64-apple-darwin
       - name: Native self-test of the built app (SQLite, restart persistence, import, rollback, restore)
         run: |
-          APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Facelet.app/Contents/MacOS/facelet"
-          export FACELET_DATA_DIR="$RUNNER_TEMP/facelet-data"
+          APP="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Parity.app/Contents/MacOS/parity"
+          export PARITY_DATA_DIR="$RUNNER_TEMP/parity-data"
           for phase in write verify; do
-            FACELET_SELFTEST=$phase FACELET_SELFTEST_OUT="$RUNNER_TEMP/$phase.json" "$APP" &
+            PARITY_SELFTEST=$phase PARITY_SELFTEST_OUT="$RUNNER_TEMP/$phase.json" "$APP" &
             pid=$!; for i in $(seq 1 120); do kill -0 $pid 2>/dev/null || break; sleep 1; done
             kill $pid 2>/dev/null || true
             cat "$RUNNER_TEMP/$phase.json"
@@ -51,10 +51,10 @@ jobs:
         run: |
           mkdir -p out
           cp src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg out/ || true
-          ditto -c -k --keepParent src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Facelet.app out/Facelet.app.zip
+          ditto -c -k --keepParent src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Parity.app out/Parity.app.zip
           ls -la out
       - uses: actions/upload-artifact@v4
         with:
-          name: Facelet-macOS-arm64
+          name: Parity-macOS-arm64
           path: out/*
           retention-days: 90

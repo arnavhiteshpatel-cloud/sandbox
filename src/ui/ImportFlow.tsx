@@ -106,7 +106,7 @@ export function ImportFlow({ onClose }: { onClose: () => void }) {
   const reportText = () => {
     if (!report || !file || !parsed) return "";
     const lines = [
-      `Facelet import report — ${new Date().toISOString()}`,
+      `Parity import report — ${new Date().toISOString()}`,
       `File: ${file.name} (${file.size.toLocaleString()} bytes, sha256 ${file.hash})`,
       `Format: ${parsed.format}`,
       `Source solves: ${report.plan.totals.source}; added: ${report.plan.totals.toAdd}; duplicates skipped: ${report.plan.totals.duplicates}; invalid: ${report.plan.totals.invalid}`,
@@ -135,7 +135,7 @@ export function ImportFlow({ onClose }: { onClose: () => void }) {
           </>
         ) : stage === "report" ? (
           <>
-            <button className="btn" onClick={() => backend.saveTextFile(`facelet-import-report-${Date.now()}.txt`, reportText(), [{ name: "Text", extensions: ["txt"] }])}>Save report</button>
+            <button className="btn" onClick={() => backend.saveTextFile(`parity-import-report-${Date.now()}.txt`, reportText(), [{ name: "Text", extensions: ["txt"] }])}>Save report</button>
             <button className="btn primary" onClick={onClose} data-testid="import-done">Done</button>
           </>
         ) : undefined
@@ -145,7 +145,7 @@ export function ImportFlow({ onClose }: { onClose: () => void }) {
         <div style={{ padding: "18px 0 8px" }}>
           <p className="muted" style={{ marginTop: 0, lineHeight: 1.6 }}>
             Choose a <b>csTimer backup</b> (Export → “Export to file”, a <span className="mono">.txt</span> file containing JSON), a csTimer session CSV, a Twisty Timer
-            backup, a Facelet backup, or a plain list of times. The original file is only read — never modified.
+            backup, a Parity backup, or a plain list of times. The original file is only read — never modified.
           </p>
           <button className="btn primary" onClick={pick} data-testid="import-pick">Choose file…</button>
         </div>
@@ -207,7 +207,7 @@ export function ImportFlow({ onClose }: { onClose: () => void }) {
           </div>
           <div style={{ display: "flex", gap: 28, marginTop: 14 }}>
             <label style={{ display: "flex", gap: 10, alignItems: "center" }}><Toggle on={merge} onChange={setMerge} /> Add to matching sessions from earlier imports</label>
-            <label style={{ display: "flex", gap: 10, alignItems: "center" }}><Toggle on={skipDup} onChange={setSkipDup} /> Skip solves already in Facelet</label>
+            <label style={{ display: "flex", gap: 10, alignItems: "center" }}><Toggle on={skipDup} onChange={setSkipDup} /> Skip solves already in Parity</label>
           </div>
           {parsed.warnings.length > 0 && <div className="dim" style={{ marginTop: 12, fontSize: 12.5 }}>{parsed.warnings.join(" ")}</div>}
           {parsed.totalInvalid > 0 && (

@@ -16,9 +16,9 @@ src/core/        Pure, unit-tested domain logic (no React)
   types.ts         Solve/Session/ImportRecord/Op model (csTimer-compatible encoding)
   time.ts          formatting/parsing; csTimer truncation semantics
   stats.ts         Fenwick-tree rolling trimmed averages, summaries, regression, Welch t-test
-  importer.ts      csTimer JSON/CSV, Twisty Timer, Facelet, plain-text parsers + validation
+  importer.ts      csTimer JSON/CSV, Twisty Timer, Parity, plain-text parsers + validation
   importPlan.ts    duplicate detection (fingerprint multiset), session matching
-  exporter.ts      csTimer JSON, Facelet JSON, CSV
+  exporter.ts      csTimer JSON, Parity JSON, CSV
   cube.ts          NxN facelet simulator (verified against cubing.js)
   algs.ts / llstate.ts   verified OLL/PLL libraries
   insights.ts      PB targets, percentiles, streaks
@@ -62,4 +62,4 @@ src-tauri/src/lib.rs  Tauri commands, daily auto-backup, self-test hooks
   cubing.js web workers never execute UI code).
 - `npx tauri build --target aarch64-apple-darwin` → `.app` + `.dmg` (ad-hoc signed).
 - CI: `.github/workflows/macos.yml` runs tests on Linux, builds on `macos-14` (arm64), runs the
-  native self-test (`FACELET_SELFTEST=write|verify`) on the built binary, and uploads the artifacts.
+  native self-test (`PARITY_SELFTEST=write|verify`) on the built binary, and uploads the artifacts.

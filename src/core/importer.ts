@@ -1,6 +1,6 @@
 /**
  * Importers for csTimer backups (JSON .txt export), csTimer CSV session exports,
- * Twisty Timer CSV backups, Facelet's own backup format, and simple one-time-per-line text.
+ * Twisty Timer CSV backups, Parity's own backup format, and simple one-time-per-line text.
  *
  * Format reference (csTimer src/js/export.js, lib/storage.js, stats/stats.js):
  *   { "session1": [solve, ...], "session2": [...], ..., "properties": { "sessionData": "<json string>", ... } }
@@ -47,7 +47,7 @@ export interface ParsedSession {
   csStat: [number, number, number] | null;
 }
 
-export type ImportFormat = "cstimer" | "cstimer-csv" | "twistytimer" | "facelet" | "plain";
+export type ImportFormat = "cstimer" | "cstimer-csv" | "twistytimer" | "parity" | "plain";
 
 export interface ParsedBackup {
   format: ImportFormat;
@@ -56,11 +56,11 @@ export interface ParsedBackup {
   warnings: string[];
   totalSolves: number;
   totalInvalid: number;
-  /** For Facelet backups: full payload (settings, ids) to restore. */
-  facelet?: any;
+  /** For Parity backups: full payload (settings, ids) to restore. */
+  parity?: any;
 }
 
-/** Fingerprint of a solve's recorded content; stable across csTimer <-> Facelet round trips. */
+/** Fingerprint of a solve's recorded content; stable across csTimer <-> Parity round trips. */
 export function solveFingerprint(s: {
   time: number;
   penalty: number;
@@ -346,7 +346,7 @@ function parsePlain(text: string, fileName: string): ParsedBackup {
   ]);
 }
 
-function parseFacelet(data: any): ParsedBackup {
+function parseParity(data: any): ParsedBackup {
   const sessions: ParsedSession[] = (data.sessions ?? []).map((s: any, i: number) => {
     const solves: ParsedSolve[] = [];
     const invalid: InvalidEntry[] = [];
@@ -383,8 +383,8 @@ function parseFacelet(data: any): ParsedBackup {
       csStat: null,
     } satisfies ParsedSession;
   });
-  const r = finish("facelet", sessions, null, []);
-  r.facelet = data;
+  const r = finish("parity", sessions, null, []);
+  r.parity = data;
   return r;
 }
 
@@ -398,7 +398,7 @@ export function parseBackup(text: string, fileName = "import"): ParsedBackup {
     } catch (e) {
       throw new Error("The file looks like JSON but could not be parsed: " + (e as Error).message);
     }
-    if (data && data.app === "facelet") return parseFacelet(data);
+    if (data && (data.app === "parity" || data.app === "facelet")) return parseParity(data);
     if (data && Object.keys(data).some((k) => /^session\d+$/.test(k))) return parseCsTimerJson(data);
     throw new Error("JSON file does not contain csTimer sessions (expected keys like \"session1\").");
   }

@@ -1,12 +1,12 @@
 [package]
-name = "facelet"
+name = "parity"
 version = "1.0.0"
-description = "Facelet — a premium local-first speedcubing timer"
+description = "Parity — a premium local-first speedcubing timer"
 edition = "2021"
 license = "MIT"
 
 [lib]
-name = "facelet_lib"
+name = "parity_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

@@ -25,7 +25,7 @@ _Last updated: 2026-11-17_
 ## Next steps / open items
 1. Confirm the macOS CI artifact builds; download and test on the user's M4 Mac.
 2. Import the user's real csTimer backup; compare the import report against csTimer's displayed numbers (screenshot: 19,043 solves, mean 17.47, best 8.50, ao5 best 12.48, ao12 best 13.46 …).
-3. Parity gaps listed as ⛔ in `docs/PARITY.md` (extra csTimer scramble types, auto-switch session by event, metronome, BLD helper, EOLine/Roux solvers, BlockKeeper/CubeDesk import).
+3. Parity gaps listed as ⛔ in `docs/CSTIMER-PARITY.md` (extra csTimer scramble types, auto-switch session by event, metronome, BLD helper, EOLine/Roux solvers, BlockKeeper/CubeDesk import).
 4. Ideas raised but not built: x-cross practice; dev-only per-window blur tuning.
 
 ## How to resume in a new Claude Code session
@@ -39,5 +39,5 @@ cd src-tauri && cargo test --lib
 ```
 In the browser console (dev only): `await __faceletDemo()` loads 20,013 synthetic csTimer solves;
 `__faceletStore.getState()` exposes the store. Native self-test: run the built binary with
-`FACELET_SELFTEST=write|verify FACELET_SELFTEST_OUT=report.json FACELET_DATA_DIR=/tmp/x`.
+`PARITY_SELFTEST=write|verify PARITY_SELFTEST_OUT=report.json PARITY_DATA_DIR=/tmp/x`.
 Design concept mockups live in `design/concepts/` (served by the dev server at `/design/concepts/*.html`).

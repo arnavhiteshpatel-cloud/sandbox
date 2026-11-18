@@ -7,6 +7,7 @@ import { layersOpen, Modal } from "./ui/Overlay";
 import { useScramble } from "./scramble/useScramble";
 import { HudTopBar } from "./ui/hud";
 import { Celebration } from "./ui/Celebration";
+import { Background } from "./ui/Background";
 
 const HistoryView = lazy(() => import("./views/HistoryView"));
 const AnalyticsView = lazy(() => import("./views/AnalyticsView"));
@@ -191,12 +192,11 @@ export default function App() {
         <div className="mono" style={{ fontSize: 12 }}>{fatal}</div>
       </div>
     );
-  if (!ready) return <div className="splash">facelet</div>;
+  if (!ready) return <div className="splash">parity</div>;
 
   return (
     <div className={"app theme-" + settings.theme + (timing ? " timing" : "")} data-testid="app">
-      <div className="bg-layer" />
-      <div className="grid-layer" />
+      <Background />
       <div className="drag-strip" data-tauri-drag-region />
       <HudTopBar />
       <main className="content">

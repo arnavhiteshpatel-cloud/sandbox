@@ -16,7 +16,7 @@ pub struct AppState {
 
 impl AppState {
     fn db_path(&self) -> PathBuf {
-        self.data_dir.join("facelet.sqlite")
+        self.data_dir.join("parity.sqlite")
     }
     fn backup_dir(&self, db: &Db) -> PathBuf {
         db.setting_str("backupDir").map(PathBuf::from).unwrap_or_else(|| self.data_dir.join("backups"))
@@ -150,7 +150,7 @@ fn write_text_file(state: State<AppState>, path: String, contents: String) -> R<
     if target.starts_with(&state.data_dir) && target.extension().map(|e| e != "txt" && e != "json" && e != "csv").unwrap_or(true) {
         return Err("refusing to overwrite application data files".into());
     }
-    let tmp = target.with_extension("facelet-tmp");
+    let tmp = target.with_extension("parity-tmp");
     std::fs::write(&tmp, contents.as_bytes()).map_err(|e| e.to_string())?;
     std::fs::rename(&tmp, &target).map_err(|e| e.to_string())
 }
@@ -168,20 +168,51 @@ fn reveal_path(path: String) -> R<()> {
     Ok(())
 }
 
-/// Automated self-test hook: returns the phase name when FACELET_SELFTEST is set (used by CI and
+/// Automated self-test hook: returns the phase name when PARITY_SELFTEST is set (used by CI and
 /// local verification of the packaged app). Normal launches return None.
 #[tauri::command]
 fn selftest_mode() -> Option<String> {
-    std::env::var("FACELET_SELFTEST").ok().filter(|s| !s.is_empty())
+    std::env::var("PARITY_SELFTEST").ok().filter(|s| !s.is_empty())
 }
 
 #[tauri::command]
 fn selftest_report(app: tauri::AppHandle, report: String, ok: bool) -> R<()> {
-    if let Ok(p) = std::env::var("FACELET_SELFTEST_OUT") {
+    if let Ok(p) = std::env::var("PARITY_SELFTEST_OUT") {
         std::fs::write(&p, report.as_bytes()).map_err(|e| e.to_string())?;
     }
     app.exit(if ok { 0 } else { 1 });
     Ok(())
+}
+
+/// One-time migration from the app's previous name ("Facelet", id app.facelet.timer):
+/// copies the database (consistent snapshot) and backups into the new data folder. The old
+/// folder is left untouched as an extra safety copy.
+fn migrate_from_old_name(data_dir: &Path) {
+    let new_db = data_dir.join("parity.sqlite");
+    if new_db.exists() {
+        return;
+    }
+    let old_dir = match data_dir.parent() {
+        Some(p) => p.join("app.facelet.timer"),
+        None => return,
+    };
+    let old_db = old_dir.join("facelet.sqlite");
+    if !old_db.exists() {
+        return;
+    }
+    if let Ok(old) = Db::open(&old_db) {
+        let _ = old.snapshot_to(&new_db);
+    }
+    if let Ok(rd) = std::fs::read_dir(old_dir.join("backups")) {
+        let nb = data_dir.join("backups");
+        let _ = std::fs::create_dir_all(&nb);
+        for e in rd.flatten() {
+            let target = nb.join(e.file_name());
+            if !target.exists() {
+                let _ = std::fs::copy(e.path(), target);
+            }
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -189,10 +220,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            // FACELET_DATA_DIR lets tests use an isolated data directory.
-            let data_dir = std::env::var("FACELET_DATA_DIR").map(PathBuf::from).unwrap_or_else(|_| app.path().app_data_dir().expect("no app data dir"));
+            // PARITY_DATA_DIR lets tests use an isolated data directory.
+            let data_dir = std::env::var("PARITY_DATA_DIR").map(PathBuf::from).unwrap_or_else(|_| app.path().app_data_dir().expect("no app data dir"));
             std::fs::create_dir_all(&data_dir)?;
-            let db = Db::open(&data_dir.join("facelet.sqlite")).map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+            migrate_from_old_name(&data_dir);
+            let db = Db::open(&data_dir.join("parity.sqlite")).map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             // Daily automatic backup (kept: newest 30).
             let backup_dir = db.setting_str("backupDir").map(PathBuf::from).unwrap_or_else(|| data_dir.join("backups"));
             let recent = db::list_backups(&backup_dir)
@@ -226,5 +258,5 @@ pub fn run() {
             selftest_report
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Facelet");
+        .expect("error while running Parity");
 }
