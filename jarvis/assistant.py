@@ -77,6 +77,7 @@ class Assistant:
         self.session = Session()
         self.current: dict | None = None        # {"task": asyncio.Task, "cancel": CancelToken, "id": int, "text": str}
         self.pending_question: dict | None = None
+        self.dictation = False
         self.last_activity = time.time()
         self.llm_ok: bool | None = None
         self._last_progress_spoken = 0.0
@@ -278,7 +279,16 @@ class Assistant:
         self.last_activity = time.time()
         text = text.strip()
         intent = router.route(text, {"browser_active": self.session.browser_active})
+        if getattr(self, "dictation", False) and source not in ("text", "ui") and not (intent and intent.name in ("stop", "dictation")):
+            # Dictation: everything you say is typed where the cursor is.
+            chunk = dictation_text(text)
+            r = await asyncio.to_thread(self.computer.insert_text, chunk)
+            self.events.emit("transcript", text=text, source="dictation")
+            if self.voice:
+                self.voice.request_followup()
+            return {"route": "dictation", "ok": r.ok, "message": ""}
         if intent and intent.name == "stop":
+            self.dictation = False
             was = self.stop("voice command" if source != "text" else "command")
             if was:
                 await self.say("Stopped.")
@@ -404,6 +414,8 @@ class Assistant:
 
     async def _builtin(self, intent, cancel: CancelToken) -> dict | None:
         n, a, c = intent.name, intent.args, self.computer
+        if n == "complete_task":
+            return await self._complete_task(intent.text, cancel)
         if n == "web_lookup":
             return await self._web_lookup(a["query"], cancel)
         if n == "find_files":
@@ -500,8 +512,21 @@ class Assistant:
             r = await self._call(c.press_keys, a["combo"])
             return {"route": "builtin", "ok": r.ok, "message": r.message} | await self._quiet_ok()
         if n == "type":
-            r = await self._call(c.type_text, a["text"])
+            if await asyncio.to_thread(c.focused_editable) is False:
+                return await self._reply("Click where you want me to type first.", False)
+            r = await self._call(c.insert_text, a["text"])
             return {"route": "builtin", "ok": r.ok, "message": r.message} | await self._quiet_ok()
+        if n == "dictation":
+            self.dictation = bool(a["on"])
+            self.events.emit("dictation", on=self.dictation)
+            if self.dictation:
+                if await asyncio.to_thread(c.focused_editable) is False:
+                    self.dictation = False
+                    return await self._reply("Click where you want the text first, then say “take dictation”.", False)
+                return await self._reply("Dictation on. Say “stop dictation” when you're done.")
+            return await self._reply("Dictation off.", followup=False)
+        if n == "compose":
+            return await self._compose(a["what"], cancel)
         if n == "volume":
             r = await self._call(c.set_volume, a.get("level"), a.get("delta"), a.get("mute"))
             return await self._reply(r.message, r.ok, followup=False)
@@ -676,6 +701,68 @@ class Assistant:
             return await self._reply(f"I couldn't find “{target}”.", False)
         return await self._run_agent(user_text, cancel)
 
+    async def _compose(self, what: str, cancel: CancelToken) -> dict:
+        """“Write a paragraph about photosynthesis”: compose with the local model, then type it at the cursor."""
+        if await asyncio.to_thread(self.computer.focused_editable) is False:
+            return await self._reply("Click where you want the text first, then ask again.", False)
+        if self.llm_ok is False and not await self._check_llm():
+            return await self._reply("I need my local AI model to write that.", False)
+        self.events.emit("status", status="thinking", detail="writing")
+        from .agent.thinking import decide
+
+        d = decide("write " + what, self.power.mode, self.settings.get("llm.think_policy", "auto"))
+        memories = "\n".join(self.memory.context_for(what, 4))
+        try:
+            r = await self.llm.chat([
+                {"role": "system", "content": "Write exactly the text requested, ready to be typed into a document or form. "
+                 "No preamble, no sign-off, no markdown or headings unless asked. Plain paragraphs separated by blank lines. "
+                 "Match the requested length, tone and audience." + (f"\nAbout the user:\n{memories}" if memories else "")},
+                {"role": "user", "content": what}],
+                model=self.model, think=d.think, max_tokens=1600, keep_alive=PROFILES[self.power.mode]["keep_alive"])
+        except LLMError as e:
+            return await self._reply(f"I couldn't write that: {e}", False)
+        body = re.sub(r"^\s*(?:Sure|Here(?:'s| is)[^\n]*?:)\s*", "", r.content.strip())
+        if not body:
+            return await self._reply("I couldn't come up with anything for that.", False)
+        cancel.check()
+        self.events.emit("status", status="acting", detail="typing")
+        res = await asyncio.to_thread(self.computer.insert_text, body)
+        words = len(body.split())
+        return await self._reply(f"Done. {words} words." if res.ok else res.message, res.ok, "compose", followup=False)
+
+    COMPLETION_TOOLS = {"observe", "read_page", "look_at_screen", "click", "type_text", "press_keys", "scroll", "browser_nav",
+                        "click_screen_text", "click_visual", "menu", "wait", "web_search", "read_webpage", "calculate", "ask_user",
+                        "done", "recall", "open_url", "read_file", "app_dictionary", "script_app"}
+
+    async def _complete_task(self, request: str, cancel: CancelToken) -> dict:
+        """“JARVIS, do it”: complete the assignment/form/task on screen, autonomously, stopping before submit."""
+        if self.llm_ok is False and not await self._check_llm():
+            return await self._reply("I need my local AI model for that, and it isn't running.", False, "agent")
+        front = await asyncio.to_thread(self.computer.frontmost_app)
+        if front in BROWSERS:
+            self.session.browser, self.session.browser_active = front, True
+        mode = self.power.mode
+        policy_ = self.settings.get("llm.think_policy", "auto")
+        think = policy_ == "always" or (policy_ == "auto" and mode != "battery_saver")
+        if self.current:
+            self.current["started"] = time.time()
+        self.db.log("agent", f"Completion mode in {front} (thinking {'on' if think else 'off'})")
+        asyncio.create_task(self.say("On it. I'll stop before submitting."))
+        ctx = self._tool_ctx(request)
+        ctx.strict_finalize = True
+        ctx.allow_vision = ctx.allow_vision or mode != "battery_saver"
+        from .agent.prompts import COMPLETION_RULES, completion_objective
+
+        res = await self.agent.run(
+            completion_objective(front, request), ctx,
+            mode=mode, model=self.model, cancel=cancel, context=await self._agent_context(request), think=think,
+            max_steps={"battery_saver": 25, "balanced": 60, "max_performance": 100}.get(mode, 60),
+            time_limit_s={"battery_saver": 300, "balanced": 1200, "max_performance": 1800}.get(mode, 1200),
+            tool_names=self.COMPLETION_TOOLS if front not in BROWSERS else self.COMPLETION_TOOLS - {"app_dictionary", "script_app"},
+            extra_rules=COMPLETION_RULES, may_escalate=False, auto_observe=True, must_act=True)
+        self.session.browser = ctx.browser
+        return await self._reply(res.message, res.ok, "agent", steps=res.steps, llm_ms=res.llm_ms, llm_calls=res.llm_calls)
+
     async def _web_lookup(self, query: str, cancel: CancelToken) -> dict:
         """Search in the background and answer in one or two sentences (one fast model call, no browser)."""
         from . import web
@@ -838,6 +925,20 @@ class Assistant:
                         "turns": len(self.session.history)},
             "permissions": self.computer.permissions(),
         }
+
+
+SPOKEN_PUNCT = [(r"\s*\bnew paragraph\b\s*", "\n\n"), (r"\s*\bnew line\b\s*", "\n"), (r"\s*\bcomma\b", ","),
+                 (r"\s*\b(?:period|full stop)\b", "."), (r"\s*\bquestion mark\b", "?"), (r"\s*\bexclamation (?:mark|point)\b", "!"),
+                 (r"\s*\bsemicolon\b", ";"), (r"\s*\bcolon\b", ":"), (r"\bopen quote\s*", "“"), (r"\s*\bclose quote\b", "”")]
+
+
+def dictation_text(t: str) -> str:
+    """Spoken punctuation ("comma", "new line") → characters; keeps a trailing space between chunks."""
+    out = t.strip()
+    for pat, rep in SPOKEN_PUNCT:
+        out = re.sub(pat, rep, out, flags=re.I)
+    out = re.sub(r"([,.;:!?])([,.;:!?])+", r"\1", out)
+    return out if out.endswith(("\n", " ")) else out + " "
 
 
 def web_host(url: str) -> str:

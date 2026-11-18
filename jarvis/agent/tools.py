@@ -38,6 +38,7 @@ class ToolContext:
     last_elements: dict[str, dict] = field(default_factory=dict)
     last_results: list = field(default_factory=list)
     cancel: Any = None
+    strict_finalize: bool = False      # completion mode: never press Submit/Finish without asking
 
 
 @dataclass
@@ -71,7 +72,13 @@ def _fmt_elements(elements: list[dict], limit: int = 80) -> str:
         if e.get("name"):
             bits.append(json.dumps(e["name"][:90]))
         if e.get("value"):
-            bits.append(f"value={json.dumps(e['value'][:40])}")
+            bits.append(f"value={json.dumps(str(e['value'])[:40])}")
+        if e.get("options"):
+            bits.append("options=" + json.dumps(e["options"][:12]))
+        if e.get("group"):
+            bits.append(f"group={e['group']}")
+        if e.get("checked"):
+            bits.append("(checked)")
         if e.get("href") and not e.get("name"):
             bits.append(e["href"][:80])
         if e.get("in_view") is False:
@@ -182,14 +189,30 @@ async def click(ctx, a):
 
 
 async def type_text(ctx, a):
-    eid = a.get("element_id")
+    """Fill a field directly, or type with real keystrokes (documents, rich editors like Google Docs/Word/Canvas).
+    If filling a field directly doesn't stick, it automatically clicks the field and types for real."""
+    eid, method = a.get("element_id"), a.get("method", "auto")
+    c = ctx.computer
+    if eid and method == "auto":
+        r = await _t(c.browser_type, eid, a["text"], bool(a.get("submit")), ctx.browser)
+        if r.ok and (r.verified or (ctx.last_elements.get(eid) or {}).get("role") == "select"):
+            return _res(r)
+        if (ctx.last_elements.get(eid) or {}).get("role") == "select":
+            return _res(r)
+        method = "keys"   # the page ignored the direct fill (rich editor): type it for real
     if eid:
-        r = await _t(ctx.computer.browser_type, eid, a["text"], bool(a.get("submit")), ctx.browser)
-    else:
-        r = await _t(ctx.computer.type_text, a["text"])
-        if a.get("submit"):
-            await _t(ctx.computer.press_keys, "return")
-    return _res(r)
+        clicked = await _t(c.browser_click, eid, None, ctx.browser) if not eid.startswith("a") else await _t(c.ui_press, eid)
+        if not clicked.ok:
+            return _res(clicked)
+        await asyncio.sleep(0.15)
+    elif await _t(c.focused_editable) is False:
+        return {"ok": False, "error": "The keyboard focus isn't in a text field. Click the place to type first (click or click_visual)."}
+    r = await _t(c.insert_text, a["text"], "paste" if method == "paste" else "auto" if method == "auto" else "keys")
+    if a.get("submit"):
+        await _t(c.press_keys, "return")
+    out = _res(r)
+    out["method"] = "keystrokes/paste"
+    return out
 
 
 async def press_keys(ctx, a):
@@ -389,6 +412,45 @@ async def done(ctx, a):
     return {"ok": True, "final": True}
 
 
+# --- precise work: calculator and vision-guided clicking ------------------------------------------
+async def calculate(ctx, a):
+    from .calc import safe_eval
+
+    try:
+        value = safe_eval(a["expression"])
+    except Exception as e:
+        return {"ok": False, "error": f"Can't evaluate that: {e}"}
+    return {"ok": True, "expression": a["expression"], "result": value}
+
+
+async def click_visual(ctx, a):
+    """Find something on screen by description with the vision model, then click it (for canvas, images,
+    PDFs and apps whose controls aren't in the accessibility tree)."""
+    import re as _re
+
+    if not (ctx.allow_vision and ctx.llm is not None):
+        return {"ok": False, "error": "Vision is off in this power mode; try click_screen_text or observe."}
+    png = await _t(ctx.computer.screenshot, 1280)
+    if not png:
+        return {"ok": False, "error": "Couldn't take a screenshot."}
+    r = await ctx.llm.chat([
+        {"role": "system", "content": "You locate UI elements in screenshots. Reply with JSON only."},
+        {"role": "user", "content": f"Find: {a['description']}\nReply exactly {{\"x\": X, \"y\": Y}} where X and Y are the element's "
+                                    "center in thousandths of the image width and height (0-1000), or {\"x\": null} if it isn't visible.",
+         "images": [base64.b64encode(png).decode()]}],
+        model=ctx.vision_model or ctx.model, max_tokens=60, think=False)
+    m = _re.search(r'"x"\s*:\s*(\d+(?:\.\d+)?)\s*,\s*"y"\s*:\s*(\d+(?:\.\d+)?)', r.content or "")
+    if not m:
+        return {"ok": False, "error": f"Couldn't find “{a['description']}” on screen."}
+    w, h = await _t(ctx.computer.screen_size)
+    x, y = float(m.group(1)) / 1000 * w, float(m.group(2)) / 1000 * h
+    res = await _t(ctx.computer.click_at, x, y, "left", int(a.get("clicks", 1)))
+    out = _res(res)
+    out["clicked_at"] = [round(x), round(y)]
+    out["hint"] = "Verify with observe or look_at_screen; vision clicks can miss by a few pixels."
+    return out
+
+
 # --- internet (background, never on screen) ----------------------------------------------------
 async def web_search(ctx, a):
     from .. import web
@@ -494,8 +556,10 @@ TOOLS: list[Tool] = [
          {"url": S, "new_tab": {"type": "boolean"}}, ["url"], "low", open_url),
     Tool("click", "Click an element by id from the latest observe (preferred) or by its visible text.",
          {"element_id": S, "text": S}, [], "medium", click),
-    Tool("type_text", "Type text into a field (element_id from observe) or the focused field. submit=true presses Return.",
-         {"text": S, "element_id": S, "submit": {"type": "boolean"}}, ["text"], "medium", type_text),
+    Tool("type_text", "Type text into a field (element_id from observe) or where the cursor is (documents, editors). For a dropdown, pass "
+         "the option's label. Line breaks are typed as Return. submit=true presses Return at the end.",
+         {"text": S, "element_id": S, "submit": {"type": "boolean"},
+          "method": {"type": "string", "enum": ["auto", "keys", "paste"]}}, ["text"], "medium", type_text),
     Tool("press_keys", "Press a keyboard shortcut, e.g. 'cmd+t', 'return', 'cmd+shift+n'.", {"combo": S}, ["combo"], "medium", press_keys),
     Tool("scroll", "Scroll the frontmost page or window.", {"direction": {"type": "string", "enum": ["down", "up", "top", "bottom"]}}, [], "low", scroll),
     Tool("browser_nav", "Browser navigation.", {"action": {"type": "string", "enum": ["back", "forward", "reload", "new_tab", "close_tab"]}}, ["action"], "low", browser_nav),
@@ -520,6 +584,11 @@ TOOLS: list[Tool] = [
     Tool("recall", "Look up saved memories.", {"query": S}, ["query"], "read", recall),
     Tool("run_shortcut", "Run one of the user's saved voice shortcuts by name.", {"name": S}, ["name"], "low", run_shortcut),
     Tool("ask_user", "Ask the user a question when required information is missing or a choice is ambiguous.", {"question": S}, ["question"], "low", ask_user),
+    Tool("calculate", "Exact arithmetic and math functions (sqrt, sin, log, factorial, pi…). Use it for every calculation.",
+         {"expression": S}, ["expression"], "read", calculate),
+    Tool("click_visual", "Click something you can only see (in images, PDFs, canvas or unusual apps) by describing it, "
+         "e.g. 'the answer box under question 3'. Uses the vision model.", {"description": S, "clicks": {"type": "integer"}},
+         ["description"], "medium", click_visual),
     Tool("web_search", "Search the internet in the background (invisible to the user). Use for facts, news, definitions, prices, "
          "anything you'd look up. Returns titles, URLs and snippets.", {"query": S, "count": {"type": "integer"}}, ["query"], "read", web_search, True),
     Tool("read_webpage", "Read a web page's text in the background (invisible). Use after web_search when snippets aren't enough.",

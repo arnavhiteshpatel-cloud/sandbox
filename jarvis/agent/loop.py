@@ -58,19 +58,32 @@ class Agent:
 
     async def run(self, objective: str, ctx: ToolContext, *, mode: str, model: str, cancel: CancelToken,
                   context: str = "", think: bool = False, max_steps: int | None = None,
-                  may_escalate: bool = False) -> AgentResult:
+                  may_escalate: bool = False, tool_names: set[str] | None = None, time_limit_s: float | None = None,
+                  extra_rules: str = "", auto_observe: bool = False, must_act: bool = False) -> AgentResult:
         max_steps = max_steps or int(self.settings.per_mode("agent.max_steps", mode, 20))
-        deadline = time.monotonic() + (90 if mode == "battery_saver" else 300 if mode == "balanced" else 900)
+        deadline = time.monotonic() + (time_limit_s or (90 if mode == "battery_saver" else 300 if mode == "balanced" else 900))
         keep_alive = {"battery_saver": "30s", "balanced": "5m", "max_performance": "30m"}.get(mode, "5m")
-        offered = select_tools(objective, browser_active=bool(ctx.last_elements) or "Browser tab:" in context,
-                               allow_vision=ctx.allow_vision)
+        offered = [t for t in TOOLS if t.name in tool_names] if tool_names else \
+            select_tools(objective, browser_active=bool(ctx.last_elements) or "Browser tab:" in context, allow_vision=ctx.allow_vision)
         offered_names = {t.name for t in offered}
         tools = [t.schema() for t in offered]
         messages: list[dict] = [
-            {"role": "system", "content": system_prompt(self.settings, mode)},
+            {"role": "system", "content": system_prompt(self.settings, mode) + ("\n\n" + extra_rules if extra_rules else "")},
             {"role": "user", "content": (context + "\n\n" if context else "") + f"Request: {objective}"},
         ]
         ctx.cancel = cancel
+        if auto_observe:
+            # Ground the model in what's actually on screen before its first decision (small models otherwise
+            # tend to ask "what task?").
+            from .tools import observe as _observe
+
+            try:
+                first = await _observe(ctx, {})
+                messages[1]["content"] += "\n\nCURRENT SCREEN (from observe):\n" + str(first.get("observation") or first.get("error", ""))[:9000]
+            except Exception as e:
+                messages[1]["content"] += f"\n\n(Could not observe the screen: {e}. Call observe or look_at_screen.)"
+        acted = False
+        nudges = 0
         steps: list[dict] = []
         res = AgentResult(False, "", steps, model)
         seen_calls: dict[str, int] = {}
@@ -108,6 +121,12 @@ class Agent:
             res.llm_calls += 1
             if not reply.tool_calls:
                 text = reply.content.strip()
+                if must_act and not acted and nudges < 2:
+                    nudges += 1
+                    messages.append({"role": "assistant", "content": text or "(no action)"})
+                    messages.append({"role": "user", "content": "Don't ask me anything: the task is on screen above. Act now with tools: "
+                                     "enter the answer to the first unanswered question (type_text / click), then continue."})
+                    continue
                 if not text and not nudged:
                     nudged = True
                     messages.append({"role": "user", "content": "Continue: call a tool, or call done with your answer."})
@@ -132,6 +151,8 @@ class Agent:
                     out = {"ok": False, "error": err} if err else await self._execute(tool, tc.arguments, ctx, objective)
                 if tc.name == "ask_user":
                     res.asked_user = True
+                if tc.name not in ("observe", "read_page", "look_at_screen", "wait", "recall", "done") and out.get("ok"):
+                    acted = True
                 key = tc.name + json.dumps(tc.arguments, sort_keys=True)
                 seen_calls[key] = seen_calls.get(key, 0) + 1
                 entry = {"step": step + 1, "tool": tc.name, "args": _short(tc.arguments), "ok": bool(out.get("ok")),
@@ -166,15 +187,18 @@ class Agent:
             label = (ctx.last_elements.get(args["element_id"]) or {}).get("name", "")
         elif tool.name in ("click", "click_screen_text"):
             label = args.get("text", "")
+        elif tool.name == "click_visual":
+            label = args.get("description", "")
         elif tool.name == "type_text" and args.get("element_id"):
             label = (ctx.last_elements.get(args["element_id"]) or {}).get("name", "")
         front = None
-        if tool.name in policy.APP_ACTION_TOOLS:
+        if tool.name in policy.APP_ACTION_TOOLS or tool.name == "click_visual":
             try:
                 front = await asyncio.to_thread(ctx.computer.frontmost_app)
             except Exception:
                 front = None
-        verdict = policy.check(tool.name, args, user_text=objective, settings=self.settings, element_label=label, front_app=front)
+        verdict = policy.check(tool.name, args, user_text=objective, settings=self.settings, element_label=label, front_app=front,
+                               strict_finalize=ctx.strict_finalize)
         if not verdict.allow:
             return {"ok": False, "error": f"Blocked by safety policy: {verdict.reason}"}
         if verdict.confirm and self.settings.get("agent.confirm_high_risk", True):

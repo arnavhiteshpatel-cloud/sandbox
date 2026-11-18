@@ -38,6 +38,29 @@ DEFAULT_SITES: dict[str, dict] = {
         "text": "Instructions: Write a 2,000-word draft of your IA research question, methodology and preliminary data. "
                 "Include a risk assessment. Submit as PDF by Nov 20, 23:59.",
     },
+    "https://school.example.edu/practice/cells": {
+        "title": "Practice Quiz: Cells and Energy (page 1 of 2)",
+        "elements": [
+            {"role": "input:text", "name": "Answer to question 1"},
+            {"role": "input:text", "name": "Answer to question 2"},
+            {"role": "select", "name": "Answer to question 3", "options": ["Choose…", "Ribosome", "Nucleus", "Cell wall"]},
+            {"role": "button", "name": "Next page", "href": "https://school.example.edu/practice/cells/2"},
+        ],
+        "text": "Practice quiz (not graded). 1. Which organelle produces most of the cell's ATP? "
+                "2. A cell divides every 7 hours. How many hours do 12 divisions take? "
+                "3. In eukaryotic cells, most DNA is stored in the:",
+    },
+    "https://school.example.edu/practice/cells/2": {
+        "title": "Practice Quiz: Cells and Energy (page 2 of 2)",
+        "elements": [
+            {"role": "input:text", "name": "Answer to question 4"},
+            {"role": "input:radio", "name": "True", "group": "q5"},
+            {"role": "input:radio", "name": "False", "group": "q5"},
+            {"role": "button", "name": "Submit quiz"},
+        ],
+        "text": "4. What process do plants use to make glucose from light, water and carbon dioxide? "
+                "5. True or false: most enzymes are proteins.",
+    },
 }
 
 
@@ -49,7 +72,9 @@ class FakeComputer(Computer):
                      "Archive Utility", "Audio MIDI Setup", "Logic Pro", "Calculator"]
         self.running: list[str] = ["Finder"]
         self.front: str | None = "Finder"
-        self.sites = sites or DEFAULT_SITES
+        import copy
+
+        self.sites = copy.deepcopy(sites or DEFAULT_SITES)   # pages hold field values; never share between instances
         self.tabs: list[dict] = []
         self.history: list[str] = []
         self.volume = 50
@@ -150,6 +175,13 @@ class FakeComputer(Computer):
         if not e:
             return ActionResult.fail("element not found (page changed?)")
         self.log.append(f"click:{e['name']}")
+        if e.get("role") in ("input:radio", "input:checkbox"):
+            if e.get("role") == "input:radio":
+                for other in self._page().get("elements", []):
+                    if other.get("group") == e.get("group"):
+                        other["checked"] = False
+            e["checked"] = True if e.get("role") == "input:radio" else not e.get("checked")
+            return ActionResult(True, f"Selected “{e['name']}”.", verified=True)
         if e.get("href"):
             self.tab["back"].append(self.tab["url"])
             self.tab["url"] = e["href"]
@@ -159,7 +191,23 @@ class FakeComputer(Computer):
 
     def browser_type(self, element_id, text, submit=False, browser=None):
         self.log.append(f"type:{text}")
-        return ActionResult(True, "Typed the text.", verified=True)
+        e = self._ids.get(element_id) if element_id else None
+        if e is not None:
+            if e.get("role") == "select":
+                opts = e.get("options", [])
+                match = next((o for o in opts if o.lower() == str(text).strip().lower()), None) or \
+                    next((o for o in opts if str(text).strip().lower() in o.lower()), None)
+                if not match:
+                    return ActionResult.fail(f'no option "{text}"; options: {" | ".join(opts)}')
+                e["value"] = match
+                return ActionResult(True, "Selected.", {"value": match}, verified=True)
+            e["value"] = text
+        return ActionResult(True, "Typed the text.", {"value": text}, verified=True)
+
+    def field_values(self, url: str) -> dict:
+        """Test helper: what has been filled in on a page."""
+        return {e["name"]: (e.get("value") if not e.get("role", "").endswith("radio") else e.get("checked"))
+                for e in self.sites.get(url, {}).get("elements", []) if e.get("role", "").startswith(("input", "select"))}
 
     def browser_scroll(self, direction="down", amount=0.8, browser=None):
         self.scroll_y += 800 if direction == "down" else -800
@@ -278,3 +326,7 @@ class FakeComputer(Computer):
     def compose_email(self, to, subject, body): return self._ok(f"email:{','.join(to)}", "Draft open in Mail. It has not been sent.")
     def send_message(self, to, text): return self._ok(f"message:{to}:{text}", f"Message sent to {to}.")
     def open_location(self, url): return self._ok(f"location:{url}", "Opened.")
+    focus_is_text = True
+
+    def paste_text(self, text): return self._ok(f"paste:{text}", "Typed the text.")
+    def focused_editable(self): return self.focus_is_text

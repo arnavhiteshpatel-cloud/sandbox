@@ -105,3 +105,24 @@ def test_repeat_execution_does_not_redeclare(page):
     for _ in range(3):
         snap(page)
         run(page, JS.CLICK.replace("__ID__", json.dumps("w1")))
+
+
+SELECT_PAGE = """<html><body><label for="q3">3. Most DNA is stored in the:</label>
+<select id="q3"><option value="">Choose…</option><option value="opt_a">Ribosome</option><option value="opt_b">Nucleus</option></select>
+<input type="radio" name="q5" id="t" value="t"><label for="t">True</label>
+<input type="radio" name="q5" id="f" value="f"><label for="f">False</label>
+<script>document.getElementById('q3').addEventListener('change', e => window.__picked = e.target.value);</script></body></html>"""
+
+
+def test_select_by_label_and_radio_groups(page):
+    page.set_content(SELECT_PAGE)
+    pg = page
+    s = json.loads(pg.evaluate(JS.SNAPSHOT.replace("__MAX__", "50").replace("__TEXT__", "500")))
+    sel = next(e for e in s["elements"] if e["role"] == "select")
+    assert sel["options"] == ["Choose…", "Ribosome", "Nucleus"]
+    radios = [e for e in s["elements"] if e["role"] == "input:radio"]
+    assert {r["group"] for r in radios} == {"q5"} and {r["name"] for r in radios} == {"True", "False"}
+    r = json.loads(pg.evaluate(JS.TYPE.replace("__ID__", json.dumps(sel["id"])).replace("__TEXT__", json.dumps("nucleus"))))
+    assert r["ok"] and r["value"] == "Nucleus" and pg.evaluate("window.__picked") == "opt_b"   # internal value set via label
+    r = json.loads(pg.evaluate(JS.TYPE.replace("__ID__", json.dumps(sel["id"])).replace("__TEXT__", json.dumps("Golgi"))))
+    assert not r["ok"] and "Ribosome" in r["error"]

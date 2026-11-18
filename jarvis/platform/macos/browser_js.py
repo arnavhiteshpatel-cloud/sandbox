@@ -37,6 +37,9 @@ __FIND__
     const e = { id, role, name: label(el), in_view: r.bottom > 0 && r.top < vh, y: Math.round(r.top + window.scrollY) };
     if (tag === 'a' && el.href) e.href = el.href.slice(0, 200);
     if ('value' in el && tag !== 'button' && el.value) e.value = String(el.value).slice(0, 80);
+    if (tag === 'select') { e.options = [...el.options].map(o => o.text.trim()).filter(Boolean).slice(0, 20);
+      if (el.selectedIndex >= 0) e.value = (el.options[el.selectedIndex] || {}).text || e.value; }
+    if (el.type === 'radio' || el.type === 'checkbox') { if (el.name) e.group = el.name.slice(0, 40); e.checked = !!el.checked; }
     if (el.disabled) e.disabled = true;
     if (el.checked) e.checked = true;
     if (!e.name && !e.href && !role.startsWith('input')) continue;
@@ -79,6 +82,15 @@ __FIND__
   const text = __TEXT__;
   el.scrollIntoView({ block: 'center' }); el.focus();
   if (el.isContentEditable) { document.execCommand('selectAll', false); document.execCommand('insertText', false, text); }
+  else if (el.tagName === 'SELECT') {
+    const want = String(text).trim().toLowerCase();
+    let idx = [...el.options].findIndex(o => o.text.trim().toLowerCase() === want || o.value.toLowerCase() === want);
+    if (idx < 0) idx = [...el.options].findIndex(o => o.text.trim().toLowerCase().includes(want));
+    if (idx < 0) return JSON.stringify({ ok: false, error: 'no option "' + text + '"; options: ' + [...el.options].map(o => o.text.trim()).join(' | ').slice(0, 300) });
+    el.selectedIndex = idx;
+    el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
+    return JSON.stringify({ ok: true, value: el.options[idx].text.trim() });
+  }
   else {
     const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : el.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, 'value').set; setter.call(el, text);

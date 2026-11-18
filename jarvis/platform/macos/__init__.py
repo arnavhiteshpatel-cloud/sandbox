@@ -398,6 +398,36 @@ class MacComputer(Computer):
         from . import integrations as I
         return I.compose_email(to, subject, body)
 
+    def paste_text(self, text):
+        """Paste long text quickly, then restore whatever text was on the clipboard before."""
+        old = subprocess.run(["pbpaste"], capture_output=True, timeout=5).stdout
+        subprocess.run(["pbcopy"], input=text.encode("utf-8"), timeout=5)
+        r = self.press_keys("cmd+v")
+        time.sleep(0.35)
+        subprocess.run(["pbcopy"], input=old, timeout=5)
+        return ActionResult(r.ok, "Typed the text." if r.ok else r.message)
+
+    def focused_editable(self):
+        try:
+            from ApplicationServices import AXUIElementCopyAttributeValue, AXUIElementCreateSystemWide  # type: ignore
+
+            err, el = AXUIElementCopyAttributeValue(AXUIElementCreateSystemWide(), "AXFocusedUIElement", None)
+            if err != 0 or el is None:
+                return None
+            err, role = AXUIElementCopyAttributeValue(el, "AXRole", None)
+            if role in ("AXTextField", "AXTextArea", "AXSearchField", "AXComboBox"):
+                return True
+            err, rng = AXUIElementCopyAttributeValue(el, "AXSelectedTextRange", None)   # any editable text supports this
+            return err == 0 and rng is not None
+        except Exception:
+            return None
+
+    def screen_size(self):
+        from AppKit import NSScreen  # type: ignore
+
+        f = NSScreen.mainScreen().frame()
+        return float(f.size.width), float(f.size.height)
+
     def open_location(self, url):
         p = subprocess.run(["open", url], capture_output=True, text=True, timeout=15)
         return ActionResult(p.returncode == 0, "Opened." if p.returncode == 0 else p.stderr.strip()[:200])

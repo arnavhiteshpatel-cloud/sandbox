@@ -312,6 +312,25 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
     if m:
         return I("type", text=raw_after(text, r"type\s+") or m.group(1))
 
+    # --- typing: dictation and writing for you -------------------------------------------------
+    if re.fullmatch(r"(?:start |begin )?(?:take dictation|dictation(?: mode)?|dictate|type (?:what|everything) i say|start typing what i say)", s):
+        return I("dictation", on=True)
+    if re.fullmatch(r"(?:stop|end|exit|finish|quit) (?:dictation|dictating|typing)(?: mode)?|dictation off", s):
+        return I("dictation", on=False)
+    m = re.fullmatch(r"(?:write|draft|compose|type up|type out)(?: me| out)? (?:a |an |the |some |my )?(.+?)(?: (?:here|for me|in this (?:doc|document|box|field)))?", s)
+    if m and not re.search(r"\b(email|e-mail|text|message|imessage|reminder|note to|shortcut)\b", m.group(1)) and len(m.group(1).split()) >= 2:
+        return I("compose", what=raw_after(text, r"(?:write|draft|compose|type up|type out)\s+(?:me\s+|out\s+)?") or m.group(1))
+
+    # --- "do it": complete the task on screen autonomously ------------------------------------
+    TASK_NOUNS = (r"assignment|worksheet|quiz|form|homework|practice|questions?|task|test|exercises?|problems?|sheet|"
+                  r"application|survey|activity|lab|module|lesson")
+    if re.fullmatch(r"(?:can you |please )?(?:do|complete|finish|solve|answer|work through|fill (?:in|out))"
+                    r"(?: (?:it|this|that|these|them|all of (?:it|this|them|these))"
+                    r"| (?:all (?:of )?)?(?:the |this |these |those |my )?(?:\w+ ){0,2}(?:" + TASK_NOUNS + r"))?"
+                    r"(?: (?:for me|out|in|now|please))*|fill (?:it|this|that|the form|this form) (?:out|in)(?: for me)?", s) \
+            and s not in ("do", "complete", "finish", "answer", "solve"):
+        return I("complete_task", request=s)
+
     # --- internet lookups (background; answered from search results) ---------------------------
     m = re.fullmatch(r"(?:look up|lookup|google|search (?:the web|the internet|online|google) for|search online for|search the web|"
                      r"look online for|find out|check online)(?: for| about)? (.+)", s)

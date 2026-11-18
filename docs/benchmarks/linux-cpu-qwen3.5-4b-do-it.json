@@ -1,0 +1,40 @@
+{
+  "host": {
+    "machine": "x86_64",
+    "system": "Linux-6.18.44-fc-v595-x86_64-with-glibc2.39",
+    "python": "3.12.3"
+  },
+  "provider": "openai_compatible",
+  "base_url": "http://127.0.0.1:8080",
+  "started": "2026-11-18 18:35:34",
+  "repeat": 1,
+  "models": {
+    "qwen3.5-4b": {
+      "pass_rate": 0.0,
+      "consistent_cases": 1,
+      "invalid_tool_calls": 0,
+      "median_llm_call_ms": 54884.0,
+      "median_wall_s": 54.89,
+      "by_category": {
+        "completion": 0
+      },
+      "runs": [
+        {
+          "case": "do_it_quiz",
+          "category": "completion",
+          "ok": false,
+          "detail": "page1={'Answer to question 1': None, 'Answer to question 2': None, 'Answer to question 3': None} page2={'Answer to question 4': None, 'True': None, 'False': None} submitted=False",
+          "error": null,
+          "steps": 0,
+          "llm_calls": 1,
+          "llm_ms": 54884,
+          "wall_s": 54.89,
+          "invalid_calls": 0,
+          "message": "I'm ready to assist. Please provide the specific task you'd like me to complete, and I'll get started immediately.",
+          "trace": [],
+          "run": 1
+        }
+      ]
+    }
+  }
+}

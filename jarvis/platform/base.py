@@ -160,4 +160,13 @@ class Computer:
     def calendar_events(self, day_offset: int = 0, days: int = 1) -> ActionResult: raise NotImplementedError
     def compose_email(self, to: list[str], subject: str, body: str) -> ActionResult: raise NotImplementedError
     def send_message(self, to: str, text: str) -> ActionResult: raise NotImplementedError
-    def open_location(self, url: str) -> ActionResult: raise NotImplementedError   # any URL scheme (spotify:, music:, zoommtg:, …)
+    def open_location(self, url: str) -> ActionResult: raise NotImplementedError
+    def screen_size(self) -> tuple[float, float]: return (1440.0, 900.0)   # main display, in points
+    def paste_text(self, text: str) -> ActionResult: raise NotImplementedError
+    def focused_editable(self) -> bool | None: return None   # is the keyboard focus in a text field? None = unknown
+
+    def insert_text(self, text: str, method: str = "auto") -> ActionResult:
+        """Put text where the cursor is: real keystrokes, or (for long text) paste with the clipboard restored."""
+        if method == "paste" or (method == "auto" and len(text) > 400):
+            return self.paste_text(text)
+        return self.type_text(text)   # any URL scheme (spotify:, music:, zoommtg:, …)

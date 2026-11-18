@@ -105,6 +105,15 @@ Root causes and fixes:
 - New: phrase learning (`jarvis/learning.py`) plus vocabulary priming of Whisper.
 128 tests pass.
 
+### “JARVIS, do it” + typing (2026-11-18, user request)
+- Completion mode (`Assistant._complete_task`, `COMPLETION_RULES`): read the whole task → answer each item (thinking,
+  `calculate`, background web lookups) → fill fields / dropdowns by label / radios / documents → verify → Next → stop before
+  submit (`strict_finalize`: Submit/Finish/Turn in/Complete-quiz always confirm, regardless of the user's words). Up to 100 steps
+  and 30 min plugged in. New tools: `calculate` (AST-safe), `click_visual` (vision grounding, 0–1000 coordinates → click).
+- Typing: real keystrokes with Return/Tab for line breaks, paste for long text (clipboard restored), automatic fallback from
+  direct fill to keystrokes for rich editors, focus check (`focused_editable`) before typing; dictation mode; “write …” composes then types.
+- Simulator gained a two-page practice quiz with real field state; benchmark case `do_it_quiz`.
+
 ### Known issues / risks
 - Nothing macOS-specific has been executed yet (see LIMITATIONS.md).
 - Qwen3.5's hybrid architecture limits prompt-cache reuse in llama.cpp-based runtimes, so first-step latency per AI task

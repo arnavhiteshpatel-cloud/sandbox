@@ -86,7 +86,7 @@
       Built for: 14-inch MacBook Pro (Nov 2024), Apple M4 Pro, 24 GB, macOS Sequoia 15.7.3<br>
       Runs entirely on-device: no Claude, no Anthropic API, no cloud AI, no subscriptions<br>
       Source: github.com/arnavhiteshpatel-cloud/sandbox, branch <span style="font-family:'DejaVu Sans Mono'">claude/project-jarvis-ai-assistant-rddtrw</span><br>
-      Document date: 18 November 2026 · version 0.3.0
+      Document date: 18 November 2026 · version 0.4.0
     </div>
     <div class="status">Status: built and tested off-Mac. Not yet run on your MacBook. See “What has been verified”.</div>
   </div>
@@ -104,6 +104,7 @@
     <li>Capabilities: instant commands</li>
     <li>Capabilities: voice shortcuts</li>
     <li>Capabilities: the AI agent</li>
+    <li>“JARVIS, do it” and typing</li>
     <li>Capabilities: every app on your Mac</li>
     <li>Capabilities: memory and file search</li>
     <li>Battery and performance modes</li>
@@ -393,7 +394,7 @@
       <li>The recent conversation and the last list of results (for “open the second one”).</li>
       <li>Only the tools the request plausibly needs (smaller prompt, faster, less energy).</li></ul></div>
   </div>
-  <h3>The agent’s 36 tools</h3>
+  <h3>The agent’s 38 tools</h3>
   <table>
     <tr><th style="width:26%">Area</th><th>Tools</th></tr>
     <tr><td>Seeing</td><td><b>observe</b> (page or app: address, visible text, interactive elements) · <b>read_page</b> (full page text) ·
@@ -405,11 +406,55 @@
     <tr><td>Any app and the system</td><td><b>app_dictionary</b> (what an app can be scripted to do) · <b>script_app</b> (AppleScript/JavaScript; risky scripts ask first) ·
       <b>media</b> · <b>system</b> (dark mode, Wi-Fi, Settings panes, screenshots, window actions, URL schemes, lock) · <b>create_note</b> · <b>create_reminder</b> ·
       <b>calendar</b> · <b>compose_email</b> (draft only) · <b>send_message</b> (always asks)</td></tr>
+    <tr><td>Precision</td><td><b>calculate</b> (exact math) · <b>click_visual</b> (click something described, found by computer vision)</td></tr>
     <tr><td>Internet (invisible)</td><td><b>web_search</b> (DuckDuckGo → Bing → Wikipedia, no account) · <b>read_webpage</b>. Lookups run in the background
       and never open your browser; Arc is used only when you want to see a page or it needs your login.</td></tr>
     <tr><td>You and memory</td><td><b>ask_user</b> · <b>remember</b> · <b>recall</b> · <b>run_shortcut</b> · <b>done</b></td></tr>
   </table>
 
+</section>
+
+<!-- ======================= DO IT ======================= -->
+<section class="section">
+  <div class="kicker">Section 8 (continued)</div>
+  <h1>“JARVIS, do it”: complete what’s on screen</h1>
+  <p class="lede">Pull up a practice assignment, a worksheet, a quiz or a form and say <b>“do it”</b> (or “complete this”, “fill this out”,
+  “answer these questions”). JARVIS works through the whole thing on its own and stops right before handing it in.</p>
+  <div class="flow">
+    <div><b>Read</b>every question and instruction (page structure, or computer vision for images, PDFs and canvas)</div>
+    <div><b>Work out</b>each answer: reasoning, the exact calculator, and invisible web lookups</div>
+    <div><b>Enter</b>type into fields, pick dropdowns, tick radios and boxes, type into documents</div>
+    <div><b>Check</b>re-reads each page to verify every answer landed</div>
+    <div><b>Continue</b>Next / scroll through every page</div>
+    <div><b>Stop</b>before Submit, and reports what’s unsure</div>
+  </div>
+  <table>
+    <tr><th style="width:26%">Detail</th><th>How it works</th></tr>
+    <tr><td>Interacting, not just reading</td><td>It operates the real page or app: text fields, dropdowns (chosen by their visible label), radio buttons, checkboxes,
+      Next buttons, and documents or rich editors (Google Docs, Word, Pages, Canvas answer boxes) using real keystrokes when direct filling doesn’t take.</td></tr>
+    <tr><td>Computer vision</td><td>When questions or answer boxes exist only as an image, PDF or canvas, it reads them from a screenshot and clicks by
+      describing what to click (“the answer box under question 3”), then checks the result.</td></tr>
+    <tr><td>Looking things up</td><td>Facts it isn’t sure of are looked up in the background (never on your screen). All arithmetic goes through an exact calculator.</td></tr>
+    <tr><td>Thinking</td><td>Uses the careful “thinking” mode (except in Battery Saver), with a larger step budget (up to 100 steps, 30 min when plugged in).</td></tr>
+    <tr><td>Never hands it in</td><td>Submit / Turn in / Finish / Complete-quiz buttons always ask you, even though you said “complete this”. It ends with a
+      summary: how many items it did, which answers it’s unsure about, and that it’s ready for your review.</td></tr>
+    <tr><td>Stopping</td><td><kbd>Esc</kbd>, <kbd>⌃⌥⌘.</kbd> or “stop” halts it immediately.</td></tr>
+  </table>
+  <div class="callout warn"><b>Honest expectations</b>A ~9-billion-parameter local model makes mistakes, especially on long or tricky assignments, so review its answers.
+    Whether you may use it for graded work is between you and your school; JARVIS never submits anything without your “yes”.</div>
+
+</section>
+<section class="section">
+  <div class="kicker">Section 8 (continued)</div>
+  <h1>Typing</h1>
+  <table>
+    <tr><th style="width:36%">Say…</th><th>Effect</th></tr>
+    <tr><td>“Type <i>Dear Ms Smith, thank you…</i>”</td><td>Types your exact words where the cursor is, in any app.</td></tr>
+    <tr><td>“Take dictation” … “stop dictation”</td><td>Everything you say in between is typed. Say “comma”, “period”, “new line”, “new paragraph”.</td></tr>
+    <tr><td>“Write a paragraph about photosynthesis”</td><td>Composes the text with the local AI and types it where the cursor is; tells you the word count.</td></tr>
+  </table>
+  <p class="muted">Typing only happens when the cursor is in a text field. Otherwise JARVIS asks you to click where the text should go, so keystrokes never trigger
+  shortcuts in other apps. Long text is pasted quickly and your clipboard is restored afterwards.</p>
 </section>
 
 <!-- ======================= MAC CONTROL + MEMORY ======================= -->
@@ -553,7 +598,7 @@
   Everything that needs macOS is written but <b>not yet run</b>. No simulated result is counted as a pass.</p>
   <table>
     <tr><th style="width:42%">Area</th><th style="width:14%">Status</th><th>Evidence</th></tr>
-    <tr><td>Routing, shortcuts, agent loop, memory, safety, power logic</td><td><span class="tag t-ok">tested</span></td><td>128 automated tests pass, including “open my IB” → “go to the assignments” → “scroll down” → “go back” with zero AI calls.</td></tr>
+    <tr><td>Routing, shortcuts, agent loop, memory, safety, power logic</td><td><span class="tag t-ok">tested</span></td><td>136 automated tests pass, including “open my IB” → “go to the assignments” → “scroll down” → “go back” with zero AI calls.</td></tr>
     <tr><td>Arc page-control code (find, click, type, scroll, read)</td><td><span class="tag t-ok">tested</span></td><td>8/8 in a real Chromium browser (the engine Arc uses).</td></tr>
     <tr><td>Voice pipeline with real models</td><td><span class="tag t-ok">tested</span></td><td>6/6: wake word detected for 4 different voices, no false triggers, exact transcripts, correct commands. Silence filter: 0 of 375 frames processed.</td></tr>
     <tr><td>AI agent with a real local model</td><td><span class="tag t-ok">tested</span></td><td>Qwen3.5-4B: 11/11 JARVIS tasks plus 3/3 app tasks (reminder + calendar, scripting Music, message correctly held for confirmation), 0 invalid actions (one run per case, on a simulated computer).</td></tr>

@@ -12,8 +12,10 @@ from dataclasses import dataclass
 ALWAYS_CONFIRM = re.compile(
     r"\b(pay|payment|buy|purchase|checkout|check out|place (?:your )?order|order now|transfer|wire|donate|subscribe|"
     r"upgrade plan|delete (?:my )?account|close account|withdraw|confirm purchase|book now)\b", re.I)
+FINALIZE = re.compile(r"\b(submit|turn in|hand in|finish|finali[sz]e|complete (?:quiz|test|exam|assignment|attempt|submission)|"
+                      r"end (?:quiz|test|exam|attempt)|send)\b", re.I)
 CONFIRM_UNLESS_ASKED = re.compile(
-    r"\b(submit|turn in|hand in|send|post|publish|reply all|reply|share|delete|remove|discard|erase|unsubscribe|"
+    r"\b(submit|turn in|hand in|finish|send|post|publish|reply all|reply|share|delete|remove|discard|erase|unsubscribe|"
     r"sign out|log ?out|archive|accept|decline|confirm|approve|save changes)\b", re.I)
 DANGEROUS_KEYS = {"cmd+delete", "cmd+backspace", "cmd+shift+delete", "cmd+opt+esc", "cmd+q", "ctrl+cmd+q", "cmd+shift+q"}
 
@@ -58,7 +60,12 @@ def sensitive_app(app: str | None, settings) -> bool:
     return app.lower() in {a.lower() for a in settings.get("security.sensitive_apps", [])}
 
 
-def check(tool: str, args: dict, *, user_text: str, settings, element_label: str = "", front_app: str | None = None) -> Verdict:
+def check(tool: str, args: dict, *, user_text: str, settings, element_label: str = "", front_app: str | None = None,
+          strict_finalize: bool = False) -> Verdict:
+    if strict_finalize and tool in ("click", "click_screen_text", "click_visual"):
+        label = element_label or str(args.get("text") or args.get("description") or "")
+        if FINALIZE.search(label):
+            return Verdict(True, confirm=True, reason=f"“{label}” would hand this in.")
     target_app = args.get("app") if tool in ("menu",) else front_app
     if tool in APP_ACTION_TOOLS and sensitive_app(target_app, settings):
         return Verdict(True, confirm=True, reason=f"{target_app} is a sensitive app.")

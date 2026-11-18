@@ -80,6 +80,23 @@ def _utf16_chunks(text: str, units: int):
 
 
 def type_text(text: str) -> ActionResult:
+    """Type like a keyboard. Line breaks and tabs are sent as real Return/Tab key presses (many editors,
+    e.g. Google Docs, ignore a typed newline character)."""
+    parts = text.replace("\r\n", "\n").split("\n")
+    for i, line in enumerate(parts):
+        segs = line.split("\t")
+        for j, seg in enumerate(segs):
+            if seg:
+                _type_plain(seg)
+            if j < len(segs) - 1:
+                press_keys("tab")
+        if i < len(parts) - 1:
+            press_keys("return")
+            time.sleep(0.02)
+    return ActionResult(True, "Typed the text.")
+
+
+def _type_plain(text: str) -> None:
     src = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStateHIDSystemState)
     for chunk in _utf16_chunks(text, 16):
         n = len(chunk.encode("utf-16-le")) // 2   # the API counts UTF-16 units, not code points
@@ -88,7 +105,6 @@ def type_text(text: str) -> ActionResult:
             Quartz.CGEventKeyboardSetUnicodeString(ev, n, chunk)
             Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
         time.sleep(0.012)
-    return ActionResult(True, "Typed the text.")
 
 
 def click_at(x: float, y: float, button: str = "left", count: int = 1) -> ActionResult:
