@@ -89,6 +89,7 @@ function onEvent(ev) {
     case "power": if (S.state) { S.state.power = { ...S.state.power, ...ev }; renderState(); } break;
     case "llm": if (S.state) { S.state.llm_available = ev.available; S.state.model = ev.model; renderState(); } break;
     case "voice": refreshState(); break;
+    case "permissions": if (location.hash.startsWith("#settings")) loadSettings(); break;
     case "error": addActivity({ ts: ev.ts, level: "error", category: ev.where || "error", message: ev.message }); if (VIEW === "hud") { root.dataset.status = "error"; hud("Something went wrong", ev.message); } break;
     case "open_editor": if (VIEW === "center") { location.hash = "#shortcuts"; newShortcut(ev.name, ev.description); } else native({ type: "openCenter", hash: "shortcuts" }); break;
   }
@@ -433,8 +434,13 @@ async function loadSettings() {
     ${permRow("microphone", "Microphone", "Privacy_Microphone")}
     ${permRow("accessibility", "Accessibility (click, type, read apps)", "Privacy_Accessibility")}
     ${permRow("screen_recording", "Screen Recording (screenshots, OCR)", "Privacy_ScreenCapture")}
+    ${perms.accessibility === false ? `<div class="banner" style="margin-top:8px"><b>${perms.accessibility_app
+      ? "JARVIS is allowed, but its background service isn't. Click Reset permissions, then allow JARVIS again."
+      : "If JARVIS is already switched on in the Accessibility list, that entry belongs to an older build. Click Reset permissions, then switch JARVIS on again when macOS asks."}</b></div>` : ""}
     <div class="perm"><span>Automation (control Arc, Finder…)</span><span class="chip">asked per app</span></div>
-    <div class="row gap" style="margin-top:10px"><button class="sm" id="p-req">Request missing permissions</button></div>
+    <div class="row gap" style="margin-top:10px"><button class="sm" id="p-req">Request missing permissions</button>
+      <button class="sm" id="p-reset">Reset permissions</button></div>
+    <div class="help">Talk key: hold <kbd>${esc(perms.talk_key || "⌥⇧C")}</kbd>${perms.talk_key === "⌃⌥C" ? " (switches to ⌥⇧C once Accessibility is allowed)" : ""}. This page re-checks automatically.</div>
     <div class="help">Hotkeys: hold <kbd>⌥⇧C</kbd> to talk · <kbd>⌃⌥⌘.</kbd> emergency stop.</div></section>`;
   $$("[data-path]", $("#settings")).forEach(el => el.onchange = async () => {
     let v = el.type === "checkbox" ? el.checked : el.dataset.lines ? el.value.split("\n").map(x => x.trim()).filter(Boolean) : el.type === "range" || el.type === "number" ? Number(el.value) : el.value;
@@ -445,6 +451,18 @@ async function loadSettings() {
   });
   $$("[data-pane]").forEach(b => b.onclick = () => native({ type: "openURL", url: "x-apple.systempreferences:com.apple.preference.security?" + b.dataset.pane }));
   $("#p-req").onclick = async () => { await api("POST", "/api/permissions", { request: true }); setTimeout(loadSettings, 1500); };
+  $("#p-reset").onclick = async () => {
+    if (!confirm("Reset JARVIS's macOS permissions? macOS will ask again; allow each one, and switch JARVIS on in Accessibility.")) return;
+    await api("POST", "/api/permissions", { reset: true }); setTimeout(loadSettings, 1500);
+  };
+  // Re-check permissions every 3 s while Settings is open, so granting them shows up without reloading.
+  clearInterval(S.permTimer);
+  S.permKey = JSON.stringify(perms);
+  S.permTimer = setInterval(async () => {
+    if (!location.hash.startsWith("#settings") || document.hidden) return;
+    const p = await api("POST", "/api/permissions", {}).catch(() => null);
+    if (p && JSON.stringify(p) !== S.permKey) loadSettings();
+  }, 3000);
   $("#v-preview").onclick = () => api("POST", "/api/voice/preview", { text: "Good evening. All systems are running locally, and nothing leaves this Mac." }).catch(e => alert(e.message));
 }
 

@@ -34,6 +34,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         system.send = { [weak self] ev in self?.daemon.post("api/system/event", ["event": ev]) }
         system.start()
 
+        // macOS posts this whenever an app is switched on/off under Privacy & Security > Accessibility.
+        // React immediately: start the ⌥⇧C tap and tell the service, so no restart is needed.
+        DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("com.apple.accessibility.api"),
+                                                            object: nil, queue: .main) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { self?.permissionsChanged() }
+        }
+
         web.onMessage = { [weak self] msg in self?.handle(msg) }
     }
 
@@ -42,9 +49,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         daemon.stop()
     }
 
+    private func permissionsChanged() {
+        hotkeys.retryTapIfNeeded()
+        daemon.post("api/system/event", ["event": "permissions", "app_accessibility": AXIsProcessTrusted(),
+                                         "talk_key": hotkeys.pttDescription])
+    }
+
     private func serviceReady() {
         setIcon("smallcircle.filled.circle")
-        hotkeys.retryTapIfNeeded()          // Accessibility may have been granted since launch
+        permissionsChanged()                // Accessibility may have been granted since launch
         if hudPanel == nil { buildHUD() }   // onReady fires again after a service restart
         if !UserDefaults.standard.bool(forKey: "onboarded") {
             onboard()

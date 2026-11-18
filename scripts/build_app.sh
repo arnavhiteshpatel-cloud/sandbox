@@ -8,7 +8,15 @@ cd "$(dirname "$0")/.."
 ROOT="$PWD"
 APP="$ROOT/build/JARVIS.app"
 PYVER="${JARVIS_PYTHON_VERSION:-3.12}"
-SIGN_ID="${JARVIS_SIGN_IDENTITY:--}"   # "-" = ad-hoc. A stable self-signed identity keeps permissions across rebuilds (see docs/SETUP.md)
+# Signing: a stable identity keeps macOS permissions across rebuilds. Uses "JARVIS Local Signing"
+# (created by scripts/create_signing_identity.sh) when present; otherwise ad-hoc ("-").
+if [[ -n "${JARVIS_SIGN_IDENTITY:-}" ]]; then
+  SIGN_ID="$JARVIS_SIGN_IDENTITY"
+elif security find-identity -p codesigning 2>/dev/null | grep -q '"JARVIS Local Signing"'; then
+  SIGN_ID="JARVIS Local Signing"
+else
+  SIGN_ID="-"
+fi
 
 [[ "$(uname -s)" == "Darwin" ]] || { echo "build_app.sh must run on macOS"; exit 1; }
 [[ "$(uname -m)" == "arm64" ]] || echo "warning: not Apple Silicon; MLX speech recognition will be unavailable"
@@ -70,8 +78,15 @@ fi
 echo "==> Signing ($([[ "$SIGN_ID" == "-" ]] && echo ad-hoc || echo "$SIGN_ID"))"
 find "$APP/Contents/Resources/python" -type f \( -name "*.so" -o -name "*.dylib" \) -exec codesign --force --sign "$SIGN_ID" {} + 2>/dev/null || true
 codesign --force --sign "$SIGN_ID" "$APP/Contents/Resources/python/bin/python3" 2>/dev/null || true
-codesign --force --sign "$SIGN_ID" "$APP"
+if ! codesign --force --sign "$SIGN_ID" "$APP"; then
+  echo "    warning: signing with \"$SIGN_ID\" failed; falling back to ad-hoc (permissions will reset on rebuilds)"
+  SIGN_ID="-"
+  find "$APP/Contents/Resources/python" -type f \( -name "*.so" -o -name "*.dylib" \) -exec codesign --force --sign - {} + 2>/dev/null || true
+  codesign --force --sign - "$APP/Contents/Resources/python/bin/python3" 2>/dev/null || true
+  codesign --force --sign - "$APP"
+fi
 codesign --verify --verbose=1 "$APP" && echo "    signature OK"
+codesign -d -r- "$APP" 2>&1 | grep -o 'designated => .*' | sed 's/^/    /' || true
 
 SIZE_MB=$(du -sm "$APP" | awk '{print $1}')
 echo "==> Built $APP (${SIZE_MB} MB)"

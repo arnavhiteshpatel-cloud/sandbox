@@ -110,3 +110,10 @@ risky scripts confirmed), AXManualAccessibility for all apps (Electron apps expo
   and `cp -R` copied only the link, so packages were installed into uv's Python instead of the app. Fix: copy
   `sys.base_prefix` with `ditto`, then assert the bundled `sys.prefix` and the `jarvis` package are inside the app and the
   app is larger than 200 MB. Verified on Linux with the same uv layout (104 MB real copy; pip installs land inside).
+
+- **Bug 3 (fixed, 2026-11-18):** after reinstalling, JARVIS was switched on under Accessibility but reported no permission.
+  Cause: ad-hoc signatures change on every build and TCC grants are tied to the signature, so the list entry belonged to the
+  previous build. Immediate fix for the user: `tccutil reset All local.jarvis.assistant`, then reopen and allow. Permanent
+  fixes: `scripts/create_signing_identity.sh` makes a local "JARVIS Local Signing" certificate that the build uses
+  automatically (permissions now survive rebuilds); the app listens for `com.apple.accessibility.api` and re-arms the ⌥⇧C
+  tap with no restart; Settings → Permissions re-checks every 3 s and has a **Reset permissions** button with an explanation.

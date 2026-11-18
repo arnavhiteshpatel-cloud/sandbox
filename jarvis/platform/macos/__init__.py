@@ -415,6 +415,13 @@ class MacComputer(Computer):
         perms["automation"] = "asked per app on first use"
         return perms
 
+    BUNDLE_ID = "local.jarvis.assistant"
+
+    def reset_permissions(self) -> None:
+        """Forget stale grants (e.g. ones made for a previous build) so macOS asks again for this build."""
+        for service in ("Accessibility", "ScreenCapture", "Microphone", "AppleEvents"):
+            subprocess.run(["tccutil", "reset", service, self.BUNDLE_ID], capture_output=True, timeout=10)
+
     def request_permissions(self) -> None:
         try:
             from ApplicationServices import AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt  # type: ignore

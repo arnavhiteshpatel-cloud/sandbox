@@ -46,5 +46,5 @@ Honest list, newest understanding first. "Unverified" means designed and written
   tokens. Follow-up steps within a task are cheap. Measure with `jarvis bench`; consider a non-hybrid model if it's too slow.
 * **Arc's future:** The Browser Company moved Arc to maintenance mode in 2025. JARVIS also supports Chrome, Brave, Edge and Safari
   (Settings → Browser).
-* **Rebuilding the app resets permissions** unless you sign with a stable identity ([SETUP.md](SETUP.md)).
+* **Permissions after rebuilds:** builds are signed with a local certificate so permissions persist. If that certificate couldn't be created, each rebuild needs permissions granted again ([SETUP.md](SETUP.md)).
 * **Semantic search** needs the embedding model in Ollama. Without it, search falls back to keyword + Spotlight.

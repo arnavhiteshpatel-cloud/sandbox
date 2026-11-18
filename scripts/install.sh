@@ -36,6 +36,7 @@ start_ollama() {
   exit 1
 }
 
+bash scripts/create_signing_identity.sh || echo "    (continuing with ad-hoc signing)"
 bash scripts/build_app.sh
 
 echo "==> Installing to /Applications"

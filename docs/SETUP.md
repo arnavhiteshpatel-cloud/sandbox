@@ -41,10 +41,11 @@ because macOS 15 no longer lets apps register Option/Option+Shift-only shortcuts
 key with a keyboard event tap and swallows it, so no "Ç" is typed. Until Accessibility is granted, push-to-talk is
 **⌃⌥C**; it switches to ⌥⇧C automatically once permission is granted (on the next service start, or restart JARVIS).
 
-> **Rebuilding resets permissions.** Ad-hoc signatures change with every build, and macOS ties permissions to the
-> signature. To keep permissions across rebuilds, create a self-signed code-signing certificate once (Keychain Access →
-> Certificate Assistant → Create a Certificate → type "Code Signing", name "JARVIS Local") and build with
-> `JARVIS_SIGN_IDENTITY="JARVIS Local" ./scripts/build_app.sh`.
+> **Permissions and rebuilds.** macOS ties permissions to an app's signature. The installer creates a local signing
+> certificate ("JARVIS Local Signing", `scripts/create_signing_identity.sh`) and signs every build with it, so permissions
+> survive updates. If JARVIS says a permission is missing although it's switched on in System Settings, that entry
+> belongs to an older build. Click **Settings → Permissions → Reset permissions** in JARVIS (or run
+> `tccutil reset All local.jarvis.assistant`), reopen JARVIS and allow again.
 
 ### Arc specifics
 

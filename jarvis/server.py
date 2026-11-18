@@ -101,7 +101,11 @@ def make_app(assistant, token: str, port: int) -> web.Application:
         return J({"ok": a.answer((await body(request)).get("text", ""))})
 
     async def system_event(request):
-        ev = (await body(request)).get("event")
+        b = await body(request)
+        ev = b.get("event")
+        if ev == "permissions":
+            a.app_permissions = {"accessibility_app": b.get("app_accessibility"), "talk_key": b.get("talk_key")}
+            a.events.emit("permissions", **a.app_permissions)
         if ev == "will_sleep":
             a.power.will_sleep()
             if a.voice:
@@ -244,9 +248,12 @@ def make_app(assistant, token: str, port: int) -> web.Application:
         return J(r.to_dict())
 
     async def permissions(request):
-        if (await body(request)).get("request") and hasattr(a.computer, "request_permissions"):
+        b = await body(request)
+        if b.get("reset") and hasattr(a.computer, "reset_permissions"):
+            await asyncio.to_thread(a.computer.reset_permissions)
+        if (b.get("request") or b.get("reset")) and hasattr(a.computer, "request_permissions"):
             await asyncio.to_thread(a.computer.request_permissions)
-        return J(a.computer.permissions())
+        return J({**a.computer.permissions(), **getattr(a, "app_permissions", {})})
 
     # --- events ---------------------------------------------------------------------------------
     async def ws(request):
