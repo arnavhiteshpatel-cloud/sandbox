@@ -192,6 +192,26 @@ return out'''
     return ActionResult(True, f"{len(events)} event(s).", {"events": events}, verified=True)
 
 
+def reminders_due(days: int = 1) -> ActionResult:
+    script = f'''
+set d1 to (current date)
+set time of d1 to 0
+set d1 to d1 + ({max(1, int(days))} * days)
+set out to ""
+tell application "Reminders"
+  repeat with r in (every reminder whose completed is false and due date is not missing value and due date < d1)
+    set out to out & (name of r) & linefeed
+  end repeat
+end tell
+return out'''
+    try:
+        out = AS.run(script, timeout=40)
+    except AutomationError as e:
+        return ActionResult.fail(str(e))
+    items = [l.strip() for l in out.splitlines() if l.strip()]
+    return ActionResult(True, f"{len(items)} due.", {"reminders": items}, verified=True)
+
+
 def compose_email(to: list[str], subject: str, body: str) -> ActionResult:
     recips = "\n".join(f"make new to recipient at end of to recipients with properties {{address:{AS.quote(a)}}}" for a in to)
     script = f'''tell application "Mail"

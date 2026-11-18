@@ -14,7 +14,15 @@ from typing import Any
 from . import paths
 
 DEFAULTS: dict[str, Any] = {
-    "settings_version": 2,
+    "settings_version": 3,
+    "learning": {
+        "ask_before_learning": True,   # user choice: ask before remembering a new phrasing
+        "suggest_shortcuts": True,     # user choice: suggest shortcuts for things you repeat, whenever useful
+    },
+    "history_days": 30,                # user choice: commands, task steps and activity are deleted after 30 days
+    "do_it": {
+        "finish": "ask_then_submit",   # user choice: spoken summary, then "Submit?"; presses Submit on yes
+    },
     "assistant": {
         "name": "JARVIS",
         "user_name": "",              # optional
@@ -70,7 +78,8 @@ DEFAULTS: dict[str, Any] = {
         "end_silence_ms": 600,
         "max_utterance_s": 15,
         "muted": False,
-        "chime": True,
+        "chime": False,                # user choice: no listening sound
+        "speak_confirmations": False,  # user choice: simple confirmations are shown on the HUD, not spoken
     },
     "agent": {
         "max_steps": {"battery_saver": 8, "balanced": 20, "max_performance": 40},
@@ -114,7 +123,8 @@ DEFAULTS: dict[str, Any] = {
     "ui": {
         "reduced_motion": False,
         "show_hud": True,
-        "hud_style": "pill",           # minimal pill, top-center, visible only while active
+        "hud_style": "pill",           # minimal pill, visible only while active
+        "hud_position": "top_left",    # user choice (2026-11-18)
     },
     "hotkeys": {                       # handled by the native shell (Carbon hot keys)
         "push_to_talk": "opt+shift+c", # hold to talk
@@ -137,7 +147,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return out
 
 
-SETTINGS_VERSION = 2
+SETTINGS_VERSION = 3
 
 
 def _migrate(data: dict, stored_version: int) -> dict:
@@ -151,6 +161,11 @@ def _migrate(data: dict, stored_version: int) -> dict:
         data.get("llm", {}).pop("think", None)   # replaced by think_policy (auto)
         data.get("security", {})["blocked_apps"] = [a for a in data.get("security", {}).get("blocked_apps", [])
                                                     if a not in ("Keychain Access", "Terminal", "iTerm")]
+    if stored_version < 3:   # design choices made by the user on 2026-11-18
+        v = data.setdefault("voice", {})
+        v["chime"] = False
+        v["speak_confirmations"] = False
+        data.setdefault("ui", {})["hud_position"] = "top_left"
     data["settings_version"] = SETTINGS_VERSION
     return data
 

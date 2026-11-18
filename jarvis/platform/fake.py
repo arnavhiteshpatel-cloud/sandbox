@@ -56,7 +56,7 @@ DEFAULT_SITES: dict[str, dict] = {
             {"role": "input:text", "name": "Answer to question 4"},
             {"role": "input:radio", "name": "True", "group": "q5"},
             {"role": "input:radio", "name": "False", "group": "q5"},
-            {"role": "button", "name": "Submit quiz"},
+            {"role": "button", "name": "Submit quiz", "href": "https://school.example.edu/practice/cells/submitted"},
         ],
         "text": "4. What process do plants use to make glucose from light, water and carbon dioxide? "
                 "5. True or false: most enzymes are proteins.",
@@ -326,6 +326,7 @@ class FakeComputer(Computer):
     def compose_email(self, to, subject, body): return self._ok(f"email:{','.join(to)}", "Draft open in Mail. It has not been sent.")
     def send_message(self, to, text): return self._ok(f"message:{to}:{text}", f"Message sent to {to}.")
     def open_location(self, url): return self._ok(f"location:{url}", "Opened.")
+    def reminders_due(self, days=1): return self._ok("reminders_due", "2 due.", reminders=["Submit IA draft", "Call the dentist"])
     focus_is_text = True
 
     def paste_text(self, text): return self._ok(f"paste:{text}", "Typed the text.")

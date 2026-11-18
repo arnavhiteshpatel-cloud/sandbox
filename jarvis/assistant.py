@@ -73,11 +73,16 @@ class Assistant:
         from .learning import PhraseLearner
 
         self.learner = PhraseLearner(self.db)
+        from .suggest import Suggester
+
+        self.suggester = Suggester(self.db)
+        self._last_prune = 0.0
         self.voice = None
         self.session = Session()
         self.current: dict | None = None        # {"task": asyncio.Task, "cancel": CancelToken, "id": int, "text": str}
         self.pending_question: dict | None = None
         self.dictation = False
+        self._pending_learning = None
         self.last_activity = time.time()
         self.llm_ok: bool | None = None
         self._last_progress_spoken = 0.0
@@ -104,6 +109,7 @@ class Assistant:
         asyncio.create_task(self._check_llm())
         asyncio.create_task(self.power.maintenance_loop(lambda: self.last_activity, self.db))
         asyncio.create_task(self._janitor())
+        self.prune_history(force=True)
         self.db.log("system", "JARVIS started", data={"platform": self.computer.name, "mode": self.power.mode})
         self.events.emit("status", status="idle")
 
@@ -113,6 +119,84 @@ class Assistant:
             self.voice.shutdown()
         self.power.stop_indexing("shutdown")
         await self.llm.close()
+
+    async def _ask_to_learn(self, text: str, tool: str, args: dict) -> None:
+        """User's choice: ask before remembering a new phrasing."""
+        from .learning import describe_action
+
+        await asyncio.sleep(0.3)
+        if self.current or self.pending_question:
+            return
+        if await self.confirm(f"Should I remember that “{text}” means {describe_action(tool, args)}?"):
+            self.learner.learn(text, tool, args)
+            await self.say("Remembered.")
+        else:
+            self.learner.decline(text)
+
+    def _record_action(self, result: dict) -> None:
+        """Log simple successful actions so routines can be noticed and offered as shortcuts."""
+        step = result.get("step_for_learning")
+        if step and result.get("ok"):
+            self.suggester.record(step, result.get("step_label") or step.get("action", ""))
+
+    async def _maybe_suggest_shortcut(self) -> None:
+        from .suggest import describe_steps
+
+        await asyncio.sleep(1.0)
+        if self.current or self.pending_question:
+            return
+        sug = self.suggester.find(self.shortcuts.list())
+        if not sug:
+            return
+        self.suggester.mark(sug["key"], "offered")
+        if not await self.confirm(f"You often {describe_steps(sug['labels'])} together. Want a shortcut for that?"):
+            self.suggester.mark(sug["key"], "declined")
+            return
+        name = await self.ask("What should I call it?")
+        if not name:
+            return
+        name = name.strip().strip(".")
+        try:
+            saved = self.shortcuts.save({"name": name.title() if name.islower() else name, "triggers": [name.lower()],
+                                         "steps": sug["steps"], "on_error": "continue"}, created_by="voice")
+        except Exception as e:
+            await self.say(f"I couldn't save that: {e}")
+            return
+        self.suggester.mark(sug["key"], "accepted")
+        await self.say(f"Saved. Say “{saved['triggers'][0]}” to run it.")
+
+    def prune_history(self, force: bool = False) -> None:
+        """User's choice: keep commands, task steps and activity for 30 days."""
+        if not force and time.time() - self._last_prune < 6 * 3600:
+            return
+        self._last_prune = time.time()
+        cutoff = time.time() - 86400 * float(self.settings.get("history_days", 30))
+        for sql in ("DELETE FROM activity WHERE ts < ?", "DELETE FROM tasks WHERE started_at < ?",
+                    "DELETE FROM conversation WHERE ts < ?", "DELETE FROM shortcut_runs WHERE started_at < ?",
+                    "DELETE FROM action_log WHERE ts < ?"):
+            self.db.execute(sql, (cutoff,))
+
+    async def _briefing(self) -> dict:
+        c = self.computer
+        cal, rem, bat = await asyncio.gather(asyncio.to_thread(c.calendar_events, 0, 1), asyncio.to_thread(c.reminders_due, 1),
+                                             asyncio.to_thread(c.battery))
+        parts = [dt.datetime.now().strftime("It's %A, %-I:%M %p.")]
+        evs = (cal.data or {}).get("events", []) if cal.ok else []
+        if evs:
+            def at(e):
+                try:
+                    return dt.datetime.fromisoformat(e["start"]).strftime("%-I:%M")
+                except ValueError:
+                    return ""
+            parts.append(f"{len(evs)} {'event' if len(evs) == 1 else 'events'}: " + "; ".join(f"{e['title']} at {at(e)}" for e in evs[:5]) + ".")
+        elif cal.ok:
+            parts.append("Nothing on your calendar.")
+        rems = (rem.data or {}).get("reminders", []) if rem.ok else []
+        if rems:
+            parts.append(f"{len(rems)} {'reminder' if len(rems) == 1 else 'reminders'} due: " + ", ".join(rems[:4]) + ".")
+        if bat.get("percent") is not None:
+            parts.append(f"Battery {bat['percent']} percent" + (", charging." if bat.get("source") == "ac" else "."))
+        return await self._reply(" ".join(parts))
 
     BASE_VOCAB = ["Arc", "Spotify", "IB", "Canvas", "Safari", "Finder", "Notes", "Reminders", "Calendar"]
 
@@ -150,6 +234,7 @@ class Assistant:
             if time.time() - self.session.last_active > 60 * float(self.settings.get("assistant.session_idle_minutes", 10)):
                 if self.session.history:
                     self.session = Session()
+            self.prune_history()
 
     @property
     def model(self) -> str:
@@ -349,6 +434,12 @@ class Assistant:
         self.db.task_finish(tid, status, result.get("message", ""), result.get("steps"), ms)
         self.events.emit("task", id=tid, status=status, text=text, route=result.get("route"), message=result.get("message"), ms=ms)
         self._refresh_vocabulary()
+        self._record_action(result)
+        if getattr(self, "_pending_learning", None):
+            asyncio.create_task(self._ask_to_learn(*self._pending_learning))
+            self._pending_learning = None
+        elif self.settings.get("learning.suggest_shortcuts", True) and status == "ok" and not self.dictation:
+            asyncio.create_task(self._maybe_suggest_shortcut())
         self.events.emit("status", status="idle")
         if self.current and self.current["id"] == tid:
             self.current = None
@@ -360,9 +451,17 @@ class Assistant:
         self.db.execute("INSERT INTO conversation(session_id, role, content, ts) VALUES (?,?,?,?)",
                         (self.session.id, role, content, time.time()))
 
-    async def _reply(self, text: str, ok: bool = True, route: str = "builtin", followup: bool = True, **extra) -> dict:
+    async def _reply(self, text: str, ok: bool = True, route: str = "builtin", followup: bool = True,
+                     confirm: bool = False, **extra) -> dict:
+        """confirm=True marks a routine success ("Opening Spotify."): shown on the HUD but not spoken, unless
+        voice.speak_confirmations is on. Answers, questions and problems are always spoken."""
         self._remember_turn("assistant", text)
-        await self.say(text, followup=followup)
+        if confirm and ok and not self.settings.get("voice.speak_confirmations", False):
+            self.events.emit("response", text=text, silent=True)
+            if followup and self.voice:
+                self.voice.request_followup()
+        else:
+            await self.say(text, followup=followup)
         return {"route": route, "ok": ok, "message": text, **extra}
 
     # --- routing ----------------------------------------------------------------------------------
@@ -398,7 +497,7 @@ class Assistant:
                 lp["tool"], out.get("message") or "Done.")
         else:
             msg = out.get("error") or out.get("message") or "That didn't work."
-        return await self._reply(msg, bool(out.get("ok")), "learned", followup=False)
+        return await self._reply(msg, bool(out.get("ok")), "learned", followup=False, confirm=True)
 
     async def _run_shortcut(self, sc: dict, params: dict, cancel: CancelToken) -> dict:
         self.events.emit("status", status="acting", detail=sc["name"])
@@ -407,7 +506,8 @@ class Assistant:
             self.session.browser = res.browser
             self.session.browser_active = any(s["action"] in ("open_url",) for s in sc["steps"]) or self.session.browser_active
         msg = res.message if res.ok else f"The {sc['name']} shortcut didn't finish: {res.message}"
-        return await self._reply(msg, res.ok, "shortcut", steps=res.log)
+        return await self._reply(msg, res.ok, "shortcut", steps=res.log, confirm=True,
+                                 step_for_learning={"action": "run_shortcut", "shortcut": sc["id"]}, step_label=f"run {sc['name']}")
 
     async def _call(self, fn, *a, **k) -> ActionResult:
         return await asyncio.to_thread(fn, *a, **k)
@@ -416,6 +516,8 @@ class Assistant:
         n, a, c = intent.name, intent.args, self.computer
         if n == "complete_task":
             return await self._complete_task(intent.text, cancel)
+        if n == "briefing":
+            return await self._briefing()
         if n == "web_lookup":
             return await self._web_lookup(a["query"], cancel)
         if n == "find_files":
@@ -441,7 +543,7 @@ class Assistant:
                 return await self._reply(f"Number {i + 1}: {_describe_file(res[i])}.")
             path = res[i]["path"]
             r = await self._call(c.open_path, path)
-            return await self._reply(f"Opening {os.path.basename(path)}." if r.ok else r.message, r.ok, followup=False)
+            return await self._reply(f"Opening {os.path.basename(path)}." if r.ok else r.message, r.ok, followup=False, confirm=True)
         if n == "open":
             app = c.resolve_app(a["target"])
             if app:
@@ -449,7 +551,8 @@ class Assistant:
                 r = await self._call(c.open_app, app)
                 if app in BROWSERS:
                     self.session.browser, self.session.browser_active = app, True
-                return await self._reply(f"Opening {app}." if r.ok else r.message, r.ok)
+                return await self._reply(f"Opening {app}." if r.ok else r.message, r.ok, confirm=True,
+                                         step_for_learning={"action": "open_app", "app": app}, step_label=f"open {app}")
             site = self._website_from_memory(a["target"])
             if site:
                 return await self._open_url(site, True)
@@ -463,7 +566,7 @@ class Assistant:
             app = c.resolve_app(a["target"])
             if app:
                 r = await self._call(c.focus_app, app)
-                return await self._reply(f"{app}." if r.ok else r.message, r.ok)
+                return await self._reply(f"{app}." if r.ok else r.message, r.ok, confirm=True)
             if self.session.browser_active:
                 return await self._click_on_page(a["target"], intent.text, cancel, allow_agent=True)
             site = self._website_from_memory(a["target"])
@@ -475,12 +578,12 @@ class Assistant:
         if n == "quit_app":
             if a["name"] in ("tab", "this tab", "the tab"):
                 r = await self._call(c.browser_nav, "close_tab", self.session.browser)
-                return await self._reply("Closed." if r.ok else r.message, r.ok)
+                return await self._reply("Closed." if r.ok else r.message, r.ok, confirm=True)
             app = c.resolve_app(a["name"])
             if not app:
                 return None
             r = await self._call(c.quit_app, app)
-            return await self._reply(f"Closed {app}." if r.ok else r.message, r.ok)
+            return await self._reply(f"Closed {app}." if r.ok else r.message, r.ok, confirm=True)
         if n == "click":
             return await self._click_on_page(a["target"], intent.text, cancel, allow_agent=True)
         if n in ("browser_scroll", "browser_nav") and not await self._is_browser_front():
@@ -523,13 +626,13 @@ class Assistant:
                 if await asyncio.to_thread(c.focused_editable) is False:
                     self.dictation = False
                     return await self._reply("Click where you want the text first, then say “take dictation”.", False)
-                return await self._reply("Dictation on. Say “stop dictation” when you're done.")
-            return await self._reply("Dictation off.", followup=False)
+                return await self._reply("Dictation on. Say “stop dictation” when you're done.", confirm=True)
+            return await self._reply("Dictation off.", followup=False, confirm=True)
         if n == "compose":
             return await self._compose(a["what"], cancel)
         if n == "volume":
             r = await self._call(c.set_volume, a.get("level"), a.get("delta"), a.get("mute"))
-            return await self._reply(r.message, r.ok, followup=False)
+            return await self._reply(r.message, r.ok, followup=False, confirm=True)
         if n == "lock_screen":
             r = await self._call(c.lock_screen)
             return {"route": "builtin", "ok": r.ok, "message": r.message}
@@ -551,18 +654,20 @@ class Assistant:
             return await self._reply(f"Searching Spotify for {a['query']}.")
         if n == "appearance":
             r = await self._call(c.set_appearance, a.get("dark"))
-            return await self._reply(r.message, r.ok, followup=False)
+            cmd = {True: "dark_mode", False: "light_mode"}.get(a.get("dark"), "toggle_appearance")
+            return await self._reply(r.message, r.ok, followup=False, confirm=True, step_for_learning={"action": "system", "command": cmd},
+                                     step_label=cmd.replace("_", " ").replace("toggle appearance", "switch dark mode"))
         if n == "wifi":
             if not a["on"] and not await self.confirm("Turning Wi-Fi off disconnects you from the internet. Go ahead?"):
                 return await self._reply("Leaving Wi-Fi on.")
             r = await self._call(c.set_wifi, a["on"])
-            return await self._reply(r.message, r.ok, followup=False)
+            return await self._reply(r.message, r.ok, followup=False, confirm=True)
         if n == "settings":
             r = await self._call(c.open_settings, a["pane"])
-            return await self._reply(r.message, r.ok)
+            return await self._reply(r.message, r.ok, confirm=True)
         if n == "screenshot":
             r = await self._call(c.take_screenshot)
-            return await self._reply(r.message, r.ok, followup=False)
+            return await self._reply(r.message, r.ok, followup=False, confirm=True)
         if n == "window":
             app = c.resolve_app(a["app"]) if a.get("app") else None
             if a.get("app") and not app:
@@ -571,10 +676,10 @@ class Assistant:
             return {"route": "builtin", "ok": r.ok, "message": r.message} | await self._quiet_ok()
         if n == "note":
             r = await self._call(c.create_note, a["body"])
-            return await self._reply("Noted in Notes." if r.ok else r.message, r.ok)
+            return await self._reply("Noted in Notes." if r.ok else r.message, r.ok, confirm=True)
         if n == "reminder":
             r = await self._call(c.create_reminder, a["text"], a.get("due_in_s"))
-            return await self._reply(r.message, r.ok)
+            return await self._reply(r.message, r.ok, confirm=True)
         if n == "calendar":
             offset, days = {"today": (0, 1), "tomorrow": (1, 1), "this week": (0, 7)}.get(a["when"], (0, 1))
             r = await self._call(c.calendar_events, offset, days)
@@ -605,14 +710,14 @@ class Assistant:
             # The user asked for it directly (this command is the only task), so apply now.
             self.power.set_mode(a["mode"], immediate=True)
             pending = self.power.pending_mode
-            return await self._reply(f"{PROFILES[a['mode']]['label']} mode" + (" after the current task." if pending else "."))
+            return await self._reply(f"{PROFILES[a['mode']]['label']} mode" + (" after the current task." if pending else "."), confirm=True)
         if n == "mute_mic":
             if self.voice:
                 self.voice.set_muted(True)
-            return await self._reply("Microphone off. Hold the hotkey when you need me.", followup=False)
+            return await self._reply("Microphone off. Hold the hotkey when you need me.", followup=False, confirm=True)
         if n == "remember":
             m = self.memory.add(a["content"], source="explicit")
-            return await self._reply("Noted.", extra_memory=m)
+            return await self._reply("Noted.", extra_memory=m, confirm=True)
         if n == "forget":
             gone = self.memory.forget(a["query"])
             return await self._reply(f"Forgotten: {gone[0]['content']}." if gone else "I had nothing stored about that.")
@@ -630,7 +735,7 @@ class Assistant:
                 return await self._reply(f"I couldn't find a shortcut called {a['name']}.", False)
             if await self.confirm(f"Delete the shortcut “{sc['name']}”?"):
                 self.shortcuts.delete(sc["id"])
-                return await self._reply("Deleted.")
+                return await self._reply("Deleted.", confirm=True)
             return await self._reply("Kept it.")
         return None
 
@@ -663,7 +768,11 @@ class Assistant:
         w = await self._call(self.computer.browser_wait_ready, b, self.settings.get("browser.page_load_timeout_s", 20), None, url)
         self.session.browser, self.session.browser_active = b, True
         title = (w.data or {}).get("title") or url
-        return await self._reply(f"{title} is open." if w.ok and not w.data.get("redirected") else w.message, w.ok)
+        from urllib.parse import urlparse as _up
+
+        return await self._reply(f"{title} is open." if w.ok and not w.data.get("redirected") else w.message, w.ok, confirm=True,
+                                 step_for_learning={"action": "open_url", "url": url, "browser": b},
+                                 step_label=f"open {_up(url if '://' in url else 'https://' + url).netloc.removeprefix('www.')}")
 
     async def _click_on_page(self, target: str, user_text: str, cancel: CancelToken, allow_agent: bool) -> dict:
         b = self.session.browser or self.settings.get("browser.default", "Arc")
@@ -728,7 +837,7 @@ class Assistant:
         self.events.emit("status", status="acting", detail="typing")
         res = await asyncio.to_thread(self.computer.insert_text, body)
         words = len(body.split())
-        return await self._reply(f"Done. {words} words." if res.ok else res.message, res.ok, "compose", followup=False)
+        return await self._reply(f"Done. {words} words." if res.ok else res.message, res.ok, "compose", followup=False, confirm=True)
 
     COMPLETION_TOOLS = {"observe", "read_page", "look_at_screen", "click", "type_text", "press_keys", "scroll", "browser_nav",
                         "click_screen_text", "click_visual", "menu", "wait", "web_search", "read_webpage", "calculate", "ask_user",
@@ -747,7 +856,7 @@ class Assistant:
         if self.current:
             self.current["started"] = time.time()
         self.db.log("agent", f"Completion mode in {front} (thinking {'on' if think else 'off'})")
-        asyncio.create_task(self.say("On it. I'll stop before submitting."))
+        self.events.emit("status", status="acting", detail="thinking it through" if think else "working on it")
         ctx = self._tool_ctx(request)
         ctx.strict_finalize = True
         ctx.allow_vision = ctx.allow_vision or mode != "battery_saver"
@@ -761,7 +870,32 @@ class Assistant:
             tool_names=self.COMPLETION_TOOLS if front not in BROWSERS else self.COMPLETION_TOOLS - {"app_dictionary", "script_app"},
             extra_rules=COMPLETION_RULES, may_escalate=False, auto_observe=True, must_act=True)
         self.session.browser = ctx.browser
-        return await self._reply(res.message, res.ok, "agent", steps=res.steps, llm_ms=res.llm_ms, llm_calls=res.llm_calls)
+        if not res.ok or self.settings.get("do_it.finish", "ask_then_submit") != "ask_then_submit":
+            return await self._reply(res.message, res.ok, "agent", steps=res.steps, llm_ms=res.llm_ms, llm_calls=res.llm_calls)
+        return await self._offer_submit(res, cancel)
+
+    async def _offer_submit(self, res, cancel: CancelToken) -> dict:
+        """User's choice: short spoken summary, then “Submit?”; on yes press the page's final button and verify."""
+        from .agent.policy import FINALIZE
+
+        summary = res.message.rstrip(".")
+        b = self.session.browser or self.settings.get("browser.default", "Arc")
+        snap = await asyncio.to_thread(self.computer.browser_snapshot, b)
+        buttons = [e for e in snap.get("elements", []) if FINALIZE.search(e.get("name") or "") and not e.get("disabled")]
+        if not buttons:
+            return await self._reply(f"{summary}. I don't see a submit button on this page.", True, "agent", steps=res.steps)
+        if not await self.confirm(f"{summary}. Submit?"):
+            return await self._reply("Okay, not submitted.", True, "agent", steps=res.steps, confirm=True)
+        cancel.check()
+        before = snap.get("url")
+        r = await asyncio.to_thread(self.computer.browser_click, buttons[0]["id"], None, b)
+        await asyncio.sleep(1.0)
+        after = await asyncio.to_thread(self.computer.browser_state, b)
+        if not r.ok:
+            return await self._reply(f"I couldn't press {buttons[0]['name']}: {r.message}", False, "agent", steps=res.steps)
+        changed = after.get("url") != before or r.verified
+        return await self._reply("Submitted." if changed else f"I pressed {buttons[0]['name']}; please check it went through.",
+                                 True, "agent", steps=res.steps, confirm=changed)
 
     async def _web_lookup(self, query: str, cancel: CancelToken) -> dict:
         """Search in the background and answer in one or two sentences (one fast model call, no browser)."""
@@ -843,8 +977,11 @@ class Assistant:
             self.session.last_results = ctx.last_results
         if res.ok:
             cand = self.learner.candidate(text, res.steps)
-            if cand:
-                self.learner.learn(text, *cand)
+            if cand and not self.learner.known(text) and not self.learner.declined(text):
+                if self.settings.get("learning.ask_before_learning", True):
+                    self._pending_learning = (text, *cand)
+                else:
+                    self.learner.learn(text, *cand)
         return await self._reply(res.message, res.ok, "agent", steps=res.steps, llm_ms=res.llm_ms, llm_calls=res.llm_calls)
 
     async def _agent_for_shortcut(self, instruction: str, cancel: CancelToken) -> RunResult:

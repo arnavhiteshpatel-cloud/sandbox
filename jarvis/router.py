@@ -271,6 +271,10 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
     if m:
         return I("window", action="hide", app=None if m.group(1) in ("this", "it", "this app", "this window") else m.group(1))
 
+    if re.fullmatch(r"brief me|(?:give me |read me )?(?:my |a |the )?(?:morning |daily )?briefing|what(?:'s| does| is) my day(?: look like)?(?: today)?|"
+                    r"what do i have going on(?: today)?|catch me up|what's on for today", s):
+        return I("briefing")
+
     # --- built-in apps ----------------------------------------------------------------------
     m = re.fullmatch(r"(?:make|create|take|write|add) (?:a )?(?:new )?note(?: (?:that says|saying|that|about|:))? (.+)|note (?:down|that) (.+)", s)
     if m:

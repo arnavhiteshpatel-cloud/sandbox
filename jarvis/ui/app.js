@@ -13,6 +13,12 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 const native = msg => { try { window.webkit.messageHandlers.jarvis.postMessage(msg); } catch (e) { /* not in the app */ } };
 const ago = ts => { const s = Date.now() / 1000 - ts; return s < 60 ? "now" : s < 3600 ? `${Math.floor(s / 60)}m` : s < 86400 ? `${Math.floor(s / 3600)}h` : new Date(ts * 1000).toLocaleDateString(); };
 const MODES = { battery_saver: "Battery Saver", balanced: "Balanced", max_performance: "Max Performance" };
+const STEP_TEXT = { observe: "Checking the page", read_page: "Reading", look_at_screen: "Looking at the screen", click: "Clicking",
+  type_text: "Typing an answer", press_keys: "Pressing keys", scroll: "Scrolling", browser_nav: "Navigating", open_url: "Opening a page",
+  open_app: "Opening an app", web_search: "Looking it up", read_webpage: "Reading a source", calculate: "Calculating",
+  click_visual: "Finding it on screen", click_screen_text: "Clicking", search_files: "Searching files", read_file: "Reading a file",
+  move_file: "Organizing files", ask_user: "Asking you", done: "Finishing up", wait: "Waiting", menu: "Using a menu",
+  script_app: "Controlling the app", create_note: "Making a note", create_reminder: "Adding a reminder", calendar: "Checking your calendar" };
 const STATUS_TEXT = { idle: "Idle", listening: "Listening…", transcribing: "Understanding…", thinking: "Thinking…", acting: "Working…", speaking: "Speaking", question: "Waiting for you" };
 
 async function api(method, path, body) {
@@ -55,7 +61,10 @@ function hudLinger() { clearTimeout(S.hudTimer); S.hudTimer = setTimeout(() => {
 function onEvent(ev) {
   switch (ev.type) {
     case "hello": S.state = ev.state; renderState(); setStatus(ev.state.status || "idle"); break;
-    case "status": setStatus(ev.status, ev.detail); break;
+    case "status":
+      if (ev.status === "thinking") S.thinking = ev.detail === "thinking it through";
+      if (ev.status === "idle") S.thinking = false;
+      setStatus(ev.status, ev.detail === "thinking it through" ? "Thinking it through…" : ev.detail); break;
     case "level": root.style.setProperty("--level", (1 + ev.value * 0.6).toFixed(2)); break;
     case "transcript":
       if (!ev.text) break;
@@ -82,9 +91,12 @@ function onEvent(ev) {
       S.steps.push(ev.type === "agent_step" ? { n: ev.step, tool: ev.tool, ok: ev.ok, res: ev.result }
         : { n: ev.i + 1, tool: ev.action, ok: ev.ok, res: ev.message });
       renderSteps();
-      if (VIEW === "hud") hud(S.lastTranscript || "Working…", `${ev.tool || ev.action}${ev.ok ? "" : " — retrying"}`);
+      if (VIEW === "hud") { const done = S.steps.filter(s => s.ok && s.tool === "type_text").length;
+        hud(S.lastTranscript || "Working…", `${STEP_TEXT[ev.tool || ev.action] || "Working"}${ev.ok ? "" : " (retrying)"}` +
+          (done ? ` · ${done} answered` : "") + (S.thinking ? " · thinking it through" : "")); }
       break;
-    case "agent_thinking": if (VIEW === "hud") hud(S.lastTranscript || "Thinking…", `Thinking · step ${ev.step}`); break;
+    case "agent_thinking": if (VIEW === "hud" && ev.step === 1) hud(S.lastTranscript || "Thinking…", S.thinking ? "Thinking it through…" : "Working…"); break;
+    case "agent_escalate": S.thinking = true; if (VIEW === "hud") hud(S.lastTranscript || "Working…", "Thinking it through…"); break;
     case "stopped": addConvo("a", "Stopped."); if (VIEW === "hud") hud("Stopped.", ""); break;
     case "power": if (S.state) { S.state.power = { ...S.state.power, ...ev }; renderState(); } break;
     case "llm": if (S.state) { S.state.llm_available = ev.available; S.state.model = ev.model; renderState(); } break;
@@ -416,6 +428,7 @@ async function loadSettings() {
     ${fld("Follow-up window (seconds)", inputFor("voice.followup_seconds", s.voice.followup_seconds, { num: 1 }))}
     ${tog("Listening chime", inputFor("voice.chime", s.voice.chime, { bool: 1 }))}
     ${tog("Interrupt JARVIS by talking over it", inputFor("voice.barge_in", s.voice.barge_in, { bool: 1 }))}
+    ${tog("Speak simple confirmations (“Opening Spotify.”)", inputFor("voice.speak_confirmations", s.voice.speak_confirmations, { bool: 1 }))}
     ${fld("Microphone (blank = system default)", inputFor("voice.input_device", s.voice.input_device ?? ""))}
     <button class="sm" id="v-preview">Preview voice</button></section>
   <section class="panel"><h2>Local AI</h2>
@@ -429,6 +442,10 @@ async function loadSettings() {
     ${fld("Slow “thinking” mode", inputFor("llm.think_policy", s.llm.think_policy, { select: { auto: "Automatic: only for complex requests, or when struggling", never: "Never (fastest)", always: "Always (slowest, most careful)" } }),
       "Say “think carefully…” to force it, or “quickly…” to skip it, for one request.")}
     ${tog("Internet lookups in the background (DuckDuckGo, Bing; no account)", inputFor("web.enabled", s.web.enabled, { bool: 1 }))}
+    ${tog("Ask before remembering a new phrasing", inputFor("learning.ask_before_learning", s.learning.ask_before_learning, { bool: 1 }))}
+    ${tog("Suggest shortcuts for things I repeat", inputFor("learning.suggest_shortcuts", s.learning.suggest_shortcuts, { bool: 1 }))}
+    ${fld("When “do it” finishes", inputFor("do_it.finish", s.do_it.finish, { select: { ask_then_submit: "Summarize, then ask “Submit?”", stop: "Stop before submitting" } }))}
+    ${fld("Keep history for (days)", inputFor("history_days", s.history_days, { num: 1 }), "Commands, task steps and the activity log. Memories and shortcuts are kept until you delete them.")}
     <div class="help">${avail.length ? "Installed: " + avail.map(esc).join(", ") : esc(models.error || "No models found.")} · Run <code>jarvis bench</code> to compare models on your Mac.</div></section>
   <section class="panel"><h2>Files &amp; search</h2>
     ${fld("Folders JARVIS may index (one per line)", inputFor("search.roots", s.search.roots, { lines: 1, rows: 3 }))}

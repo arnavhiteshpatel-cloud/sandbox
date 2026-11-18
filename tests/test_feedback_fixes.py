@@ -60,11 +60,21 @@ async def test_open_it_without_results_never_opens_an_app(assistant, scripted):
 
 
 async def test_learns_phrasing_then_runs_without_ai(assistant, scripted):
+    import asyncio
+
     llm = scripted([("tools", [("open_app", {"name": "Spotify"})]), ("tools", [("done", {"summary": "Opening Spotify."})])])
     assistant.llm = llm
     assistant.agent.llm = llm
+    asked = []
+
+    async def yes(q):
+        asked.append(q)
+        return True
+    assistant.confirm = yes
     r1 = await assistant.handle_text("crank up my tunes")
     assert r1["route"] == "agent" and r1["ok"]
+    await asyncio.sleep(0.6)                      # the "should I remember…?" question runs after the reply
+    assert asked == ["Should I remember that “crank up my tunes” means open Spotify?"]
     assert any(p["phrase"] == "crank up my tunes" for p in assistant.learner.all())
     calls_before = len(llm.calls)
     assistant.computer.quit_app("Spotify")
@@ -188,3 +198,91 @@ def test_barge_in_detects_user_not_echo():
     v._speak_t0 = time.monotonic() - 5
     assert not any(v._barge_check(frame(0.03)) for _ in range(30))           # echo alone never triggers
     assert any(v._barge_check(frame(0.15)) for _ in range(6))                # the user talking does
+
+
+async def test_declined_phrasing_is_not_asked_again(assistant, scripted):
+    import asyncio
+
+    asked = []
+
+    async def no(q):
+        asked.append(q)
+        return False
+    assistant.confirm = no
+    for _ in range(2):
+        llm = scripted([("tools", [("open_app", {"name": "Notes"})]), ("tools", [("done", {"summary": "Opening Notes."})])])
+        assistant.llm = llm
+        assistant.agent.llm = llm
+        await assistant.handle_text("bring up my scribbles")
+        await asyncio.sleep(0.6)
+    assert len(asked) == 1 and assistant.learner.all() == []
+
+
+async def test_briefing(assistant):
+    r = await assistant.handle_text("what's my day look like")
+    assert r["ok"] and "2 events" in r["message"] and "Submit IA draft" in r["message"] and "Battery" in r["message"]
+
+
+async def test_silent_confirmations(assistant):
+    spoken = []
+
+    async def say(text, followup=False):
+        spoken.append(text)
+    assistant.say = say
+    r = await assistant.handle_text("open spotify")
+    assert r["message"] == "Opening Spotify." and spoken == []          # shown on the HUD, not spoken
+    await assistant.handle_text("what time is it")
+    assert len(spoken) == 1 and spoken[0].startswith("It's")           # answers are still spoken
+
+
+def test_shortcut_suggestion_from_routine(db):
+    import time as _t
+
+    from jarvis.suggest import Suggester
+
+    s = Suggester(db)
+    day = 86400
+    base = _t.time() - 5 * day
+    for d in range(3):                                   # the same evening routine on 3 different days
+        t0 = base + d * day
+        for i, (step, label) in enumerate([({"action": "open_app", "app": "Arc"}, "open Arc"),
+                                           ({"action": "open_app", "app": "Spotify"}, "open Spotify"),
+                                           ({"action": "system", "command": "dark_mode"}, "dark mode")]):
+            db.execute("INSERT INTO action_log(ts, step, label) VALUES (?,?,?)", (t0 + i * 60, __import__("json").dumps(step, sort_keys=True), label))
+    sug = s.find([])
+    assert sug and sug["labels"] == ["open Arc", "open Spotify", "dark mode"] and sug["days"] == 3
+    s.mark(sug["key"], "declined")
+    assert s.find([], now=_t.time() + 10 * 3600) is None or s.find([], now=_t.time() + 10 * 3600)["key"] != sug["key"]
+
+
+async def test_suggestion_creates_shortcut(assistant, monkeypatch):
+    import asyncio
+
+    sug = {"key": "k1", "steps": [{"action": "open_app", "app": "Arc"}, {"action": "open_app", "app": "Spotify"}],
+           "labels": ["open Arc", "open Spotify"], "days": 3}
+    monkeypatch.setattr(assistant.suggester, "find", lambda shortcuts, now=None: sug)
+
+    async def yes(q):
+        return True
+
+    async def name(q, timeout=15):
+        return "focus time"
+    assistant.confirm, assistant.ask = yes, name
+    await assistant._maybe_suggest_shortcut()
+    sc = assistant.shortcuts.get("focus-time")
+    assert sc and [s["app"] for s in sc["steps"]] == ["Arc", "Spotify"]
+    r = await assistant.handle_text("focus time")
+    assert r["route"] == "shortcut" and r["ok"]
+
+
+def test_history_pruned_after_30_days(assistant):
+    import time as _t
+
+    old = _t.time() - 40 * 86400
+    assistant.db.execute("INSERT INTO activity(ts, level, category, message) VALUES (?,?,?,?)", (old, "info", "x", "old"))
+    assistant.db.execute("INSERT INTO tasks(objective, route, status, started_at) VALUES (?,?,?,?)", ("old", "builtin", "ok", old))
+    assistant.memory.add("User prefers Arc")                            # memories are never pruned
+    assistant.prune_history(force=True)
+    assert assistant.db.one("SELECT count(*) AS n FROM activity WHERE ts < ?", (old + 1,))["n"] == 0
+    assert assistant.db.one("SELECT count(*) AS n FROM tasks WHERE started_at < ?", (old + 1,))["n"] == 0
+    assert assistant.memory.all()

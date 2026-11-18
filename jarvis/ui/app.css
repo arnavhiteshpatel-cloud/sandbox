@@ -65,7 +65,7 @@ textarea { font-family: var(--mono); font-size: 12px; width: 100%; }
 .seg button[data-mode="max_performance"].on { color: var(--orange); background: #2a1a0c; }
 
 /* ---------- HUD pill ---------- */
-#hud { height: 100%; align-items: flex-start; justify-content: center; padding: 8px 10px; background: transparent; }
+#hud { height: 100%; align-items: flex-start; justify-content: flex-start; padding: 8px 10px; background: transparent; }
 .pill { display: flex; align-items: center; gap: 12px; min-width: 260px; max-width: 660px; padding: 9px 16px 9px 12px; border-radius: 22px !important;
   background: rgba(8, 12, 16, .86); border: 1px solid rgba(56, 214, 255, .28); border-radius: 999px;
   box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 8px 30px rgba(0,0,0,.55), 0 0 24px rgba(56,214,255,.12);

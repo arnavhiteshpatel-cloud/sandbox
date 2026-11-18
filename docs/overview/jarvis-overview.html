@@ -86,7 +86,7 @@
       Built for: 14-inch MacBook Pro (Nov 2024), Apple M4 Pro, 24 GB, macOS Sequoia 15.7.3<br>
       Runs entirely on-device: no Claude, no Anthropic API, no cloud AI, no subscriptions<br>
       Source: github.com/arnavhiteshpatel-cloud/sandbox, branch <span style="font-family:'DejaVu Sans Mono'">claude/project-jarvis-ai-assistant-rddtrw</span><br>
-      Document date: 18 November 2026 · version 0.4.0
+      Document date: 18 November 2026 · version 0.5.0
     </div>
     <div class="status">Status: built and tested off-Mac. Not yet run on your MacBook. See “What has been verified”.</div>
   </div>
@@ -242,7 +242,8 @@
     <tr><td>Mute the microphone</td><td>Say “stop listening”, or popover → Mute mic. Holding the talk key still works.</td></tr>
   </table>
   <img class="shot" src="../screenshots/ui-hud.png" style="width:78%; margin: 6pt auto 0">
-  <div class="shotcap" style="text-align:center">The HUD pill: appears at the top of the screen only while JARVIS is listening, thinking or speaking.</div>
+  <div class="shotcap" style="text-align:center">The HUD pill: appears in the top-left corner only while JARVIS is listening, thinking or speaking.
+    Simple confirmations appear here silently; answers are spoken.</div>
   <div class="grid2" style="grid-template-columns: 1fr 1.9fr; align-items:start">
     <div><img class="shot" src="../screenshots/ui-compact.png"><div class="shotcap">Menu-bar popover.</div></div>
     <div><img class="shot" src="../screenshots/ui-live.png"><div class="shotcap">Command Center → Live: tasks, conversation and activity log.
@@ -299,6 +300,7 @@
     <tr><td>“Volume up / down”, “set volume to 30”, “mute”, “unmute”</td><td>System volume.</td></tr>
     <tr><td>“Lock my screen”, “turn off the display”</td><td>Locks the Mac / sleeps the display.</td></tr>
     <tr><td>“What time is it?”, “What’s the date?”, “What’s my battery?”</td><td>Spoken answer.</td></tr>
+    <tr><td>“Brief me”, “What’s my day look like?”</td><td>Today’s events, reminders due and battery in a few sentences.</td></tr>
     <tr><td>“Switch to battery saver / balanced / max performance mode”</td><td>Changes power mode.</td></tr>
     <tr><td>“Remember that …”, “What do you remember about …”, “Forget …”</td><td>Saves, recalls or deletes a memory.</td></tr>
     <tr><td>“Create a shortcut called …”, “Whenever I say X, do Y”</td><td>Starts the shortcut-creation conversation.</td></tr>
@@ -418,14 +420,14 @@
   <div class="kicker">Section 8 (continued)</div>
   <h1>“JARVIS, do it”: complete what’s on screen</h1>
   <p class="lede">Pull up a practice assignment, a worksheet, a quiz or a form and say <b>“do it”</b> (or “complete this”, “fill this out”,
-  “answer these questions”). JARVIS works through the whole thing on its own and stops right before handing it in.</p>
+  “answer these questions”). JARVIS works through the whole thing on its own, then asks before handing it in.</p>
   <div class="flow">
     <div><b>Read</b>every question and instruction (page structure, or computer vision for images, PDFs and canvas)</div>
     <div><b>Work out</b>each answer: reasoning, the exact calculator, and invisible web lookups</div>
     <div><b>Enter</b>type into fields, pick dropdowns, tick radios and boxes, type into documents</div>
     <div><b>Check</b>re-reads each page to verify every answer landed</div>
     <div><b>Continue</b>Next / scroll through every page</div>
-    <div><b>Stop</b>before Submit, and reports what’s unsure</div>
+    <div><b>Ask</b>summary, then “Submit?”</div>
   </div>
   <table>
     <tr><th style="width:26%">Detail</th><th>How it works</th></tr>
@@ -435,8 +437,9 @@
       describing what to click (“the answer box under question 3”), then checks the result.</td></tr>
     <tr><td>Looking things up</td><td>Facts it isn’t sure of are looked up in the background (never on your screen). All arithmetic goes through an exact calculator.</td></tr>
     <tr><td>Thinking</td><td>Uses the careful “thinking” mode (except in Battery Saver), with a larger step budget (up to 100 steps, 30 min when plugged in).</td></tr>
-    <tr><td>Never hands it in</td><td>Submit / Turn in / Finish / Complete-quiz buttons always ask you, even though you said “complete this”. It ends with a
-      summary: how many items it did, which answers it’s unsure about, and that it’s ready for your review. <kbd>Esc</kbd> or “stop” halts it at any time.</td></tr>
+    <tr><td>Ends by asking</td><td>When everything is filled it says a one-line summary, e.g. “Answered 10 of 10; unsure about 4 and 7. Submit?”, and presses
+      Submit only if you say yes (then checks it went through). It never presses Submit / Finish / Turn in on its own. <kbd>Esc</kbd> or “stop” halts it any time.</td></tr>
+    <tr><td>While it works</td><td>Silent. The HUD shows what it's doing (“Typing an answer · 3 answered”, “Looking it up”, “Thinking it through…”).</td></tr>
   </table>
   <div class="callout warn"><b>Honest expectations</b>A ~9-billion-parameter local model makes mistakes, especially on long or tricky assignments, so review its answers.
     Whether you may use it for graded work is between you and your school; JARVIS never submits anything without your “yes”.</div>
@@ -498,9 +501,12 @@
       <li>Also stores your shortcuts, task history with outcomes, and an activity log.</li>
       <li>Searchable, editable, deletable and exportable (JSON) in Command Center → Memory.</li>
       <li>Never claims to remember something that isn’t stored.</li>
-      <li><b>Learns how you talk:</b> when you phrase something your own way and the AI works out it meant one simple action, the phrasing is
-      saved and runs instantly next time. Say “no” right after to unlearn; see or delete all of them under Memory → Learned phrasings. Your app
-      names, shortcuts and sites also tune speech recognition to your words.</li>
+      <li><b>Learns how you talk:</b> when you phrase something your own way and the AI works out it meant one simple action, JARVIS asks
+      “Should I remember that…?” and from then on runs it instantly. See or delete them under Memory → Learned phrasings. Your app names,
+      shortcuts and sites also tune speech recognition to your words.</li>
+      <li><b>Suggests shortcuts:</b> when it notices things you do together on several days (e.g. open Arc, Spotify and dark mode), it offers
+      to make a shortcut and asks what to call it.</li>
+      <li>History (commands, task steps, activity) is kept 30 days; memories and shortcuts until you delete them.</li>
       <li>Stored only on your Mac, and survives restarts.</li></ul></div>
     <div class="card"><h3>File search</h3><ul>
       <li>Covers your <b>whole home folder</b> (your choice). Hidden folders, ~/Library, keychains, password vaults, apps and media libraries are excluded.</li>
@@ -567,7 +573,7 @@
   and turn off in Battery Saver or with Reduce Motion.</p>
   <table>
     <tr><th style="width:24%">Part</th><th>What’s there</th></tr>
-    <tr><td>HUD pill</td><td>Top-center, only while active: status light (cyan listening, blue thinking, orange question), what you said, what it’s doing, Yes/No buttons.</td></tr>
+    <tr><td>HUD pill</td><td>Top-left corner, only while active: status light (cyan listening, blue thinking, orange question), what you said, what it’s doing, Yes/No buttons.</td></tr>
     <tr><td>Menu-bar popover</td><td>Status, command box, power-mode switch, model and battery chips, recent tasks, Mute, Stop, Command Center.</td></tr>
     <tr><td>Right-click menu</td><td>Command Center, power mode, mute, emergency stop, Launch at Login, restart service, quit.</td></tr>
     <tr><td>Command Center</td><td><b>Live</b> (current task step by step, conversation, recent tasks, activity log) · <b>Dashboard</b> (status orb, power, model, voice, files, quick
@@ -596,7 +602,7 @@
   Everything that needs macOS is written but <b>not yet run</b>. No simulated result is counted as a pass.</p>
   <table>
     <tr><th style="width:42%">Area</th><th style="width:14%">Status</th><th>Evidence</th></tr>
-    <tr><td>Routing, shortcuts, agent loop, memory, safety, power logic</td><td><span class="tag t-ok">tested</span></td><td>136 automated tests pass, including “open my IB” → “go to the assignments” → “scroll down” → “go back” with zero AI calls.</td></tr>
+    <tr><td>Routing, shortcuts, agent loop, memory, safety, power logic</td><td><span class="tag t-ok">tested</span></td><td>144 automated tests pass, including “open my IB” → “go to the assignments” → “scroll down” → “go back” with zero AI calls.</td></tr>
     <tr><td>Arc page-control code (find, click, type, scroll, read)</td><td><span class="tag t-ok">tested</span></td><td>8/8 in a real Chromium browser (the engine Arc uses).</td></tr>
     <tr><td>Voice pipeline with real models</td><td><span class="tag t-ok">tested</span></td><td>6/6: wake word detected for 4 different voices, no false triggers, exact transcripts, correct commands. Silence filter: 0 of 375 frames processed.</td></tr>
     <tr><td>AI agent with a real local model</td><td><span class="tag t-ok">tested</span></td><td>Qwen3.5-4B: 11/11 JARVIS tasks plus 3/3 app tasks (reminder + calendar, scripting Music, message correctly held for confirmation), 0 invalid actions (one run per case, on a simulated computer).</td></tr>

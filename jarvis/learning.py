@@ -30,6 +30,7 @@ NEGATION = re.compile(r"^(?:(?:no|nope|wrong|not that|that's wrong|that is wrong
                       r"undo that|don't do that|not what i (?:meant|wanted))\b[\s,.!]*)+", re.I)
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS learning_declined (key TEXT PRIMARY KEY, ts REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS learned_phrases (
     id INTEGER PRIMARY KEY,
     key TEXT NOT NULL UNIQUE,
@@ -41,6 +42,22 @@ CREATE TABLE IF NOT EXISTS learned_phrases (
     last_used REAL
 );
 """
+
+
+def describe_action(tool: str, args: dict) -> str:
+    if tool == "open_app":
+        return f"open {args.get('name')}"
+    if tool == "open_url":
+        from urllib.parse import urlparse
+
+        return f"open {urlparse(str(args.get('url', ''))).netloc.removeprefix('www.') or args.get('url')}"
+    if tool == "run_shortcut":
+        return f"run your “{args.get('name')}” shortcut"
+    if tool == "media":
+        return {"play": "play or pause", "next": "skip to the next track", "previous": "go to the previous track"}.get(args.get("key"), str(args.get("key")))
+    if tool == "system":
+        return str(args.get("action", "")).replace("_", " ") + (f" {args.get('value')}" if args.get("value") else "")
+    return tool.replace("_", " ")
 
 
 class PhraseLearner:
@@ -69,6 +86,15 @@ class PhraseLearner:
         if tool not in SAFE_TOOLS and tool != "system":
             return None
         return tool, args
+
+    def declined(self, text: str) -> bool:
+        return self.db.one("SELECT key FROM learning_declined WHERE key=?", (match_key(text),)) is not None
+
+    def decline(self, text: str) -> None:
+        self.db.execute("INSERT OR REPLACE INTO learning_declined(key, ts) VALUES (?,?)", (match_key(text), time.time()))
+
+    def known(self, text: str) -> bool:
+        return self.db.one("SELECT id FROM learned_phrases WHERE key=?", (match_key(text),)) is not None
 
     def learn(self, text: str, tool: str, args: dict) -> int:
         key = match_key(text)

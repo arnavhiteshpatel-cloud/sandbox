@@ -260,8 +260,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let panel = hudPanel else { return }
         if visible {
             if let screen = NSScreen.main {
-                let f = screen.visibleFrame
-                panel.setFrameOrigin(NSPoint(x: f.midX - panel.frame.width / 2, y: f.maxY - panel.frame.height - 6))
+                let f = screen.visibleFrame   // top-left corner, just under the menu bar (user choice)
+                panel.setFrameOrigin(NSPoint(x: f.minX + 10, y: f.maxY - panel.frame.height - 4))
             }
             panel.orderFrontRegardless()
             NSAnimationContext.runAnimationGroup { ctx in ctx.duration = 0.18; panel.animator().alphaValue = 1 }

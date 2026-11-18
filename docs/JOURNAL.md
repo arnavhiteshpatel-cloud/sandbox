@@ -21,6 +21,21 @@ Recorded 2026-11-17, answers given directly by the user:
 | File indexing | **Entire home folder** authorized. Hidden folders, ~/Library, keychains and password-manager vaults, app bundles and media libraries are excluded. Heavy indexing runs while charging. |
 | Max Performance model | **Benchmark decides.** Ship Qwen3.5 9B; `jarvis bench` on the Mac compares candidates. |
 | App access (2026-11-18) | **Every app reachable**, not just Arc. Nothing is blocked by default. Terminal, iTerm, Keychain Access, Passwords, System Settings, password managers, Disk Utility and Activity Monitor are "sensitive": any click, typing or script there asks first. Sending messages always asks. |
+| “Do it” ending (2026-11-18) | **Ask, then submit**: short spoken summary (“Answered 10 of 10; unsure about 4 and 7. Submit?”); presses Submit on yes and verifies. |
+| “Do it” progress | **HUD only, silent** (readable steps: “Typing an answer · 3 answered”). |
+| Learning phrasings | **Ask first** (“Should I remember that … means …?”); declined phrasings are never asked again. |
+| HUD position | **Top-left corner**, just under the menu bar. |
+| Typing look | **Instant** (fast keystrokes; paste for long text). |
+| Thinking indicator | **Show “Thinking it through…”** on the HUD. |
+| Simple confirmations | **Silent**: shown on the HUD only; spoken only for answers, questions and problems. |
+| Talk-over interruption | **On**. |
+| Colors | **Closest to the film**: black with cyan/light-blue holographic light and amber accents (unchanged). |
+| Menu-bar icon | **Ring / reactor** (unchanged). |
+| Briefing | **On request** (“brief me”, “what's my day look like”): calendar, reminders due, battery. No automatic greeting. |
+| Confirmations | **Voice + HUD buttons** (unchanged). |
+| Listening sound | **None**. |
+| Shortcut suggestions | **Whenever useful**: notices routines (same actions together on ≥3 days) and offers a shortcut; at most every 4 h; declined ones never again. |
+| History retention | **30 days** for commands, task steps, activity; memories/shortcuts kept until deleted. |
 | Subscription | Claude access ends **2026-12-05**. Nothing at runtime may depend on Claude or Anthropic. |
 
 ## Environment facts
@@ -113,6 +128,12 @@ Root causes and fixes:
 - Typing: real keystrokes with Return/Tab for line breaks, paste for long text (clipboard restored), automatic fallback from
   direct fill to keystrokes for rich editors, focus check (`focused_editable`) before typing; dictation mode; “write …” composes then types.
 - Simulator gained a two-page practice quiz with real field state; benchmark case `do_it_quiz`.
+
+### Design round (2026-11-18)
+User asked to be consulted instead of having design guessed; three rounds of questions, answers recorded in the decision
+table above and implemented (settings migration v3 applies them to the existing install). Real-model “do it” on the
+practice quiz: first run failed (model asked “what task?”) → added auto-observe + must-act; second run got Q1–Q2 right but
+stuck on a native dropdown → clicking an option's text now selects it; third run **PASS** (all 5 answers, stopped before submit).
 
 ### Known issues / risks
 - Nothing macOS-specific has been executed yet (see LIMITATIONS.md).

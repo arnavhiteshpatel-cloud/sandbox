@@ -428,6 +428,10 @@ class MacComputer(Computer):
         f = NSScreen.mainScreen().frame()
         return float(f.size.width), float(f.size.height)
 
+    def reminders_due(self, days=1):
+        from . import integrations as I
+        return I.reminders_due(days)
+
     def open_location(self, url):
         p = subprocess.run(["open", url], capture_output=True, text=True, timeout=15)
         return ActionResult(p.returncode == 0, "Opened." if p.returncode == 0 else p.stderr.strip()[:200])

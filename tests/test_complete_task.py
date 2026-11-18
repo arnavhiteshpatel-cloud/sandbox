@@ -38,8 +38,10 @@ async def test_do_it_completes_quiz_and_stops_before_submit(assistant, scripted)
         asked.append(q)
         return False
     assistant.agent.confirm = deny
+    assistant.confirm = deny          # the final "…Submit?" question: answer no
     assistant.say = lambda *a, **k: _noop()
     r = await assistant.handle_text("JARVIS, do it")
+    assert r["message"] == "Okay, not submitted." and "Submit?" in asked[-1]
     assert r["ok"] and r["route"] == "agent", r
     p1, p2 = c.field_values(QUIZ), c.field_values(QUIZ + "/2")
     assert p1 == {"Answer to question 1": "Mitochondria", "Answer to question 2": "84 hours", "Answer to question 3": "Nucleus"}
@@ -134,3 +136,23 @@ async def test_clicking_a_dropdown_option_selects_it(settings):
     assert out["ok"] and c.field_values(QUIZ)["Answer to question 3"] == "Nucleus"
     out = await click(ctx, {"element_id": "w3", "text": "Ribosome"})
     assert out["ok"] and c.field_values(QUIZ)["Answer to question 3"] == "Ribosome"
+
+
+async def test_do_it_asks_then_submits_on_yes(assistant, scripted):
+    c = assistant.computer
+    c.browser_open_url(QUIZ + "/2")
+    llm = scripted([
+        ("tools", [("type_text", {"element_id": "w1", "text": "Photosynthesis"}), ("click", {"element_id": "w2"})]),
+        ("tools", [("done", {"summary": "Answered 2 of 2; unsure about none.", "success": True})]),
+    ])
+    assistant.llm = llm
+    assistant.agent.llm = llm
+    questions = []
+
+    async def yes(q):
+        questions.append(q)
+        return True
+    assistant.confirm = yes
+    r = await assistant.handle_text("do it")
+    assert questions == ["Answered 2 of 2; unsure about none. Submit?"]
+    assert "click:Submit quiz" in c.log and c.tab["url"].endswith("/submitted") and r["message"] == "Submitted."

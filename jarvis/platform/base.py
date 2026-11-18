@@ -161,6 +161,7 @@ class Computer:
     def compose_email(self, to: list[str], subject: str, body: str) -> ActionResult: raise NotImplementedError
     def send_message(self, to: str, text: str) -> ActionResult: raise NotImplementedError
     def open_location(self, url: str) -> ActionResult: raise NotImplementedError
+    def reminders_due(self, days: int = 1) -> ActionResult: raise NotImplementedError    # incomplete reminders due within N days
     def screen_size(self) -> tuple[float, float]: return (1440.0, 900.0)   # main display, in points
     def paste_text(self, text: str) -> ActionResult: raise NotImplementedError
     def focused_editable(self) -> bool | None: return None   # is the keyboard focus in a text field? None = unknown
