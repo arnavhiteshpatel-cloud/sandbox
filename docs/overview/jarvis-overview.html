@@ -400,13 +400,12 @@
     <tr><td>Seeing</td><td><b>observe</b> (page or app: address, visible text, interactive elements) · <b>read_page</b> (full page text) ·
       <b>look_at_screen</b> (screenshot interpreted by the model, or Apple’s text recognition)</td></tr>
     <tr><td>Acting</td><td><b>open_app</b> · <b>open_url</b> · <b>click</b> (by element or text) · <b>type_text</b> · <b>press_keys</b> · <b>scroll</b> ·
-      <b>browser_nav</b> · <b>menu</b> · <b>click_screen_text</b> (last resort, via on-screen text) · <b>wait</b></td></tr>
+      <b>browser_nav</b> · <b>menu</b> · <b>click_screen_text</b> (via on-screen text) · <b>click_visual</b> (computer vision) · <b>calculate</b> (exact math) · <b>wait</b></td></tr>
     <tr><td>Files</td><td><b>search_files</b> · <b>list_folder</b> · <b>read_file</b> (PDF, Word, PowerPoint, Excel, text, code) · <b>move_file</b> ·
       <b>make_folder</b> · <b>find_duplicates</b> · <b>trash_files</b> (always confirms; uses the Trash, never permanent delete)</td></tr>
     <tr><td>Any app and the system</td><td><b>app_dictionary</b> (what an app can be scripted to do) · <b>script_app</b> (AppleScript/JavaScript; risky scripts ask first) ·
       <b>media</b> · <b>system</b> (dark mode, Wi-Fi, Settings panes, screenshots, window actions, URL schemes, lock) · <b>create_note</b> · <b>create_reminder</b> ·
       <b>calendar</b> · <b>compose_email</b> (draft only) · <b>send_message</b> (always asks)</td></tr>
-    <tr><td>Precision</td><td><b>calculate</b> (exact math) · <b>click_visual</b> (click something described, found by computer vision)</td></tr>
     <tr><td>Internet (invisible)</td><td><b>web_search</b> (DuckDuckGo → Bing → Wikipedia, no account) · <b>read_webpage</b>. Lookups run in the background
       and never open your browser; Arc is used only when you want to see a page or it needs your login.</td></tr>
     <tr><td>You and memory</td><td><b>ask_user</b> · <b>remember</b> · <b>recall</b> · <b>run_shortcut</b> · <b>done</b></td></tr>
@@ -437,8 +436,7 @@
     <tr><td>Looking things up</td><td>Facts it isn’t sure of are looked up in the background (never on your screen). All arithmetic goes through an exact calculator.</td></tr>
     <tr><td>Thinking</td><td>Uses the careful “thinking” mode (except in Battery Saver), with a larger step budget (up to 100 steps, 30 min when plugged in).</td></tr>
     <tr><td>Never hands it in</td><td>Submit / Turn in / Finish / Complete-quiz buttons always ask you, even though you said “complete this”. It ends with a
-      summary: how many items it did, which answers it’s unsure about, and that it’s ready for your review.</td></tr>
-    <tr><td>Stopping</td><td><kbd>Esc</kbd>, <kbd>⌃⌥⌘.</kbd> or “stop” halts it immediately.</td></tr>
+      summary: how many items it did, which answers it’s unsure about, and that it’s ready for your review. <kbd>Esc</kbd> or “stop” halts it at any time.</td></tr>
   </table>
   <div class="callout warn"><b>Honest expectations</b>A ~9-billion-parameter local model makes mistakes, especially on long or tricky assignments, so review its answers.
     Whether you may use it for graded work is between you and your school; JARVIS never submits anything without your “yes”.</div>
