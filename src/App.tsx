@@ -6,6 +6,7 @@ import { THEMES, TIMER_FONTS } from "./data/settings";
 import { layersOpen, Modal } from "./ui/Overlay";
 import { useScramble } from "./scramble/useScramble";
 import { HudTopBar } from "./ui/hud";
+import { Celebration } from "./ui/Celebration";
 
 const HistoryView = lazy(() => import("./views/HistoryView"));
 const AnalyticsView = lazy(() => import("./views/AnalyticsView"));
@@ -230,6 +231,7 @@ export default function App() {
           </table>
         </Modal>
       )}
+      <Celebration />
       <Toasts />
     </div>
   );

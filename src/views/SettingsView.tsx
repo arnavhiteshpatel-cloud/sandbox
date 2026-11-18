@@ -99,7 +99,6 @@ function Appearance() {
       <div className="section-title">Timer screen</div>
       <Row t="Live 3D cube" d="Rotatable model of the scrambled puzzle, with scramble guide"><Toggle on={s.showCube3d} onChange={(v) => set({ showCube3d: v })} /></Row>
       <Row t="Flat scramble net"><Toggle on={s.showScrambleImage} onChange={(v) => set({ showScrambleImage: v })} /></Row>
-      <Row t="Time ruler" d="Places each solve against PB, ao5, ao12 and ao100"><Toggle on={s.showRuler} onChange={(v) => set({ showRuler: v })} /></Row>
       <Row t="Animations"><Toggle on={s.animations} onChange={(v) => set({ animations: v })} /></Row>
       <Row t="Sticker colours" d="U R F D L B">
         {s.cubeColors.map((c, i) => (
@@ -126,6 +125,19 @@ function TimerSettings() {
       </Row>
       <Row t="Hide interface while timing"><Toggle on={s.hideUiWhileTiming} onChange={(v) => set({ hideUiWhileTiming: v })} /></Row>
       <Row t="Precision" d="Display and statistics resolution (csTimer uses 0.01 unless “use milliseconds”)"><Seg value={s.decimals} options={[{ v: 2 as const, label: "0.01" }, { v: 3 as const, label: "0.001" }]} onChange={(v) => set({ decimals: v })} /></Row>
+      <div className="section-title">Accidental stops</div>
+      <Row t="Ignore impossibly fast solves" d="A stop faster than this share of your best single (minimum 1 s) is not saved; a notice lets you keep it anyway, and the scramble stays">
+        <Seg value={s.shortFilter} options={[{ v: "auto", label: "On" }, { v: "off", label: "Off" }]} onChange={(v) => set({ shortFilter: v })} />
+        <Seg value={s.shortRatio} options={[0.3, 0.4, 0.5, 0.6].map((v) => ({ v, label: Math.round(v * 100) + "%" }))} onChange={(v) => set({ shortRatio: v })} />
+      </Row>
+      <div className="section-title">Personal bests</div>
+      <Row t="Celebration" d="When you set a new best single, mo3, ao5, ao12, ao50, ao100 or ao1000">
+        <Seg value={s.celebrate} options={[{ v: "big", label: "Big" }, { v: "subtle", label: "Subtle" }, { v: "off", label: "Off" }]} onChange={(v) => set({ celebrate: v })} />
+      </Row>
+      <Row t="Celebration sound"><Toggle on={s.celebrateSound} onChange={(v) => set({ celebrateSound: v })} /></Row>
+      <Row t="Preview">
+        <button className="btn sm" onClick={() => window.dispatchEvent(new CustomEvent("facelet:pb", { detail: [{ label: "ao5", value: "12.21", gain: "−0.27" }, { label: "single", value: "8.43", gain: "−0.07" }] }))}>Test celebration</button>
+      </Row>
       <div className="section-title">WCA inspection</div>
       <Row t="Inspection" d="Tap space to start inspection; +2 after 15 s, DNF after 17 s (⌘I)"><Toggle on={s.inspection} onChange={(v) => set({ inspection: v })} testId="toggle-inspection" /></Row>
       <Row t="Inspection length">

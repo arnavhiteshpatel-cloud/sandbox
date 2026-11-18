@@ -1,0 +1,48 @@
+// Visual + behaviour check with a real csTimer export (path in argv[2]) at 32" monitor size.
+import { createRequire } from "node:module";
+import { execSync } from "node:child_process";
+const require = createRequire(execSync("npm root -g").toString().trim() + "/");
+const { chromium } = require("playwright");
+const file = process.argv[2];
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 2560, height: 1440 } });
+const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+await p.goto("http://127.0.0.1:1420");
+await p.waitForSelector('[data-testid="app"]');
+await p.evaluate(() => window.__faceletStore.getState().setView("settings"));
+await p.click("text=Data");
+await p.click('[data-testid="open-import"]');
+const [fc] = await Promise.all([p.waitForEvent("filechooser"), p.click('[data-testid="import-pick"]')]);
+await fc.setFiles(file);
+await p.waitForSelector('[data-testid="import-commit"]');
+await p.click('[data-testid="import-commit"]');
+await p.waitForSelector('[data-testid="verify-result"]', { timeout: 120000 });
+console.log("verify:", await p.textContent('[data-testid="verify-result"]'));
+await p.screenshot({ path: "artifacts/shots/real-import-report.png" });
+await p.click('[data-testid="import-done"]');
+await p.evaluate(() => { const st = window.__faceletStore.getState(); const s = st.sessions.find((x) => x.sourceKey === "cstimer:session1"); st.setCurrentSession(s.id); st.setView("timer"); });
+await p.waitForFunction(() => (document.querySelector('[data-testid="scramble"]')?.textContent || "").trim().split(/\s+/).length >= 15, null, { timeout: 60000 });
+await p.waitForTimeout(2500);
+const scr = await p.$eval('[data-testid="scramble"]', (e) => ({ h: e.getBoundingClientRect().height, fs: getComputedStyle(e).fontSize, ff: getComputedStyle(e).fontFamily, sw: e.scrollWidth, cw: e.clientWidth }));
+console.log("scramble:", JSON.stringify(scr));
+await p.screenshot({ path: "artifacts/shots/real-timer-2560.png" });
+// accidental short stop: inspection tap, hold, release, stop after ~1 s
+const n0 = await p.evaluate(() => window.__faceletStore.getState().solves.filter((s) => !s.deletedAt).length);
+const scrBefore = (await p.textContent('[data-testid="scramble"]')).trim();
+await p.keyboard.down("Space"); await p.keyboard.up("Space"); await p.waitForTimeout(400);
+await p.keyboard.down("Space"); await p.waitForTimeout(450); await p.keyboard.up("Space");
+await p.waitForTimeout(1000); await p.keyboard.press("KeyJ"); await p.waitForTimeout(400);
+const n1 = await p.evaluate(() => window.__faceletStore.getState().solves.filter((s) => !s.deletedAt).length);
+const toast = await p.$$eval('[data-testid="toast"]', (t) => t.map((x) => x.textContent));
+console.log("short stop saved?", n1 !== n0, "scramble kept?", (await p.textContent('[data-testid="scramble"]')).trim() === scrBefore, "toast:", toast.join(" | "));
+// PB celebration: add a solve faster than the PB single via the store
+await p.evaluate(() => window.__faceletStore.getState().updateSettings({ shortRatio: 0.3 }));
+await p.waitForTimeout(3000);
+await p.keyboard.down("Space"); await p.keyboard.up("Space"); await p.waitForTimeout(300);
+await p.keyboard.down("Space"); await p.waitForTimeout(450); await p.keyboard.up("Space");
+await p.waitForTimeout(8300); await p.keyboard.press("KeyJ");
+await p.waitForTimeout(700);
+console.log("celebration shown:", !!(await p.$('[data-testid="pb-celebration"]')), await p.$eval('[data-testid="pb-celebration"]', (e) => e.textContent).catch(() => ""));
+await p.screenshot({ path: "artifacts/shots/real-pb-celebration.png" });
+console.log("errors:", errs);
+await b.close();

@@ -2,14 +2,14 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExter
 import { sessionSolves, useStore } from "../data/store";
 import { neededLabels, sessionStats } from "../data/derived";
 import { EVENTS, EVENT_GROUPS, getEvent } from "../core/events";
-import { fmtSingle, parseTypedEntry } from "../core/time";
+import { fmtAvg, fmtSingle, parseTypedEntry } from "../core/time";
 import { useScramble } from "../scramble/useScramble";
 import { TimerEngine, type Phase } from "../timer/engine";
 import { inspectionWarning } from "../timer/feedback";
 import { Menu, useMenu, layersOpen } from "../ui/Overlay";
 import { IconChevronDown, IconChevronLeft, IconChevronRight, IconComment, IconTrash } from "../ui/icons";
 import { AvgDetail } from "../ui/AvgDetail";
-import { LeftPanel, RecentStrip, RightPanel, TimeRuler } from "../ui/hud";
+import { LeftPanel, RecentStrip, RightPanel } from "../ui/hud";
 
 /** Single shared engine so global shortcuts can see whether a solve is in progress. */
 export const engine = new TimerEngine({ holdMs: 300, inspection: true, inspectionMs: 15000, phases: 1, startKey: "space" });
@@ -79,13 +79,31 @@ function ScrambleText({ scramble, error, loading }: { scramble: string; error: s
   useEffect(() => setGuideIdx(-1), [scramble]);
   const settings = useStore((s) => s.settings);
   const scr = useScramble();
+  const box = useRef<HTMLDivElement>(null);
+  const long = scramble.length > 120; // 5x5+ / megaminx cannot sensibly fit on one line
+  // Fit the scramble on one line: start large and scale down to the available width.
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el || long) return;
+    const fit = () => {
+      const max = Math.min(window.innerHeight * 0.075, window.innerWidth * 0.042) * settings.scrambleScale;
+      el.style.fontSize = max + "px";
+      const avail = el.clientWidth;
+      const need = el.scrollWidth;
+      if (need > avail) el.style.fontSize = Math.max(12, Math.floor(max * (avail / need) * 0.98)) + "px";
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el.parentElement ?? el);
+    return () => ro.disconnect();
+  }, [scramble, long, settings.scrambleScale, settings.scrambleFont]);
   if (!scramble) return <div className="scramble loading">{error ? <span className="bad">{error}</span> : loading ? "generating scramble…" : ""}</div>;
   let k = 0;
-  const moves = scramble.split(/\s+/).filter(Boolean);
   return (
     <>
       <div
-        className={"scramble" + (settings.scrambleFont === "sans" ? " sans" : "") + (scramble.length > 90 ? " long" : "")}
+        ref={box}
+        className={"scramble" + (settings.scrambleFont === "mono" ? " mono-scr" : "") + (long ? " long" : " one-line")}
         style={{ ["--scr-scale" as any]: settings.scrambleScale }}
         data-testid="scramble"
         onDoubleClick={() => {
@@ -110,13 +128,6 @@ function ScrambleText({ scramble, error, loading }: { scramble: string; error: s
           </div>
         ))}
       </div>
-      {moves.length <= 40 && (
-        <div className="move-ticks">
-          {moves.map((_, i) => (
-            <i key={i} className={guideIdx < 0 ? "" : i < guideIdx ? "done" : i === guideIdx ? "now" : ""} />
-          ))}
-        </div>
-      )}
     </>
   );
 }
@@ -160,13 +171,29 @@ export function TimerView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
+  const bestRef = useRef(Infinity);
+  bestRef.current = stats.summary.best;
   const scrambleRef = useRef(scramble);
   scrambleRef.current = scramble;
   useEffect(() => {
     engine.onSolve = (r) => {
-      addSolve({ time: r.time, penalty: r.penalty, splits: r.splits, scramble: scrambleRef.current });
-      setJustSolved(true);
-      useScramble.getState().next();
+      const st = useStore.getState();
+      const scr = scrambleRef.current;
+      const save = () => {
+        st.addSolve({ time: r.time, penalty: r.penalty, splits: r.splits, scramble: scr });
+        setJustSolved(true);
+        useScramble.getState().next();
+      };
+      // Accidental stop filter: a "solve" far faster than your best single is almost certainly a mis-stop.
+      if (st.settings.shortFilter === "auto" && r.penalty >= 0) {
+        const best = bestRef.current;
+        const limit = Number.isFinite(best) ? Math.max(1000, best * st.settings.shortRatio) : 1000;
+        if (r.time < limit) {
+          st.toast(`Ignored ${fmtSingle(r.time, st.settings.decimals)} — under ${fmtSingle(limit, 2)}, likely an accidental stop. Same scramble kept.`, "info", { label: "Keep it", run: save });
+          return;
+        }
+      }
+      save();
     };
     engine.onInspectionWarning = (sec) => {
       const st = useStore.getState().settings;
@@ -177,16 +204,27 @@ export function TimerView() {
     };
   }, [addSolve]);
 
-  // PB notifications (csTimer "logo hint") — only for the solve just completed
+  // PB celebrations — only for the solve just completed
   const pbFor = useRef<string | null>(null);
   useEffect(() => {
     if (!justSolved || !last || pbFor.current === last.id) return;
     pbFor.current = last.id;
     const n = solves.length;
-    const hits: string[] = [];
-    if (n > 1 && stats.pbSingle[n - 1]) hits.push("single " + fmtSingle(stats.values[n - 1], d));
-    for (const r of stats.rows) if (r.bestEnd === n - 1 && n > r.spec.n && Number.isFinite(r.best) && ["ao5", "ao12", "ao50", "ao100", "ao1000"].includes(r.label)) hits.push(r.label);
-    if (hits.length) useStore.getState().toast("New personal best — " + hits.join(" · "), "success");
+    const hits: { label: string; value: string; gain: string | null }[] = [];
+    if (n > 1 && stats.pbSingle[n - 1]) {
+      let prev = Infinity;
+      for (let i = 0; i < n - 1; i++) prev = Math.min(prev, stats.values[i]);
+      hits.push({ label: "single", value: fmtSingle(stats.values[n - 1], d), gain: Number.isFinite(prev) ? "−" + fmtSingle(prev - stats.values[n - 1], d) : null });
+    }
+    for (const r of stats.rows) {
+      if (!["mo3", "ao5", "ao12", "ao50", "ao100", "ao1000"].includes(r.label)) continue;
+      if (r.bestEnd !== n - 1 || n <= r.spec.n || !Number.isFinite(r.best)) continue;
+      const roll = stats.rolling.get(r.label)!.avg;
+      let prev = Infinity;
+      for (let i = 0; i < n - 1; i++) if (roll[i] < prev) prev = roll[i];
+      hits.push({ label: r.label, value: fmtAvg(r.best, d), gain: Number.isFinite(prev) ? "−" + fmtAvg(prev - r.best, d) : null });
+    }
+    if (hits.length) window.dispatchEvent(new CustomEvent("facelet:pb", { detail: hits }));
   }, [justSolved, last?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -247,14 +285,6 @@ export function TimerView() {
     return () => cancelAnimationFrame(raf);
   }, [phase, settings.runningDisplay, settings.inspectionSeconds, d]);
 
-  const stageDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest("button,input,.scramble,.hud-panel,.recent-strip,.scr-head,.ruler,a")) return;
-    engine.keyDown({ code: "Space", timeStamp: e.timeStamp });
-  };
-  const stageUp = (e: React.PointerEvent) => {
-    engine.keyUp({ code: "Space", timeStamp: e.timeStamp });
-  };
-
   let intPart = "0";
   let decPart = d === 3 ? ".000" : ".00";
   let pen: string | null = null;
@@ -287,17 +317,8 @@ export function TimerView() {
     useScramble.getState().next();
   }, [addSolve, scramble]);
 
-  const row = (l: string) => stats.rows.find((r) => r.label === l);
-  const marks = [
-    { label: "PB", v: stats.summary.best },
-    { label: "AO5", v: row("ao5")?.current ?? NaN },
-    { label: "AO12", v: row("ao12")?.current ?? NaN },
-    { label: "AO100", v: row("ao100")?.current ?? NaN },
-  ];
-  const lastVal = last ? stats.values[solves.length - 1] : null;
-
   return (
-    <div className="hud-body" onPointerDown={settings.inputMode === "timer" ? stageDown : undefined} onPointerUp={settings.inputMode === "timer" ? stageUp : undefined}>
+    <div className="hud-body">
       <LeftPanel eventId={eventId} scramble={scramble} solves={solves} stats={stats} />
       <section className="hud-center">
         <div className="scr-head fade-when-timing">
@@ -334,11 +355,6 @@ export function TimerView() {
           {engine.phase === "run" && (session?.phases ?? 1) > 1 && (
             <div className="dim num" style={{ marginTop: 18, fontSize: 18 }}>
               phase {engine.splits.length + 1} / {session?.phases}
-            </div>
-          )}
-          {settings.showRuler && (
-            <div className="ruler-wrap fade-when-timing">
-              <TimeRuler value={lastVal} marks={marks} />
             </div>
           )}
           {last && phase === "idle" && (

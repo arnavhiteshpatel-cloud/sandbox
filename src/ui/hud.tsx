@@ -190,7 +190,7 @@ export function useInsights(solves: Solve[], stats: SessionStats, d: number, tri
     solves.forEach((s, i) => isToday(s.date) && todayVals.push(vals[i]));
     const today = summarize(todayVals);
     const streak = practiceStreak(allSolves.filter((s) => !s.deletedAt).map((s) => s.date));
-    return { thresholds: ["ao5", "ao12", "ao100"].map(thr).filter(Boolean) as { label: string; r: ReturnType<typeof pbThreshold> }[], pct, today, streak };
+    return { thresholds: ["mo3", "ao5", "ao12", "ao100"].map(thr).filter(Boolean) as { label: string; r: ReturnType<typeof pbThreshold> }[], pct, today, streak };
   }, [solves, stats, d, trimPct, allSolves]);
 }
 
@@ -348,7 +348,8 @@ function TrendChart({ solves, stats, n = 200 }: { solves: Solve[]; stats: Sessio
   const lo = fin[Math.floor(fin.length * 0.02)],
     hi = fin[Math.floor(fin.length * 0.96)];
   const pad = 6;
-  const X = (i: number) => pad + (i / Math.max(1, n - 1)) * (w - 2 * pad);
+  const span = Math.max(2, Math.min(n, solves.length - start));
+  const X = (i: number) => pad + (i / Math.max(1, span - 1)) * (w - 2 * pad);
   const Y = (v: number) => pad + (1 - (Math.max(lo, Math.min(v, hi)) - lo) / Math.max(1, hi - lo)) * (h - 2 * pad);
   let path = "";
   if (ao)

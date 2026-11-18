@@ -153,11 +153,13 @@ input, textarea, select { font: inherit; color: inherit; user-select: text; -web
 .scr-nav button:disabled { opacity: 0.3; }
 .scr-wrap { padding: 8px 2% 0; }
 .scramble {
-  font-family: var(--font-mono); font-weight: 450; text-align: center;
+  font-family: var(--font-ui); font-weight: 450; text-align: center; font-feature-settings: "tnum", "cv11", "ss01";
   font-size: calc(clamp(18px, 1.9vw, 34px) * var(--scr-scale, 1)); line-height: 1.55; letter-spacing: 0.03em; word-spacing: 0.32em;
   color: var(--fg); text-wrap: balance; user-select: text; -webkit-user-select: text; cursor: text; min-height: 3.1em;
 }
-.scramble.sans { font-family: var(--font-ui); }
+.scramble.mono-scr { font-family: var(--font-mono); }
+.scramble.one-line { white-space: nowrap; overflow: hidden; min-height: 0; letter-spacing: 0.01em; word-spacing: 0.28em; line-height: 1.25; }
+.scramble.one-line > div { display: inline; }
 .scramble.long { font-size: calc(clamp(12px, 1.15vw, 19px) * var(--scr-scale, 1)); text-wrap: pretty; line-height: 1.5; text-align: left; }
 .scramble.loading { color: var(--fg4); font-size: 16px; display: grid; place-items: center; }
 .scramble .mv { transition: color 0.2s, opacity 0.2s, text-shadow 0.2s; }
@@ -316,3 +318,20 @@ input[type="range"] { accent-color: var(--accent); width: 180px; }
 .ses-stats div { display: flex; flex-direction: column; gap: 2px; }
 .ses-stats b { font-weight: 450; font-size: 15px; }
 .ses-stats .cap { font-size: 9.5px; letter-spacing: 0.1em; }
+
+/* PB celebration */
+.pb-layer { position: fixed; inset: 0; pointer-events: none; z-index: 150; }
+.pb-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pb-banner { position: absolute; left: 50%; top: 17%; transform: translateX(-50%); text-align: center; animation: pbIn 0.55s cubic-bezier(0.2, 1.4, 0.3, 1) both, pbOut 0.5s ease 3.6s forwards; }
+.subtle .pb-banner { animation: pbIn 0.4s ease both, pbOut 0.4s ease 2.3s forwards; top: 20%; }
+.pb-kicker { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.5em; text-transform: uppercase; color: var(--accent); text-shadow: 0 0 18px var(--glow); }
+.pb-items { display: flex; gap: 36px; justify-content: center; margin-top: 10px; }
+.pb-item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 22px; border-radius: 16px; background: color-mix(in srgb, var(--accent) 12%, rgba(0,0,0,0.55)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), 0 0 60px color-mix(in srgb, var(--accent) 35%, transparent); backdrop-filter: blur(12px); }
+.pb-label { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.2em; color: var(--fg2); }
+.pb-value { font-size: 44px; font-weight: 400; letter-spacing: -0.02em; color: #fff; text-shadow: 0 0 24px var(--accent); }
+.pb-gain { font-size: 15px; color: var(--good); }
+.subtle .pb-value { font-size: 30px; }
+@keyframes pbIn { from { opacity: 0; transform: translate(-50%, 18px) scale(0.86); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+@keyframes pbOut { to { opacity: 0; transform: translate(-50%, -12px) scale(0.98); } }
+html.pb-flash .timer { color: #fff; text-shadow: 0 0 40px var(--accent), 0 0 120px var(--accent); animation: pbPulse 0.9s ease-out 2; }
+@keyframes pbPulse { 0% { transform: scale(1); } 30% { transform: scale(1.045); } 100% { transform: scale(1); } }

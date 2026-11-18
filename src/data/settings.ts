@@ -3,6 +3,11 @@ export type TimerFont = "inter" | "system" | "helvetica" | "mono" | "rounded" | 
 
 export interface Settings {
   showCube3d: boolean;
+  celebrate: "big" | "subtle" | "off";
+  celebrateSound: boolean;
+  /** ignore accidental stops: "auto" = faster than shortRatio × your best single */
+  shortFilter: "auto" | "off";
+  shortRatio: number;
   showRuler: boolean;
   theme: ThemeId;
   accent: string;
@@ -42,6 +47,10 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   showCube3d: true,
+  celebrate: "big",
+  celebrateSound: true,
+  shortFilter: "auto",
+  shortRatio: 0.5,
   showRuler: true,
   theme: "hud",
   accent: "",
@@ -50,7 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
   timerScale: 1,
   smallDecimals: false,
   scrambleScale: 1,
-  scrambleFont: "mono",
+  scrambleFont: "sans",
   decimals: 2,
   holdMs: 300,
   startKey: "space",
