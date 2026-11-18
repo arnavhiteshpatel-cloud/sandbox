@@ -118,3 +118,19 @@ async def test_agent_types_for_real_when_direct_fill_fails(settings):
     out = await type_text(ToolContext(computer=c, settings=settings, last_elements={"w1": {"role": "textbox"}}),
                           {"element_id": "w1", "text": "Line one\nLine two"})
     assert out["ok"] and "text:Line one\nLine two" in c.log
+
+
+async def test_clicking_a_dropdown_option_selects_it(settings):
+    """Reproduces the real-model run: click the dropdown, then click the option's text."""
+    from jarvis.agent.tools import ToolContext, click, observe
+    from jarvis.platform.fake import FakeComputer
+
+    c = FakeComputer()
+    c.browser_open_url(QUIZ)
+    ctx = ToolContext(computer=c, settings=settings, browser="Arc")
+    await observe(ctx, {})
+    await click(ctx, {"element_id": "w3"})
+    out = await click(ctx, {"text": "Nucleus"})
+    assert out["ok"] and c.field_values(QUIZ)["Answer to question 3"] == "Nucleus"
+    out = await click(ctx, {"element_id": "w3", "text": "Ribosome"})
+    assert out["ok"] and c.field_values(QUIZ)["Answer to question 3"] == "Ribosome"

@@ -163,9 +163,35 @@ async def open_url(ctx, a):
     return _res(w)
 
 
+def _option_owner(ctx, text: str) -> tuple[str, str] | None:
+    """Find the dropdown that has an option matching `text` (people click options; native dropdown menus aren't
+    clickable page elements, so choose the option directly)."""
+    from rapidfuzz import fuzz
+
+    want = (text or "").strip().lower()
+    best = None
+    for e in ctx.last_elements.values():
+        for o in e.get("options") or []:
+            sc = 100 if o.strip().lower() == want else fuzz.ratio(o.strip().lower(), want)
+            if sc >= 85 and (best is None or sc > best[0]):
+                best = (sc, e["id"], o)
+    return (best[1], best[2]) if best else None
+
+
 async def click(ctx, a):
     eid = a.get("element_id")
     text = a.get("text")
+    target = ctx.last_elements.get(eid) if eid else None
+    if target and target.get("options") and text:            # click(dropdown, text=option)
+        return _res(await _t(ctx.computer.browser_type, eid, text, False, ctx.browser))
+    if text and not eid:
+        named = best_element_match(text, list(ctx.last_elements.values())) if ctx.last_elements else None
+        owner = _option_owner(ctx, text)
+        if owner and (named is None or named.get("options")):
+            r = await _t(ctx.computer.browser_type, owner[0], owner[1], False, ctx.browser)
+            out = _res(r)
+            out["note"] = f"Chose “{owner[1]}” in dropdown {owner[0]}."
+            return out
     el = ctx.last_elements.get(eid) if eid else None
     if eid and eid.startswith("a"):
         r = await _t(ctx.computer.ui_press, eid)
@@ -182,7 +208,8 @@ async def click(ctx, a):
         return {"ok": False, "error": "Give element_id (from observe) or text."}
     out = _res(r)
     if not r.ok:
-        out["hint"] = "Call observe to get fresh element ids; the page may have changed."
+        out["hint"] = ("Call observe to get fresh element ids; the page may have changed. To choose from a dropdown, use "
+                       "type_text with the dropdown's element_id and the option label.")
     elif el:
         out["clicked"] = el.get("name")
     return out
