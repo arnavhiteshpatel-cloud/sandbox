@@ -51,6 +51,8 @@ and copies the app to /Applications. Then grant the permissions JARVIS asks for.
 
 | | |
 |---|---|
+| [START_HERE.md](START_HERE.md) | **exact first-time setup steps** |
+| [docs/JARVIS-Overview.pdf](docs/JARVIS-Overview.pdf) | overview, full capabilities, getting started, verification status (PDF) |
 | [docs/SETUP.md](docs/SETUP.md) | installation, permissions, first shortcut ("open my IB") |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | components, data flow, extension points |
 | [docs/MODELS.md](docs/MODELS.md) | model choice, benchmark results, how to upgrade or replace models |

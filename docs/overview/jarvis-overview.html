@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JARVIS — Overview, Capabilities and Getting Started</title>
+<style>
+  @page { size: Letter; margin: 0.65in 0.7in 0.75in; }
+  @page cover { margin: 0; }
+  :root {
+    --ink: #0f1a22; --muted: #5b6b76; --line: #d8e1e7; --soft: #f3f7f9; --cyan: #0a8db8; --cyan-l: #e3f5fb;
+    --orange: #c8661a; --orange-l: #fdf0e4; --green: #17845a; --green-l: #e5f6ee; --red: #b4373b; --red-l: #fbeaea;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font: 9.4pt/1.42 Inter, "DejaVu Sans", sans-serif; color: var(--ink); }
+  h1 { font: 600 21pt/1.15 "Inter Display", Inter, sans-serif; margin: 0 0 4pt; letter-spacing: -.2pt; }
+  h2 { font: 600 13pt/1.25 "Inter Display", Inter, sans-serif; margin: 16pt 0 5pt; color: var(--ink); break-after: avoid; }
+  h3 { font: 600 10.5pt/1.3 Inter, sans-serif; margin: 11pt 0 3pt; break-after: avoid; }
+  p { margin: 0 0 6pt; }
+  ul { margin: 0 0 6pt; padding-left: 15pt; }
+  li { margin: 1pt 0; }
+  .kicker { font: 600 7.5pt/1 Inter, sans-serif; letter-spacing: 1.6pt; text-transform: uppercase; color: var(--cyan); margin-bottom: 6pt; }
+  .lede { font-size: 11pt; color: #22313b; }
+  .muted { color: var(--muted); }
+  kbd { font: 600 8.5pt "DejaVu Sans", sans-serif; border: 1px solid #b9c7d0; border-bottom-width: 2px; border-radius: 3pt; padding: 0 3pt; background: #fff; white-space: nowrap; }
+  code { font: 8.6pt "DejaVu Sans Mono", monospace; background: var(--soft); padding: 0 2.5pt; border-radius: 2pt; }
+  pre { font: 8.4pt/1.45 "DejaVu Sans Mono", monospace; background: #0f1a22; color: #d7f3ff; padding: 7pt 9pt; border-radius: 5pt; margin: 3pt 0 8pt; white-space: pre-wrap; word-break: break-all; break-inside: avoid; }
+  table { width: 100%; border-collapse: collapse; margin: 3pt 0 8pt; font-size: 8.6pt; break-inside: auto; }
+  th { text-align: left; font-weight: 600; font-size: 7.6pt; letter-spacing: .3pt; text-transform: uppercase; color: var(--muted); border-bottom: 1.5px solid var(--ink); padding: 3pt 6pt; }
+  td { border-bottom: 1px solid var(--line); padding: 3pt 6pt; vertical-align: top; }
+  tr { break-inside: avoid; }
+  td:first-child { font-weight: 500; }
+  .section { break-before: page; }
+  .callout { border-left: 3px solid var(--cyan); background: var(--cyan-l); padding: 7pt 10pt; border-radius: 0 5pt 5pt 0; margin: 6pt 0 10pt; break-inside: avoid; }
+  .callout.warn { border-color: var(--orange); background: var(--orange-l); }
+  .callout b:first-child { display: block; margin-bottom: 2pt; }
+  .tag { display: inline-block; font: 600 7pt/1 Inter, sans-serif; letter-spacing: .5pt; text-transform: uppercase; padding: 2.5pt 5pt; border-radius: 3pt; white-space: nowrap; }
+  .t-ok { background: var(--green-l); color: var(--green); }
+  .t-part { background: var(--orange-l); color: var(--orange); }
+  .t-no { background: var(--red-l); color: var(--red); }
+  .t-info { background: var(--cyan-l); color: var(--cyan); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10pt 16pt; }
+  .card { border: 1px solid var(--line); border-radius: 6pt; padding: 8pt 10pt; break-inside: avoid; }
+  .card h3 { margin-top: 0; }
+  .levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8pt; margin: 6pt 0 10pt; }
+  .lvl { border: 1px solid var(--line); border-top: 3px solid var(--cyan); border-radius: 5pt; padding: 7pt 9pt; font-size: 9pt; }
+  .lvl b { display: block; font-size: 10pt; margin-bottom: 2pt; }
+  .lvl .eg { color: var(--muted); font-style: italic; margin-top: 3pt; }
+  .steps { counter-reset: s; list-style: none; padding: 0; }
+  .steps > li { counter-increment: s; position: relative; padding-left: 24pt; margin: 0 0 9pt; break-inside: avoid; }
+  .steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 16pt; height: 16pt; border-radius: 50%; background: var(--ink); color: #fff; font: 600 8.5pt/16pt Inter, sans-serif; text-align: center; }
+  .shot { width: 100%; border: 1px solid var(--line); border-radius: 5pt; display: block; }
+  .shotcap { font-size: 8pt; color: var(--muted); margin: 3pt 0 10pt; }
+  .flow { display: flex; align-items: stretch; gap: 0; margin: 6pt 0 10pt; font-size: 8.5pt; }
+  .flow div { flex: 1; border: 1px solid var(--line); padding: 6pt; text-align: center; background: var(--soft); }
+  .flow div + div { border-left: none; }
+  .flow b { display: block; font-size: 9pt; }
+  .toc { columns: 2; column-gap: 20pt; padding-left: 14pt; }
+
+  /* cover */
+  .cover { page: cover; height: 11in; width: 8.5in; background: radial-gradient(90% 60% at 50% 30%, #0e2b38 0%, #05090c 65%); color: #e6f4fa; position: relative; overflow: hidden; break-after: page; }
+  .cover .inner { position: absolute; left: 0.8in; right: 0.8in; top: 4.9in; }
+  .cover .orb { position: absolute; left: 50%; top: 1.15in; width: 3.2in; height: 3.2in; transform: translateX(-50%); }
+  .cover h1 { color: #fff; font-size: 40pt; letter-spacing: 6pt; font-weight: 600; margin: 0 0 6pt; }
+  .cover .sub { font-size: 14pt; color: #9fd9ee; margin-bottom: 18pt; }
+  .cover .meta { font-size: 9.5pt; color: #8aa3b0; line-height: 1.7; border-top: 1px solid #1f3b48; padding-top: 12pt; }
+  .cover .status { display: inline-block; margin-top: 14pt; padding: 6pt 10pt; border: 1px solid #6b4220; color: #ffcf9e; background: #1c1209; border-radius: 5pt; font-size: 9pt; }
+</style>
+</head>
+<body>
+
+<!-- ======================= COVER ======================= -->
+<section class="cover">
+  <svg class="orb" viewBox="0 0 200 200">
+    <circle cx="100" cy="100" r="96" fill="none" stroke="#38d6ff" stroke-opacity=".22" stroke-width="1" stroke-dasharray="1.5 5"/>
+    <circle cx="100" cy="100" r="82" fill="none" stroke="#38d6ff" stroke-opacity=".7" stroke-width="2.4" stroke-dasharray="70 18 8 18"/>
+    <circle cx="100" cy="100" r="66" fill="none" stroke="#38d6ff" stroke-opacity=".3" stroke-width="9" stroke-dasharray="1 4"/>
+    <circle cx="100" cy="100" r="40" fill="#38d6ff" fill-opacity=".12" stroke="#7fe7ff" stroke-width="1.4"/>
+    <circle cx="100" cy="100" r="18" fill="#38d6ff" fill-opacity=".55"/>
+    <path d="M155 40 A82 82 0 0 1 177 85" fill="none" stroke="#ff9a3c" stroke-width="2.6" stroke-linecap="round"/>
+  </svg>
+  <div class="inner">
+    <h1>JARVIS</h1>
+    <div class="sub">A local, voice-controlled assistant that operates your Mac.<br>Overview · Capabilities · Getting Started</div>
+    <div class="meta">
+      Built for: 14-inch MacBook Pro (Nov 2024), Apple M4 Pro, 24 GB, macOS Sequoia 15.7.3<br>
+      Runs entirely on-device: no Claude, no Anthropic API, no cloud AI, no subscriptions<br>
+      Source: github.com/arnavhiteshpatel-cloud/sandbox, branch <span style="font-family:'DejaVu Sans Mono'">claude/project-jarvis-ai-assistant-rddtrw</span><br>
+      Document date: 18 November 2026 · version 0.1.0
+    </div>
+    <div class="status">Status: built and tested off-Mac. Not yet run on your MacBook. See “What has been verified”.</div>
+  </div>
+</section>
+
+<!-- ======================= CONTENTS + OVERVIEW ======================= -->
+<section>
+  <div class="kicker">Contents</div>
+  <ol class="toc">
+    <li>What JARVIS is</li>
+    <li>How it works</li>
+    <li>Getting started (exact steps)</li>
+    <li>Using JARVIS day to day</li>
+    <li>Capabilities: voice</li>
+    <li>Capabilities: instant commands</li>
+    <li>Capabilities: voice shortcuts</li>
+    <li>Capabilities: the AI agent</li>
+    <li>Capabilities: controlling your Mac</li>
+    <li>Capabilities: memory and file search</li>
+    <li>Battery and performance modes</li>
+    <li>Safety and privacy</li>
+    <li>The interface</li>
+    <li>Tools for checking and tuning</li>
+    <li>What has been verified</li>
+    <li>Known limitations</li>
+    <li>Technical specifications</li>
+  </ol>
+
+  <h1 style="margin-top:18pt">1. What JARVIS is</h1>
+  <p class="lede">JARVIS is a personal assistant that lives in your Mac’s menu bar. You talk to it, it answers out loud, and it actually
+  operates your computer: it opens apps, navigates websites in your own Arc browser, clicks and types, reads pages back to you,
+  finds and organizes files, and remembers what you tell it.</p>
+  <p>Everything that makes it intelligent runs <b>on your MacBook</b>. That covers the wake word, speech recognition, its voice and the
+  language model that reasons and plans. After the one-time setup it does not use Claude, the Anthropic API, any cloud AI or any paid
+  service, so it keeps working after December 5, 2026 and offline. The internet is used only for things you ask it to do online,
+  like opening a website.</p>
+
+  <div class="grid2">
+    <div class="card"><h3>What it’s for</h3>
+      <ul><li>Hands-free control: “Open Spotify”, “Lock my screen”, “Scroll down”.</li>
+      <li>Your own voice shortcuts: “Open my IB” runs a saved routine instantly.</li>
+      <li>Unfamiliar multistep tasks: “Open the most recent assignment and tell me what I need to do.”</li>
+      <li>Finding things: “Find the paper I downloaded about Parkinson’s.”</li></ul></div>
+    <div class="card"><h3>What it is not</h3>
+      <ul><li>Not a chatbot window you have to open. It works from voice, a hotkey or the menu bar.</li>
+      <li>Not a cloud product. Your audio, screen and files stay on your Mac.</li>
+      <li>Not frontier-level AI. It uses the strongest model that fits a 24 GB laptop (about 9 billion parameters), so very
+      long or ambiguous tasks will sometimes fail. It says so instead of pretending.</li></ul></div>
+  </div>
+
+  <h2>Design principles</h2>
+  <ul>
+    <li><b>Fast path first.</b> Routine commands never touch the AI model. They run as ordinary code in milliseconds.</li>
+    <li><b>Real actions, verified.</b> After opening a page or clicking, JARVIS checks what actually happened (the page address,
+    the file on disk) before saying “done”.</li>
+    <li><b>Battery-aware.</b> Nothing heavy runs while idle, models unload after use, and on battery the microphone stays off until you hold the talk key.</li>
+    <li><b>Safe by default.</b> Deleting, submitting, sending and buying always need your “yes”, and text on websites can’t give JARVIS orders.</li>
+  </ul>
+</section>
+
+<!-- ======================= HOW IT WORKS ======================= -->
+<section class="section">
+  <div class="kicker">Section 2</div>
+  <h1>How it works</h1>
+  <p>Every request goes to the cheapest level that can handle it reliably:</p>
+  <div class="levels">
+    <div class="lvl"><b>Level 1 · Instant</b>Plain code recognizes the command and acts. No AI model is loaded.
+      <div class="eg">“Open Arc”, “volume to 30”, “click assignments”, “go back”, your shortcuts</div></div>
+    <div class="lvl"><b>Level 2 · Local AI</b>The on-device language model interprets the request and uses tools.
+      <div class="eg">“Find the paper about Parkinson’s”, “What’s on my screen?”</div></div>
+    <div class="lvl"><b>Level 3 · Agent</b>The model works step by step: look, decide, act, check, repeat, with strict limits.
+      <div class="eg">“Open Canvas, find my next three assignments and summarize them”</div></div>
+  </div>
+
+  <h3>The path of one spoken request</h3>
+  <div class="flow">
+    <div><b>Listen</b>“Hey JARVIS” or hold <kbd>⌥⇧C</kbd></div>
+    <div><b>Transcribe</b>Whisper, on-device</div>
+    <div><b>Route</b>stop? shortcut? built-in? else AI</div>
+    <div><b>Act</b>Arc, apps, files, system</div>
+    <div><b>Verify</b>check the real result</div>
+    <div><b>Reply</b>spoken + shown in the HUD</div>
+  </div>
+
+  <h3>Continuous conversation</h3>
+  <p>JARVIS keeps context for about 10 minutes: the app and web page you’re on, what it just did, the last list of results and the
+  recent back-and-forth. That is why “Open my IB” → “Go to the assignments” → “Open the most recent one” works without
+  repeating yourself. After it answers, it listens for a few seconds for a follow-up without needing the wake word. A new instruction
+  replaces whatever it was doing, and “stop” halts everything.</p>
+
+  <h3>The pieces</h3>
+  <table>
+    <tr><th style="width:28%">Component</th><th>What it does</th></tr>
+    <tr><td>JARVIS.app (native)</td><td>Menu-bar icon and popover, floating HUD, command center window, the global hotkeys, sleep/wake and
+      power-source detection, launch at login. Starts the background service and restarts it if it crashes.</td></tr>
+    <tr><td>Background service</td><td>The brain: routing, shortcuts, the agent, voice, memory, search, power management. Talks to the app
+      over a private, password-protected connection on your Mac only.</td></tr>
+    <tr><td>Ollama (free)</td><td>Runs the local language models and loads and unloads them on demand.</td></tr>
+    <tr><td>Your Mac’s own frameworks</td><td>Arc (AppleScript), Accessibility, Vision (text recognition), Spotlight, Shortcuts app.</td></tr>
+  </table>
+</section>
+
+<!-- ======================= GETTING STARTED ======================= -->
+<section class="section">
+  <div class="kicker">Section 3</div>
+  <h1>Getting started (exact steps)</h1>
+  <p>About 30–60 minutes, mostly downloads (~10 GB). Internet is needed only for setup. These steps are also in
+  <code>START_HERE.md</code> in the repository.</p>
+  <ol class="steps">
+    <li><b>Open Terminal.</b> Press <kbd>⌘</kbd> <kbd>Space</kbd>, type <i>Terminal</i>, press Return.</li>
+    <li><b>Install Homebrew</b> (skip if <code>brew --version</code> already works). It asks for your Mac password and also installs Apple’s Command Line Tools.
+      <pre>/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</pre>
+      When it finishes it prints two “Next steps” lines (<code>echo … &gt;&gt; ~/.zprofile</code> and <code>eval …</code>). Run those two lines.</li>
+    <li><b>Download JARVIS.</b>
+      <pre>git clone --branch claude/project-jarvis-ai-assistant-rddtrw https://github.com/arnavhiteshpatel-cloud/sandbox.git ~/JARVIS</pre></li>
+    <li><b>Install.</b> This builds the app, installs Ollama, downloads all models, checks your Mac and opens JARVIS.
+      <pre>cd ~/JARVIS &amp;&amp; ./scripts/install.sh</pre>
+      If the build stops with a Swift compiler error, open a Claude Code session in <code>~/JARVIS</code> and give it the error. That
+      part could not be compiled before it reached your Mac.</li>
+    <li><b>Grant permissions.</b> JARVIS opens Settings → Permissions. Allow <b>Microphone</b>, <b>Accessibility</b> (needed for clicking and
+      typing and for the <kbd>⌥⇧C</kbd> talk key) and <b>Screen &amp; System Audio Recording</b>. Click <b>Allow</b> when asked whether JARVIS may control
+      Arc, Finder and System Events. Then quit JARVIS (right-click the menu-bar icon → Quit) and open it again from Applications.</li>
+    <li><b>Start at login.</b> Right-click the menu-bar icon → <b>Launch at Login</b>.</li>
+    <li><b>Create “open my IB”.</b> Open your IB course page in Arc. Hold <kbd>⌥⇧C</kbd> and say “Create a shortcut called open my IB.” When asked
+      what it should do, hold <kbd>⌥⇧C</kbd> again and say “Open Arc and go to this URL,” then say “yes.” (Or: Command Center → Shortcuts → New,
+      and paste the URL.)</li>
+    <li><b>Try it.</b> Hold <kbd>⌥⇧C</kbd>, speak, release: “Open my IB.” → “Go to the assignments.” → “Open the most recent one.” → “Read the
+      instructions and tell me what I need to do.” When plugged in you can also just say “Hey JARVIS.”</li>
+  </ol>
+  <div class="callout"><b>If something goes wrong</b>
+    Run <code>/Applications/JARVIS.app/Contents/Resources/python/bin/python3 -m jarvis doctor</code> for a full health check. Logs are in
+    <code>~/Library/Logs/JARVIS/</code>. If JARVIS says it can’t reach its AI model, open the Ollama app. Shortcuts and built-in commands keep
+    working without it.</div>
+</section>
+
+<!-- ======================= DAY TO DAY ======================= -->
+<section class="section">
+  <div class="kicker">Section 4</div>
+  <h1>Using JARVIS day to day</h1>
+  <table>
+    <tr><th style="width:34%">To…</th><th>Do this</th></tr>
+    <tr><td>Talk (any time)</td><td>Hold <kbd>⌥⇧C</kbd>, speak, release. (<kbd>⌃⌥C</kbd> until Accessibility is granted.)</td></tr>
+    <tr><td>Talk hands-free</td><td>Say “Hey JARVIS” when the Mac is <b>plugged in</b>. On battery the wake word is off to save power, by your choice.</td></tr>
+    <tr><td>Continue the conversation</td><td>Just keep talking for ~6 seconds after a reply. No wake word needed.</td></tr>
+    <tr><td>Interrupt it while speaking</td><td>Hold <kbd>⌥⇧C</kbd> or say “Hey JARVIS”. It stops talking and listens.</td></tr>
+    <tr><td>Stop everything immediately</td><td><kbd>⌃⌥⌘.</kbd> (Control-Option-Command-Period), say “stop” or “never mind”, press Esc in its window, or use the menu.</td></tr>
+    <tr><td>Answer its questions</td><td>Say “yes”/“no” (or the answer), or click Yes/No on the HUD pill.</td></tr>
+    <tr><td>Type instead of talk</td><td>Click the menu-bar icon and type in the box.</td></tr>
+    <tr><td>See what it’s doing</td><td>Menu-bar icon → Command Center → Live: each step, result and timing.</td></tr>
+    <tr><td>Change power mode</td><td>Say “switch to battery saver mode”, or use the popover’s Saver / Balanced / Max buttons.</td></tr>
+    <tr><td>Mute the microphone</td><td>Say “stop listening”, or popover → Mute mic. Holding the talk key still works.</td></tr>
+  </table>
+  <img class="shot" src="../screenshots/ui-hud.png" style="width:78%; margin: 6pt auto 0">
+  <div class="shotcap" style="text-align:center">The HUD pill: appears at the top of the screen only while JARVIS is listening, thinking or speaking.</div>
+  <div class="grid2" style="grid-template-columns: 1fr 1.9fr; align-items:start">
+    <div><img class="shot" src="../screenshots/ui-compact.png"><div class="shotcap">Menu-bar popover.</div></div>
+    <div><img class="shot" src="../screenshots/ui-live.png"><div class="shotcap">Command Center → Live: tasks, conversation and activity log.
+      Screenshots are from a test run against the simulated computer.</div></div>
+  </div>
+</section>
+
+<!-- ======================= VOICE ======================= -->
+<section class="section">
+  <div class="kicker">Section 5</div>
+  <h1>Capabilities: voice</h1>
+  <table>
+    <tr><th style="width:30%">Feature</th><th>Details</th></tr>
+    <tr><td>Wake word</td><td>“Hey JARVIS” (openWakeWord <i>hey_jarvis</i> model). Active only on AC power by default. Options: always,
+      AC only, except Battery Saver, never. Adjustable sensitivity. A silence filter skips the neural network while the room is quiet.</td></tr>
+    <tr><td>Push-to-talk</td><td>Hold <kbd>⌥⇧C</kbd>, works in every power mode. Records exactly while held.</td></tr>
+    <tr><td>Speech recognition</td><td>Whisper on-device. large-v3-turbo on the M4 Pro GPU (Balanced/Max) or small (Battery Saver). Primed with your
+      shortcut names and common terms (JARVIS, Arc, IB, Canvas). Filters Whisper’s known phantom phrases on silence.</td></tr>
+    <tr><td>End-of-speech detection</td><td>Stops recording after ~0.75 s of silence (adjustable), with a 15 s maximum. Cancels if you say nothing.</td></tr>
+    <tr><td>Voice</td><td>Kokoro neural voice, default <b>George</b> (British male, composed). Nine alternatives (British/American, male/female),
+      adjustable speed, preview button. Falls back to macOS’s built-in Daniel voice.</td></tr>
+    <tr><td>Speaking style</td><td>Simple commands get a short functional reply (“Opening Spotify.”). Complex, multistep or conversational
+      requests get a polite, dry-witted, JARVIS-like reply that occasionally says “sir”. No markdown or URLs read aloud.</td></tr>
+    <tr><td>Fast replies</td><td>Speech starts after the first sentence is synthesized while the rest is still being generated.</td></tr>
+    <tr><td>Follow-ups</td><td>Hands-free listening window after each reply (default 6 s, adjustable, can be turned off).</td></tr>
+    <tr><td>Questions and confirmations</td><td>JARVIS can ask you something mid-task (“What’s the web address?”, “Shall I submit?”) and take your answer
+      by voice or a click.</td></tr>
+    <tr><td>Interruption</td><td>Talk key or wake word cuts it off mid-sentence. A new instruction replaces the current task.</td></tr>
+    <tr><td>Progress updates</td><td>For tasks longer than ~8 s it says brief progress lines (“Reading the page.”), at most every 25 s.</td></tr>
+    <tr><td>Privacy controls</td><td>Mute mic, choose the microphone, chime on/off. Audio is never saved to disk.</td></tr>
+    <tr><td>Offline</td><td>All voice processing works without internet.</td></tr>
+  </table>
+
+</section>
+<section class="section">
+  <div class="kicker">Section 6</div>
+  <h1>Capabilities: instant commands</h1>
+  <p>Recognized by plain code, with no AI model and a near-instant reply. Variations are tolerated: “could you…”, “please”, “Hey JARVIS” prefixes,
+  “I.B.” or “i b” for “IB”.</p>
+  <table>
+    <tr><th style="width:44%">Say…</th><th>Effect</th></tr>
+    <tr><td>“Open / launch / start <i>Spotify</i>”</td><td>Opens any installed app (fuzzy name matching, e.g. “VS Code”), verifies it launched.</td></tr>
+    <tr><td>“Switch to / show <i>Notes</i>”</td><td>Brings the app forward.</td></tr>
+    <tr><td>“Quit / close <i>Spotify</i>”</td><td>Quits the app and verifies.</td></tr>
+    <tr><td>“Go to youtube.com”, “open wikipedia dot org”</td><td>Opens the site in your browser and waits until it has loaded.</td></tr>
+    <tr><td>“Open <i>name</i>” for a site you told it to remember</td><td>Opens that saved website.</td></tr>
+    <tr><td>“Click <i>assignments</i>”, “go to the <i>grades</i> tab”</td><td>Finds the link or button on the current page and clicks it, but only if the match is unambiguous.
+      Otherwise the AI takes over.</td></tr>
+    <tr><td>“Scroll down / up”, “scroll to the top / bottom”, “page down”</td><td>Scrolls the page, including pages that scroll an inner panel.</td></tr>
+    <tr><td>“Go back”, “go forward”, “refresh”, “new tab”, “close this tab”</td><td>Browser navigation.</td></tr>
+    <tr><td>“Type <i>Hello, world</i>”</td><td>Types the text (keeps capitals and punctuation).</td></tr>
+    <tr><td>“Press command T”</td><td>Presses that key combination.</td></tr>
+    <tr><td>“Volume up / down”, “set volume to 30”, “mute”, “unmute”</td><td>System volume.</td></tr>
+    <tr><td>“Lock my screen”, “turn off the display”</td><td>Locks the Mac / sleeps the display.</td></tr>
+    <tr><td>“What time is it?”, “What’s the date?”, “What’s my battery?”</td><td>Spoken answer.</td></tr>
+    <tr><td>“Switch to battery saver / balanced / max performance mode”</td><td>Changes power mode.</td></tr>
+    <tr><td>“Remember that …”, “What do you remember about …”, “Forget …”</td><td>Saves, recalls or deletes a memory.</td></tr>
+    <tr><td>“Create a shortcut called …”, “Whenever I say X, do Y”</td><td>Starts the shortcut-creation conversation.</td></tr>
+    <tr><td>“List my shortcuts”, “Delete the shortcut called …”</td><td>Lists them, or deletes one after you confirm.</td></tr>
+    <tr><td>“Stop listening”</td><td>Turns the microphone off. The talk key still works.</td></tr>
+    <tr><td>“Stop”, “cancel”, “never mind”</td><td>Halts the current task and speech immediately.</td></tr>
+  </table>
+</section>
+
+<!-- ======================= SHORTCUTS ======================= -->
+<section class="section">
+  <div class="kicker">Section 7</div>
+  <h1>Capabilities: voice shortcuts</h1>
+  <p>Your own spoken phrases that run a saved sequence of actions instantly, without AI. Each shortcut has a name, one or more
+  trigger phrases, ordered steps, an optional spoken confirmation, and a rule for failures: <b>let the AI finish it</b> (default),
+  <b>stop and tell me</b>, or <b>skip and continue</b>.</p>
+  <div class="grid2">
+    <div class="card"><h3>Creating and managing</h3><ul>
+      <li><b>By voice:</b> “Create a shortcut called Open My IB” → “What should it do?” → “Open Arc and go to this URL” (uses the page you have open,
+      or a link on your clipboard; JARVIS never invents a URL). It reads the draft back and saves on “yes”.</li>
+      <li>“Whenever I say study mode, open these sites, turn on Do Not Disturb and arrange my windows.”</li>
+      <li>Descriptions it can’t parse itself are converted by the local AI, then validated, read back and confirmed.</li>
+      <li><b>Visual editor:</b> add, reorder and delete steps, edit triggers, test-run, enable/disable, raw JSON view.</li>
+      <li>Edit, delete, import/export (JSON file), execution history with per-step results and timing.</li>
+      <li>Saved in the local database, so they survive restarts.</li></ul></div>
+    <div class="card"><h3>Smart behaviour</h3><ul>
+      <li><b>Parameters:</b> “search youtube for {query}” → “search youtube for lo-fi beats”.</li>
+      <li><b>Multiple trigger phrases</b> per shortcut. Tolerant matching, but short phrases must match exactly so “open arc” never fires “open ib”.</li>
+      <li><b>Waits and verification:</b> wait for the page to load, for text to appear, for an app to start; check the address.</li>
+      <li><b>Branches:</b> if/else on conditions.</li>
+      <li><b>Reusable blocks:</b> one shortcut can run another.</li>
+      <li><b>Retries:</b> page and click steps retry automatically.</li>
+      <li><b>Follow-ups:</b> after a shortcut, keep talking (“click assignments”, “scroll down”, “what does this page say?”).</li></ul></div>
+  </div>
+  <h3 style="break-before: page; margin-top:0">All shortcut step types</h3>
+  <table>
+    <tr><th style="width:24%">Step</th><th>What it does</th></tr>
+    <tr><td>open_url</td><td>Open a web address in Arc (or another browser), new tab or current, wait until loaded, verify where it landed (detects login redirects).</td></tr>
+    <tr><td>open_app · focus_app · quit_app</td><td>Launch, bring forward or quit an app.</td></tr>
+    <tr><td>browser</td><td>Back, forward, reload, new tab, close tab.</td></tr>
+    <tr><td>click · type · keys · scroll · menu</td><td>Click a named button/link (page or app), type text into a named field (optionally submit), press a key combo, scroll, choose a menu item (“File &gt; New Window”).</td></tr>
+    <tr><td>wait · wait_for · verify</td><td>Pause, or wait for/check: page ready, address or title contains, text on page, element present, app running/frontmost, file exists.</td></tr>
+    <tr><td>if</td><td>Run different steps depending on a condition.</td></tr>
+    <tr><td>run_shortcut · set</td><td>Call another shortcut (with parameters); set a variable.</td></tr>
+    <tr><td>agent</td><td>Hand an unpredictable step to the AI (“find the newest announcement”).</td></tr>
+    <tr><td>open_file · reveal_file · move_file</td><td>Open a file (optionally in a given app), show it in Finder, move it (never overwrites).</td></tr>
+    <tr><td>arrange_windows</td><td>Tile apps: halves, thirds, columns, maximize, left, right.</td></tr>
+    <tr><td>macos_shortcut</td><td>Run a Shortcuts-app shortcut, e.g. to turn on Do Not Disturb/Focus (macOS has no other way).</td></tr>
+    <tr><td>volume · say · notify</td><td>Set volume; speak a sentence; show a notification.</td></tr>
+    <tr><td>applescript · shell</td><td>Run a script or command. Allowed directly only in shortcuts you wrote in the editor. Ones created by voice, AI or import
+      ask you first. Shell commands outside a short read-only allow-list always ask.</td></tr>
+  </table>
+</section>
+
+<!-- ======================= AGENT ======================= -->
+<section class="section">
+  <div class="kicker">Section 8</div>
+  <h1>Capabilities: the AI agent</h1>
+  <p>For anything not covered by built-ins or shortcuts, the on-device model (Qwen3.5) works through the task in a bounded loop:
+  <b>observe → decide one step → act → verify → continue</b>. It doesn’t guess a long chain of clicks up front.</p>
+  <div class="grid2">
+    <div class="card"><h3>How it stays reliable</h3><ul>
+      <li>Looks at the actual page/app (its links, buttons and fields by ID) before acting, and checks the result after.</li>
+      <li>Invalid or failed actions are reported back to the model so it can try another way. It is nudged after 3 identical attempts and
+      stopped after 5, or after 5 consecutive failures.</li>
+      <li>Step limits: 8 (Battery Saver) / 20 (Balanced) / 40 (Max). Time limits: 90 s / 5 min / 15 min.</li>
+      <li>Asks you a short question when information is missing or the request is ambiguous.</li>
+      <li>Finishes with a short spoken summary, and says plainly when it couldn’t finish.</li>
+      <li>Cancellable at any moment.</li></ul></div>
+    <div class="card"><h3>What it knows when it starts</h3><ul>
+      <li>Time, power mode, frontmost app.</li>
+      <li>The current browser tab (title and address).</li>
+      <li>Relevant saved memories, labelled “you told me” or “inferred”.</li>
+      <li>Your shortcut names.</li>
+      <li>The recent conversation and the last list of results (for “open the second one”).</li>
+      <li>Only the tools the request plausibly needs (smaller prompt, faster, less energy).</li></ul></div>
+  </div>
+  <h3>The agent’s 25 tools</h3>
+  <table>
+    <tr><th style="width:26%">Area</th><th>Tools</th></tr>
+    <tr><td>Seeing</td><td><b>observe</b> (page or app: address, visible text, interactive elements) · <b>read_page</b> (full page text) ·
+      <b>look_at_screen</b> (screenshot interpreted by the model, or Apple’s text recognition)</td></tr>
+    <tr><td>Acting</td><td><b>open_app</b> · <b>open_url</b> · <b>click</b> (by element or text) · <b>type_text</b> · <b>press_keys</b> · <b>scroll</b> ·
+      <b>browser_nav</b> · <b>menu</b> · <b>click_screen_text</b> (last resort, via on-screen text) · <b>wait</b></td></tr>
+    <tr><td>Files</td><td><b>search_files</b> · <b>list_folder</b> · <b>read_file</b> (PDF, Word, PowerPoint, Excel, text, code) · <b>move_file</b> ·
+      <b>make_folder</b> · <b>find_duplicates</b> · <b>trash_files</b> (always confirms; uses the Trash, never permanent delete)</td></tr>
+    <tr><td>You and memory</td><td><b>ask_user</b> · <b>remember</b> · <b>recall</b> · <b>run_shortcut</b> · <b>done</b></td></tr>
+  </table>
+  <h3>Examples it is built for</h3>
+  <ul>
+    <li>“Open the most recent assignment, read the instructions and tell me what I need to do.”</li>
+    <li>“Open Canvas, look through my upcoming assignments and make a list.”</li>
+    <li>“Go through my Downloads folder, find duplicate files and organize the research papers.”</li>
+    <li>“Find all my resumes and tell me which is the most recent.”</li>
+    <li>“What’s on my screen?” · “Navigate this website and find the opening hours.”</li>
+  </ul>
+</section>
+
+<!-- ======================= MAC CONTROL + MEMORY ======================= -->
+<section class="section">
+  <div class="kicker">Section 9</div>
+  <h1>Capabilities: controlling your Mac</h1>
+  <table>
+    <tr><th style="width:24%">Area</th><th>How JARVIS does it</th></tr>
+    <tr><td>Your browser</td><td>Drives <b>your real Arc</b> (so you stay logged in to school portals): new tabs, navigation, waiting for pages, reading
+      text, listing every clickable element (including inside web components), clicking, filling fields (works with modern web apps), scrolling the right
+      panel. Also supports Chrome, Brave, Edge and Safari.</td></tr>
+    <tr><td>Native apps</td><td>Reads the app’s Accessibility tree (buttons, fields, lists) and presses, fills or selects by name. Navigates menus. Positions and resizes windows.</td></tr>
+    <tr><td>Keyboard and mouse</td><td>Key combinations, typing any text (including emoji), clicks and scrolling.</td></tr>
+    <tr><td>Screen</td><td>Screenshots (deleted immediately after use), on-device text recognition with positions, and visual questions answered by the model.</td></tr>
+    <tr><td>System</td><td>Volume and mute, lock screen, display sleep, battery status, notifications, running Shortcuts-app shortcuts, opening and revealing files.</td></tr>
+    <tr><td>Fallback order</td><td>Structured page/app data first → Accessibility tree → screenshot + text recognition. If an app blocks automation, JARVIS reports it.</td></tr>
+  </table>
+
+  <h1 style="margin-top:14pt">Capabilities: memory and file search</h1>
+  <div class="grid2">
+    <div class="card"><h3>Memory</h3><ul>
+      <li>Remembers what you explicitly tell it (“Remember that…”): preferences, projects, file locations, websites, standing instructions.</li>
+      <li>Keeps <b>explicit</b> memories separate from <b>inferred</b> guesses, which are labelled with a confidence.</li>
+      <li>Also stores your shortcuts, task history with outcomes, and an activity log.</li>
+      <li>Searchable, editable, deletable and exportable (JSON) in Command Center → Memory.</li>
+      <li>Never claims to remember something that isn’t stored.</li>
+      <li>Stored only on your Mac, and survives restarts.</li></ul></div>
+    <div class="card"><h3>File search</h3><ul>
+      <li>Covers your <b>whole home folder</b> (your choice). Hidden folders, ~/Library, keychains, password vaults, apps and media libraries are excluded.</li>
+      <li>Reads PDFs, Word, PowerPoint, Excel/CSV, text, Markdown, code, notebooks, and text inside screenshots/images.</li>
+      <li>Combines three searches: <b>Spotlight</b> (always current), <b>keyword</b> search of contents, and <b>meaning-based</b> search.</li>
+      <li>Filters by type and date, understands “last month” and “most recent”.</li>
+      <li>Results show the file path and a matching snippet, with Open / Show in Finder.</li>
+      <li>Finds exact duplicate files.</li>
+      <li>Indexing is incremental (only changed files) and runs while charging at low priority, unless you start it yourself.</li></ul></div>
+  </div>
+</section>
+
+<!-- ======================= POWER + SAFETY ======================= -->
+<section class="section">
+  <div class="kicker">Section 11</div>
+  <h1>Battery and performance modes</h1>
+  <table>
+    <tr><th></th><th>Battery Saver</th><th>Balanced</th><th>Max Performance</th></tr>
+    <tr><td>Used automatically</td><td>on battery ≤ 30%</td><td>on battery</td><td>plugged in</td></tr>
+    <tr><td>AI model</td><td>Qwen3.5 4B, unloaded 30 s after use</td><td>Qwen3.5 9B, kept 5 min</td><td>Qwen3.5 9B with deeper thinking, kept 30 min</td></tr>
+    <tr><td>Speech recognition</td><td>Whisper small</td><td>Whisper large-v3-turbo</td><td>Whisper large-v3-turbo</td></tr>
+    <tr><td>Agent limits</td><td>8 steps</td><td>20 steps</td><td>40 steps</td></tr>
+    <tr><td>Screenshot understanding</td><td>off (text recognition only)</td><td>on</td><td>on</td></tr>
+    <tr><td>Preload AI on wake word</td><td>no</td><td>yes</td><td>yes</td></tr>
+    <tr><td>File indexing</td><td>never</td><td>while charging</td><td>while charging</td></tr>
+    <tr><td>Animations</td><td>none</td><td>normal</td><td>full</td></tr>
+  </table>
+  <ul>
+    <li><b>Idle on battery:</b> microphone closed, no AI model generating, no screenshots, no indexing, no regular background polling. The Mac sleeps normally;
+    JARVIS holds no sleep-prevention lock unless you enable “keep awake during long tasks”.</li>
+    <li>Mode changes never interrupt a task you started. They apply when it finishes. A manual choice holds until you plug in or unplug.</li>
+    <li>Sleep pauses the microphone and indexing, and waking restores them.</li>
+  </ul>
+  <div class="callout warn"><b>Not yet measured on your Mac</b>The target is under 0.5 W of extra power while idle with the wake word on, and essentially zero on battery
+    with hotkey only. These are design targets, not measurements. The built-in profiler measures them against a JARVIS-off baseline (section 14).</div>
+
+  <h1 style="margin-top:14pt">Safety and privacy</h1>
+  <ul>
+    <li><b>Always asks first</b> before purchases or payments, moving files to the Trash, and running scripts it didn’t get from you.</li>
+    <li><b>Asks unless you said it yourself</b> before submit, send, post, delete, confirm and similar buttons. “Click submit” from you runs directly; the AI
+    deciding to click Submit asks first.</li>
+    <li><b>Never</b> controls blocked apps (Terminal, Keychain Access, iTerm by default), opens <code>javascript:</code>/<code>file:</code> links, or
+    overwrites files.</li>
+    <li><b>Websites and documents can’t give orders.</b> Their content is marked as untrusted data, and the safety rules are enforced in code, so a malicious
+    page can at most suggest an action that still needs your approval. This was tested: an injected “delete ~/Documents” on a page was ignored.</li>
+    <li><b>Local only.</b> The control channel accepts only your Mac and requires a secret that changes on every launch, so websites can’t control JARVIS. No
+    audio or screen recordings are kept. Any optional API keys go in the macOS Keychain.</li>
+    <li>Every action is written to the activity log you can read in Command Center.</li>
+  </ul>
+</section>
+
+<!-- ======================= UI + TOOLS ======================= -->
+<section class="section">
+  <div class="kicker">Section 13</div>
+  <h1>The interface</h1>
+  <p>Dark, minimal and HUD-inspired: deep charcoal, cyan highlights, orange only for warnings and questions. Animations run only while JARVIS is active
+  and turn off in Battery Saver or with Reduce Motion.</p>
+  <table>
+    <tr><th style="width:24%">Part</th><th>What’s there</th></tr>
+    <tr><td>HUD pill</td><td>Top-center, only while active: status light (cyan listening, blue thinking, orange question), what you said, what it’s doing, Yes/No buttons.</td></tr>
+    <tr><td>Menu-bar popover</td><td>Status, command box, power-mode switch, model and battery chips, recent tasks, Mute, Stop, Command Center.</td></tr>
+    <tr><td>Right-click menu</td><td>Command Center, power mode, mute, emergency stop, Launch at Login, restart service, quit.</td></tr>
+    <tr><td>Command Center</td><td><b>Live</b> (current task step by step, conversation, recent tasks, activity log) · <b>Dashboard</b> (status orb, power, model, voice, files, quick
+      shortcut buttons) · <b>Shortcuts</b> (editor) · <b>Memory</b> · <b>Search</b> · <b>Settings</b> (power, voice, local AI, files, browser and safety, permissions).</td></tr>
+  </table>
+  <img class="shot" src="../screenshots/ui-shortcuts.png" style="width:46%; margin: 2pt auto 0">
+  <div class="shotcap" style="text-align:center">Shortcut editor with “Open My IB” (example URL from a test).</div>
+
+  <h1 style="margin-top:12pt">Tools for checking and tuning</h1>
+  <p class="muted">Full form: <code>/Applications/JARVIS.app/Contents/Resources/python/bin/python3 -m jarvis doctor</code> (likewise for the others; the power profiler needs <code>sudo</code>).</p>
+  <table>
+    <tr><th style="width:28%">Command (run in Terminal)</th><th>Purpose</th></tr>
+    <tr><td><code>jarvis doctor</code></td><td>Confirms your hardware and macOS (M4 Pro, 24 GB, 15.7.3), battery health, packages, models, microphone and permissions.</td></tr>
+    <tr><td><code>jarvis.acceptance</code></td><td>Walks through all 40 acceptance tests on the real app and records evidence to <code>docs/ACCEPTANCE_RESULTS.md</code>.</td></tr>
+    <tr><td><code>jarvis bench</code></td><td>Compares local AI models on real JARVIS tasks (accuracy, consistency, speed) to choose or upgrade models.</td></tr>
+    <tr><td><code>jarvis.powerprof</code></td><td>Measures real power (chip and whole-system battery drain) for 10 scenarios vs. a JARVIS-off baseline.</td></tr>
+    <tr><td><code>jarvis.voice.selftest</code></td><td>Tests wake word → speech recognition → command understanding with real models, no microphone.</td></tr>
+  </table>
+</section>
+
+<!-- ======================= VERIFICATION ======================= -->
+<section class="section">
+  <div class="kicker">Section 15</div>
+  <h1>What has been verified</h1>
+  <p>JARVIS was developed in a Linux cloud environment with <b>no access to your MacBook</b>. Everything that could be tested there was tested for real.
+  Everything that needs macOS is written but <b>not yet run</b>. No simulated result is counted as a pass.</p>
+  <table>
+    <tr><th style="width:42%">Area</th><th style="width:14%">Status</th><th>Evidence</th></tr>
+    <tr><td>Routing, shortcuts, agent loop, memory, safety, power logic</td><td><span class="tag t-ok">tested</span></td><td>78 automated tests pass, including “open my IB” → “go to the assignments” → “scroll down” → “go back” with zero AI calls.</td></tr>
+    <tr><td>Arc page-control code (find, click, type, scroll, read)</td><td><span class="tag t-ok">tested</span></td><td>8/8 in a real Chromium browser (the engine Arc uses).</td></tr>
+    <tr><td>Voice pipeline with real models</td><td><span class="tag t-ok">tested</span></td><td>6/6: wake word detected for 4 different voices, no false triggers, exact transcripts, correct commands. Silence filter: 0 of 375 frames processed.</td></tr>
+    <tr><td>AI agent with a real local model</td><td><span class="tag t-ok">tested</span></td><td>Qwen3.5-4B: 11/11 JARVIS tasks, 0 invalid actions (one run per case, on a simulated computer).</td></tr>
+    <tr><td>File indexing and search</td><td><span class="tag t-ok">tested</span></td><td>Real files: relevance, recency, duplicates, exclusions, incremental updates.</td></tr>
+    <tr><td>Interface</td><td><span class="tag t-ok">tested</span></td><td>Rendered and checked in a browser (screenshots in this document).</td></tr>
+    <tr><td>Native Mac app (Swift)</td><td><span class="tag t-part">partial</span></td><td>Passes the Swift syntax check; supervisor code type-checks. An independent review found 13 possible issues; 11 were fixed, and 2 low-confidence notes remain to check on the Mac. Full compile needs your Mac.</td></tr>
+    <tr><td>Arc via AppleScript, Accessibility, keyboard/mouse, screenshots</td><td><span class="tag t-no">not run</span></td><td>Needs macOS.</td></tr>
+    <tr><td>Microphone, speaker, GPU speech recognition</td><td><span class="tag t-no">not run</span></td><td>Needs macOS.</td></tr>
+    <tr><td>Power and battery measurements</td><td><span class="tag t-no">not run</span></td><td>Needs your MacBook; profiler provided.</td></tr>
+    <tr><td>The 40 acceptance tests</td><td><span class="tag t-no">0 of 40 run</span></td><td>Runner provided; results will be recorded on your Mac.</td></tr>
+  </table>
+
+</section>
+<section class="section">
+  <div class="kicker">Section 16</div>
+  <h1>Known limitations</h1>
+  <ul>
+    <li><b>First build may need fixes.</b> The Mac-specific code has never been compiled or run on a Mac.</li>
+    <li><b>Wake phrase is “Hey JARVIS”.</b> “JARVIS” alone may not trigger it; use the talk key. Similar-sounding phrases can come close (“Hey Travis” scored 0.48
+    vs. a 0.5 threshold), so tune sensitivity for your voice and room. The wake-word model is licensed for personal, non-commercial use.</li>
+    <li><b>The orange microphone dot</b> shows whenever the wake word is listening (on AC power).</li>
+    <li><b>No echo cancellation:</b> interrupt with the talk key or wake word, not by just talking over it.</li>
+    <li><b>Local AI is not frontier AI.</b> Long, ambiguous, multi-site tasks will sometimes fail, and it reports failures. The first AI step of each task takes
+    noticeably longer than follow-up steps.</li>
+    <li><b>Some web content is unreachable</b> by page control: other-site embedded frames, canvas-drawn apps. Screenshot fallback is slower.</li>
+    <li><b>Main display only</b> for screenshots and text recognition.</li>
+    <li><b>Do Not Disturb</b> requires a one-time Shortcuts-app shortcut named “JARVIS Focus On”.</li>
+    <li><b>Rebuilding the app resets macOS permissions</b> unless you sign it with a fixed local certificate (explained in docs/SETUP.md).</li>
+    <li><b>Arc is in maintenance mode</b> from its maker. JARVIS also supports Chrome, Brave, Edge and Safari.</li>
+  </ul>
+</section>
+
+<!-- ======================= SPECS ======================= -->
+<section class="section">
+  <div class="kicker">Section 17</div>
+  <h1>Technical specifications</h1>
+  <table>
+    <tr><th style="width:30%">Item</th><th>Value</th></tr>
+    <tr><td>Platform</td><td>Apple Silicon Mac, macOS 14+ (built for M4 Pro, 24 GB, macOS 15.7.3)</td></tr>
+    <tr><td>Language model</td><td>Qwen3.5 9B (Balanced/Max) and 4B (Battery Saver) via Ollama, Apache-2.0. One model handles both reasoning and screenshots.</td></tr>
+    <tr><td>Embeddings (meaning search)</td><td>EmbeddingGemma 300M via Ollama</td></tr>
+    <tr><td>Speech recognition</td><td>Whisper large-v3-turbo / small via MLX (Apple GPU), MIT</td></tr>
+    <tr><td>Voice</td><td>Kokoro-82M (int8), voice George; fallback macOS Daniel</td></tr>
+    <tr><td>Wake word</td><td>openWakeWord “hey_jarvis” (model CC BY-NC-SA 4.0, personal use)</td></tr>
+    <tr><td>App</td><td>Native Swift menu-bar app + Python 3.12 service embedded in JARVIS.app (~1 GB) + web interface</td></tr>
+    <tr><td>Disk</td><td>~12 GB total including models</td></tr>
+    <tr><td>Memory in use</td><td>Idle: small (models unloaded). During AI tasks: ~7 GB for the 9B model, ~1.6 GB for speech recognition while loaded.</td></tr>
+    <tr><td>Your data</td><td><code>~/Library/Application Support/JARVIS</code> (database, settings, voice model) · logs in <code>~/Library/Logs/JARVIS</code></td></tr>
+    <tr><td>Cost</td><td>Free. All components are open source or free; no accounts or subscriptions.</td></tr>
+    <tr><td>Internet</td><td>Setup only (model downloads), plus whatever online tasks you ask for</td></tr>
+    <tr><td>Changing models</td><td>Settings → Local AI. Benchmark first with <code>jarvis bench</code>. Nothing else changes.</td></tr>
+  </table>
+
+  <h2>Where to read more</h2>
+  <table>
+    <tr><td style="width:30%"><code>START_HERE.md</code></td><td>The setup steps from section 3</td></tr>
+    <tr><td><code>docs/SETUP.md</code></td><td>Permissions, the IB shortcut, Do Not Disturb, updating</td></tr>
+    <tr><td><code>docs/ARCHITECTURE.md</code></td><td>How the pieces fit, and how to extend JARVIS</td></tr>
+    <tr><td><code>docs/MODELS.md</code></td><td>Model choice, benchmark results, upgrading</td></tr>
+    <tr><td><code>docs/POWER.md</code></td><td>Battery design and how to measure it</td></tr>
+    <tr><td><code>docs/TESTING.md</code> · <code>docs/LIMITATIONS.md</code></td><td>Test results and known limitations</td></tr>
+    <tr><td><code>docs/JOURNAL.md</code></td><td>Decisions, status and next steps for future development sessions</td></tr>
+  </table>
+</section>
+
+</body>
+</html>

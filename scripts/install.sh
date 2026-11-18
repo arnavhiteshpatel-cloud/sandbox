@@ -23,7 +23,7 @@ if [[ ! -d /Applications/Ollama.app ]] && ! command -v ollama >/dev/null; then
 fi
 open -g -a Ollama || true
 
-./scripts/build_app.sh
+bash scripts/build_app.sh
 
 echo "==> Installing to /Applications"
 if [[ -d /Applications/JARVIS.app ]]; then
