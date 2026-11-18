@@ -148,7 +148,12 @@ class VoiceLoop:
 
             threading.Thread(target=produce, daemon=True).start()
             while True:
-                item = q.get()
+                try:
+                    item = q.get(timeout=0.05)   # poll so "stop" never waits for the next sentence to synthesize
+                except queue.Empty:
+                    if self._speak_stop.is_set():
+                        return False
+                    continue
                 if item is None:
                     return True
                 if isinstance(item, Exception):
@@ -165,10 +170,13 @@ class VoiceLoop:
             threading.Thread(target=self.player.play, args=(chime(kind), 24000), daemon=True).start()
 
     # --- the loop ------------------------------------------------------------------------
+    def _barge_in_enabled(self) -> bool:
+        return bool(self.settings.get("voice.barge_in", True)) and self.tts.backend == "kokoro" and not self.muted
+
     def _want_mic(self) -> bool:
         if self.muted:
             return self._capture_req is not None and self._capture_req["kind"] in ("ptt", "ask")
-        return self.wake_enabled or self._capture_req is not None
+        return self.wake_enabled or self._capture_req is not None or (self.speaking and self._barge_in_enabled())
 
     def _run(self) -> None:
         while self._running:
@@ -190,7 +198,17 @@ class VoiceLoop:
                     self._handle_capture(req)
                     continue
                 frame = self.mic.read(timeout=0.5)
-                if frame is None or not self.wake_enabled:
+                if frame is None:
+                    continue
+                if self.speaking and self._barge_in_enabled() and self._barge_check(frame):
+                    log.info("barge-in: user started talking over JARVIS")
+                    self.stop_speaking()
+                    self.events.emit("barge_in")
+                    self._request("barge", timeout=4.0)
+                    continue
+                if not self.speaking:
+                    self._barge_reset()
+                if not self.wake_enabled:
                     continue
                 score = self.wake.process(frame)
                 if score is not None:
@@ -236,11 +254,43 @@ class VoiceLoop:
             return
         asyncio.run_coroutine_threadsafe(self.on_utterance(text, {"source": kind, "stt_ms": result["ms"]}), self.loop)
 
+    # --- barge-in: notice the user talking over JARVIS's own voice ------------------------------------
+    def _barge_reset(self) -> None:
+        self._echo_samples: list[float] = []
+        self._barge_hits = 0
+        self._barge_pre = RingBuffer(0.6)
+        self._speak_t0 = None
+
+    def _barge_check(self, frame: np.ndarray) -> bool:
+        """Compare mic level with what we're playing. Our own voice leaks into the mic at a roughly constant
+        ratio, learned during the first ~0.8 s of each reply; sustained energy well above that is the user."""
+        if not hasattr(self, "_barge_hits"):
+            self._barge_reset()
+        if self._speak_t0 is None:
+            self._speak_t0 = time.monotonic()
+        self._barge_pre.add(frame)
+        mic = float(np.sqrt(np.mean((frame.astype(np.float32) / 32768.0) ** 2)))
+        out = self.player.level
+        noise = max(self.wake.noise_floor, 0.002)
+        if time.monotonic() - self._speak_t0 < 0.8:      # learn the echo ratio
+            if out > 0.02:
+                self._echo_samples.append(mic / out)
+            return False
+        ratio = float(np.median(self._echo_samples)) if self._echo_samples else 0.5
+        expected = ratio * out
+        loud = mic > max(expected * 2.5, noise * 6, 0.02)
+        self._barge_hits = self._barge_hits + 1 if loud else max(0, self._barge_hits - 1)
+        return self._barge_hits >= 4                     # ~320 ms of sustained speech
+
     def _capture(self, kind: str, timeout: float) -> np.ndarray | None:
         """Record until end of speech (VAD) or PTT release. Returns float32 audio or None."""
         frames: list[np.ndarray] = []
         noise = max(self.wake.noise_floor, 0.002)
         started = False
+        if kind == "barge":   # the user is already talking: keep what they said over JARVIS
+            frames.extend(getattr(self, "_barge_pre", RingBuffer(0.1)).get())
+            started = True
+            self._barge_reset()
         silence_ms = 0
         end_ms = int(self.settings.get("voice.end_silence_ms", 750))
         max_s = float(self.settings.get("voice.max_utterance_s", 15))

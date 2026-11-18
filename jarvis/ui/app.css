@@ -36,7 +36,8 @@ kbd { font: 11px var(--mono); padding: 1px 5px; border: 1px solid var(--line2); 
 
 /* views selected by <html data-view> */
 #hud, #compact, #center { display: none; }
-[data-view="hud"] body { background: transparent; }
+/* HUD: fully transparent window so only the pill is visible (no box behind it) */
+html[data-view="hud"], html[data-view="hud"] body { background: transparent !important; overflow: hidden; }
 [data-view="hud"] #hud { display: flex; }
 [data-view="compact"] #compact { display: flex; }
 [data-view="center"] #center { display: grid; }
@@ -64,8 +65,8 @@ textarea { font-family: var(--mono); font-size: 12px; width: 100%; }
 .seg button[data-mode="max_performance"].on { color: var(--orange); background: #2a1a0c; }
 
 /* ---------- HUD pill ---------- */
-#hud { height: 100%; align-items: flex-start; justify-content: center; padding: 10px; }
-.pill { display: flex; align-items: center; gap: 12px; min-width: 260px; max-width: 640px; padding: 10px 16px 10px 12px;
+#hud { height: 100%; align-items: flex-start; justify-content: center; padding: 8px 10px; background: transparent; }
+.pill { display: flex; align-items: center; gap: 12px; min-width: 260px; max-width: 660px; padding: 9px 16px 9px 12px; border-radius: 22px !important;
   background: rgba(8, 12, 16, .86); border: 1px solid rgba(56, 214, 255, .28); border-radius: 999px;
   box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 8px 30px rgba(0,0,0,.55), 0 0 24px rgba(56,214,255,.12);
   -webkit-backdrop-filter: blur(18px) saturate(140%); backdrop-filter: blur(18px) saturate(140%); }
@@ -74,7 +75,7 @@ textarea { font-family: var(--mono); font-size: 12px; width: 100%; }
   transform: scale(var(--level, 1)); transition: transform .08s linear; }
 .dot::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 1px solid rgba(56,214,255,.5); }
 .pill-text { min-width: 0; flex: 1; }
-.pill-line { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .1px; }
+.pill-line { font-size: 14px; line-height: 1.3; letter-spacing: .1px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .pill-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pill-sub:empty { display: none; }
 .pill-actions { display: flex; gap: 6px; }

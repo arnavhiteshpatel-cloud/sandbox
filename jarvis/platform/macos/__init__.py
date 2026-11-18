@@ -38,13 +38,22 @@ class MacComputer(Computer):
         if apps and time.time() - ts < 600:
             return apps
         names: set[str] = set()
-        for d in APP_DIRS:
+        for d in APP_DIRS + ["/Applications/Setapp", str(Path.home() / "Applications" / "Chrome Apps.localized")]:
             try:
                 for entry in os.scandir(d):
                     if entry.name.endswith(".app"):
                         names.add(entry.name[:-4])
             except OSError:
                 continue
+        # Spotlight knows apps installed anywhere (subfolders, other volumes, Setapp, etc.).
+        try:
+            out = subprocess.run(["mdfind", "kMDItemContentType == 'com.apple.application-bundle'"],
+                                 capture_output=True, text=True, timeout=8).stdout
+            for line in out.splitlines():
+                if line.endswith(".app") and "/Library/" not in line and ".app/" not in line[:-4]:
+                    names.add(os.path.basename(line)[:-4])
+        except Exception:
+            pass
         self._apps_cache = (time.time(), sorted(names))
         return self._apps_cache[1]
 

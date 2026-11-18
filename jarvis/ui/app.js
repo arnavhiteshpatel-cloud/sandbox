@@ -171,7 +171,7 @@ function route() {
   $$("#nav a").forEach(a => a.classList.toggle("active", a.getAttribute("href") === "#" + h));
   $$(".view").forEach(v => v.classList.toggle("active", v.id === "v-" + h));
   if (h === "shortcuts") loadShortcuts();
-  if (h === "memory") loadMemory();
+  if (h === "memory") { loadMemory(); loadLearned(); }
   if (h === "search") loadSearchStats();
   if (h === "settings") loadSettings();
   if (h === "dashboard") loadDashboard();
@@ -345,6 +345,15 @@ async function loadMemory() {
     $(".del", li).onclick = async () => { await api("DELETE", "/api/memory/" + id); li.remove(); };
   });
 }
+async function loadLearned() {
+  const ul = $("#lp-list"); if (!ul) return;
+  const rows = await api("GET", "/api/learned").catch(() => []);
+  const what = r => r.tool === "open_app" ? `open ${r.args.name}` : r.tool === "open_url" ? `open ${r.args.url}` :
+    r.tool === "run_shortcut" ? `run shortcut ${r.args.name}` : `${r.tool} ${JSON.stringify(r.args)}`;
+  ul.innerHTML = rows.map(r => `<li data-id="${r.id}"><span class="chip on">${r.uses}×</span><div class="body"><div>“${esc(r.phrase)}”</div>
+    <small class="muted">→ ${esc(what(r))}</small></div><button class="ghost sm del">Delete</button></li>`).join("") || `<li class="muted">Nothing learned yet.</li>`;
+  $$("#lp-list li[data-id]").forEach(li => $(".del", li).onclick = async () => { await api("DELETE", "/api/learned/" + li.dataset.id); loadLearned(); });
+}
 $("#m-q") && ($("#m-q").oninput = () => { clearTimeout(S.mt); S.mt = setTimeout(loadMemory, 200); });
 $("#m-add") && ($("#m-add").onsubmit = async e => { e.preventDefault(); const c = $("#m-new").value.trim(); if (!c) return;
   await api("POST", "/api/memory", { content: c, kind: $("#m-kind").value || undefined }); $("#m-new").value = ""; loadMemory(); });
@@ -406,6 +415,7 @@ async function loadSettings() {
     ${tog("Hands-free follow-ups (listen briefly after replies)", inputFor("voice.hands_free", s.voice.hands_free, { bool: 1 }))}
     ${fld("Follow-up window (seconds)", inputFor("voice.followup_seconds", s.voice.followup_seconds, { num: 1 }))}
     ${tog("Listening chime", inputFor("voice.chime", s.voice.chime, { bool: 1 }))}
+    ${tog("Interrupt JARVIS by talking over it", inputFor("voice.barge_in", s.voice.barge_in, { bool: 1 }))}
     ${fld("Microphone (blank = system default)", inputFor("voice.input_device", s.voice.input_device ?? ""))}
     <button class="sm" id="v-preview">Preview voice</button></section>
   <section class="panel"><h2>Local AI</h2>
@@ -416,6 +426,9 @@ async function loadSettings() {
     ${fld("Balanced model", inputFor("llm.models.balanced", s.llm.models.balanced, { list: "mlist" }))}
     ${fld("Max Performance model", inputFor("llm.models.max_performance", s.llm.models.max_performance, { list: "mlist" }))}
     ${fld("Embedding model (file search)", inputFor("llm.embed_model", s.llm.embed_model, { list: "mlist" }))}
+    ${fld("Slow “thinking” mode", inputFor("llm.think_policy", s.llm.think_policy, { select: { auto: "Automatic: only for complex requests, or when struggling", never: "Never (fastest)", always: "Always (slowest, most careful)" } }),
+      "Say “think carefully…” to force it, or “quickly…” to skip it, for one request.")}
+    ${tog("Internet lookups in the background (DuckDuckGo, Bing; no account)", inputFor("web.enabled", s.web.enabled, { bool: 1 }))}
     <div class="help">${avail.length ? "Installed: " + avail.map(esc).join(", ") : esc(models.error || "No models found.")} · Run <code>jarvis bench</code> to compare models on your Mac.</div></section>
   <section class="panel"><h2>Files &amp; search</h2>
     ${fld("Folders JARVIS may index (one per line)", inputFor("search.roots", s.search.roots, { lines: 1, rows: 3 }))}

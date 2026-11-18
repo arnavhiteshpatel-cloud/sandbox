@@ -221,6 +221,12 @@ def make_app(assistant, token: str, port: int) -> web.Application:
         return web.Response(text=a.memory.export(), content_type="application/json",
                             headers={"Content-Disposition": "attachment; filename=jarvis-memory.json"})
 
+    async def learned_list(request):
+        return J(a.learner.all())
+
+    async def learned_delete(request):
+        return J({"deleted": a.learner.delete(int(request.match_info["id"]))})
+
     # --- history, activity, search ---------------------------------------------------------------
     async def tasks(request):
         return J(a.db.recent_tasks(int(request.query.get("limit", 50))))
@@ -321,6 +327,8 @@ def make_app(assistant, token: str, port: int) -> web.Application:
     r.add_put("/api/memory/{id}", mem_update)
     r.add_delete("/api/memory/{id}", mem_delete)
     r.add_get("/api/memory-export", mem_export)
+    r.add_get("/api/learned", learned_list)
+    r.add_delete("/api/learned/{id}", learned_delete)
     r.add_get("/api/tasks", tasks)
     r.add_get("/api/activity", activity)
     r.add_get("/api/search", search)

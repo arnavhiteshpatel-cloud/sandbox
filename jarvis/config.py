@@ -14,6 +14,7 @@ from typing import Any
 from . import paths
 
 DEFAULTS: dict[str, Any] = {
+    "settings_version": 2,
     "assistant": {
         "name": "JARVIS",
         "user_name": "",              # optional
@@ -42,7 +43,7 @@ DEFAULTS: dict[str, Any] = {
         "embed_model": "embeddinggemma:300m",
         "num_ctx": 16384,
         "temperature": 0.2,
-        "think": False,                # Qwen3.5 thinking mode; enabled automatically in max mode
+        "think_policy": "auto",        # auto: fast by default, think for complex requests or when struggling | always | never
         "request_timeout_s": 180,
     },
     "voice": {
@@ -62,10 +63,11 @@ DEFAULTS: dict[str, Any] = {
         "tts_backend": "auto",         # auto | kokoro | say
         "tts_voice": "bm_george",      # Kokoro British male voice; `say` fallback uses Daniel
         "say_voice": "Daniel",
-        "tts_speed": 1.05,
+        "tts_speed": 1.25,
         "followup_seconds": 6.0,       # listen for a follow-up without the wake word
         "hands_free": True,
-        "end_silence_ms": 750,
+        "barge_in": True,              # interrupt JARVIS by simply talking over it (turn off if it cuts itself off)
+        "end_silence_ms": 600,
         "max_utterance_s": 15,
         "muted": False,
         "chime": True,
@@ -79,6 +81,9 @@ DEFAULTS: dict[str, Any] = {
     "browser": {
         "default": "Arc",              # Arc | Google Chrome | Safari | Brave Browser | Microsoft Edge
         "page_load_timeout_s": 20,
+    },
+    "web": {
+        "enabled": True,               # background internet lookups (DuckDuckGo → Bing → Wikipedia; no keys, no accounts)
     },
     "search": {
         # User authorized the whole home folder (2026-11-17). Private/system areas are excluded below.
@@ -132,6 +137,24 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return out
 
 
+SETTINGS_VERSION = 2
+
+
+def _migrate(data: dict, stored_version: int) -> dict:
+    """Upgrade saved settings when defaults change for a reason (feedback from real use)."""
+    if stored_version < 2:
+        v = data.setdefault("voice", {})
+        if float(v.get("tts_speed", 1.25)) <= 1.1:
+            v["tts_speed"] = 1.25          # "talks way too slow"
+        if int(v.get("end_silence_ms", 600)) >= 750:
+            v["end_silence_ms"] = 600      # respond sooner after you stop talking
+        data.get("llm", {}).pop("think", None)   # replaced by think_policy (auto)
+        data.get("security", {})["blocked_apps"] = [a for a in data.get("security", {}).get("blocked_apps", [])
+                                                    if a not in ("Keychain Access", "Terminal", "iTerm")]
+    data["settings_version"] = SETTINGS_VERSION
+    return data
+
+
 class Settings:
     def __init__(self, path: Path | None = None):
         self.path = path or paths.settings_path()
@@ -145,7 +168,11 @@ class Settings:
             if self.path.exists():
                 try:
                     stored = json.loads(self.path.read_text())
+                    version = int(stored.get("settings_version", 1))
                     self._data = _deep_merge(DEFAULTS, stored)
+                    if version < SETTINGS_VERSION:
+                        self._data = _migrate(self._data, version)
+                        self.save()
                 except (json.JSONDecodeError, OSError):
                     # Keep the broken file for inspection; run on defaults.
                     self.path.rename(self.path.with_suffix(".corrupt.json"))

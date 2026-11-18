@@ -14,6 +14,10 @@ final class HotKeys {
     var onPress: ((UInt32) -> Void)?
     var onRelease: ((UInt32) -> Void)?
     private(set) var pttDescription = "⌥⇧C"
+    /// True while JARVIS is listening, thinking or speaking: Esc then means "stop" system-wide.
+    var isActive: () -> Bool = { false }
+    private(set) var stopRegistered = true
+    private var escRef: EventHotKeyRef?
     private var refs: [EventHotKeyRef?] = []
     private var handler: EventHandlerRef?
     private var tap: CFMachPort?
@@ -21,6 +25,7 @@ final class HotKeys {
     private var tapKeyDown = false
     static let pushToTalk: UInt32 = 1
     static let emergencyStop: UInt32 = 2
+    static let escapeStop: UInt32 = 3
 
     static let stopBinding = Binding(id: emergencyStop, keyCode: UInt32(kVK_ANSI_Period), modifiers: UInt32(controlKey | optionKey | cmdKey))
     static let pttFallback = Binding(id: pushToTalk, keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(controlKey | optionKey))
@@ -71,8 +76,18 @@ final class HotKeys {
             return Unmanaged.passUnretained(event)
         }
         let code = event.getIntegerValueField(.keyboardEventKeycode)
-        guard code == Int64(kVK_ANSI_C) || tapKeyDown else { return Unmanaged.passUnretained(event) }
         let flags = event.flags.intersection([.maskAlternate, .maskShift, .maskControl, .maskCommand])
+        // Emergency stop also through the tap, so it works even if another app owns ⌃⌥⌘. as a hot key.
+        if type == .keyDown && code == Int64(kVK_ANSI_Period) && flags == [.maskControl, .maskAlternate, .maskCommand] {
+            DispatchQueue.main.async { self.onPress?(HotKeys.emergencyStop) }
+            return nil
+        }
+        // Esc stops JARVIS only while it is active; otherwise Esc belongs to the front app.
+        if type == .keyDown && code == Int64(kVK_Escape) && flags.isEmpty && isActive() {
+            DispatchQueue.main.async { self.onPress?(HotKeys.emergencyStop) }
+            return nil
+        }
+        guard code == Int64(kVK_ANSI_C) || tapKeyDown else { return Unmanaged.passUnretained(event) }
         if type == .keyDown && code == Int64(kVK_ANSI_C) && flags == [.maskAlternate, .maskShift] {
             if !tapKeyDown {  // ignore key-repeat
                 tapKeyDown = true
@@ -115,9 +130,24 @@ final class HotKeys {
             let hkID = EventHotKeyID(signature: OSType(0x4A52_5653), id: b.id)  // 'JRVS'
             let status = RegisterEventHotKey(b.keyCode, b.modifiers, hkID, GetApplicationEventTarget(), 0, &ref)
             if status != noErr { NSLog("JARVIS: hot key \(b.id) unavailable (status \(status)); another app may use it") }
+            if b.id == HotKeys.emergencyStop { stopRegistered = (status == noErr) }
             refs.append(ref)
         }
     }
+
+    /// Without the keyboard tap (no Accessibility yet), register plain Esc as a hot key only while JARVIS is active.
+    func setEscapeHotKey(_ on: Bool) {
+        if tap != nil { return }  // the tap already handles Esc
+        if on, escRef == nil {
+            let hkID = EventHotKeyID(signature: OSType(0x4A52_5653), id: HotKeys.escapeStop)
+            RegisterEventHotKey(UInt32(kVK_Escape), 0, hkID, GetApplicationEventTarget(), 0, &escRef)
+        } else if !on, let r = escRef {
+            UnregisterEventHotKey(r)
+            escRef = nil
+        }
+    }
+
+    var stopAvailable: Bool { stopRegistered || tap != nil }
 
     private func unregisterCarbon() {
         for r in refs { if let r = r { UnregisterEventHotKey(r) } }

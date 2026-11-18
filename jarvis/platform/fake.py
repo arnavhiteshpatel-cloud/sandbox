@@ -45,7 +45,8 @@ class FakeComputer(Computer):
     name = "simulated"
 
     def __init__(self, sites: dict | None = None):
-        self.apps = ["Arc", "Safari", "Spotify", "Finder", "Notes", "Visual Studio Code", "System Settings", "Google Chrome"]
+        self.apps = ["Arc", "Safari", "Spotify", "Finder", "Notes", "Visual Studio Code", "System Settings", "Google Chrome",
+                     "Archive Utility", "Audio MIDI Setup", "Logic Pro", "Calculator"]
         self.running: list[str] = ["Finder"]
         self.front: str | None = "Finder"
         self.sites = sites or DEFAULT_SITES

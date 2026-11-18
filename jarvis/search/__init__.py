@@ -28,7 +28,10 @@ SPOTLIGHT_TYPES = {
 }
 STOP = {"the", "a", "an", "of", "my", "that", "i", "find", "show", "me", "locate", "file", "files", "document",
         "documents", "about", "related", "to", "for", "with", "all", "every", "where", "is", "took", "downloaded",
-        "last", "month", "week", "year", "recent", "latest", "most", "version", "on", "in", "from", "this", "any"}
+        "last", "month", "week", "year", "recent", "latest", "most", "version", "on", "in", "from", "this", "any",
+        "paper", "papers", "pdf", "pdfs", "doc", "docs", "documents", "presentation", "presentations", "spreadsheet",
+        "spreadsheets", "image", "images", "picture", "pictures", "photo", "photos", "i", "did", "got", "saved", "made",
+        "wrote", "called", "named", "some", "today", "yesterday", "ago"}
 
 
 def _days_from_text(q: str) -> int | None:
@@ -87,6 +90,11 @@ class Search:
         out = [m for m in merged.values() if os.path.exists(m["path"])]
         recency = "recent" in query.lower() or "latest" in query.lower() or "newest" in query.lower()
         for m in out:
+            # Files whose *name* contains your words are usually what you meant.
+            name = (m.get("name") or os.path.basename(m["path"])).lower()
+            hits = sum(1 for k in kws if k in name)
+            if kws and hits:
+                m["score"] += 0.02 * hits / len(kws) + (0.02 if hits == len(kws) else 0)
             try:
                 m["mtime"] = m.get("mtime") or os.path.getmtime(m["path"])
             except OSError:

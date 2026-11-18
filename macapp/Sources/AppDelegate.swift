@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var hudPanel: NSPanel?
     var center: NSWindow?
     var pttDown = false
+    var jarvisActive = false
     var statusText = "Starting…"
 
     func applicationDidFinishLaunching(_ note: Notification) {
@@ -28,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         daemon.start()
 
         hotkeys.onPress = { [weak self] id in self?.hotkeyPressed(id) }
+        hotkeys.isActive = { [weak self] in self?.jarvisActive ?? false }
         hotkeys.onRelease = { [weak self] id in self?.hotkeyReleased(id) }
         hotkeys.start()
 
@@ -81,8 +83,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             pttDown = true
             showHUD(true)
             daemon.post("api/ptt/down")
-        } else if id == HotKeys.emergencyStop {
+        } else if id == HotKeys.emergencyStop || id == HotKeys.escapeStop {
             daemon.post("api/stop", ["source": "hotkey"])
+            jarvisActive = false
+            hotkeys.setEscapeHotKey(false)
+            showHUD(false)
         }
     }
 
@@ -117,6 +122,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updateIcon(status: String) {
+        let active = status != "idle"
+        if active != jarvisActive {
+            jarvisActive = active
+            hotkeys.setEscapeHotKey(active)
+        }
         switch status {
         case "listening": setIcon("waveform.circle.fill")
         case "thinking", "acting", "transcribing": setIcon("ellipsis.circle.fill")
@@ -172,7 +182,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         modeItem.submenu = modes
         m.addItem(modeItem)
         m.addItem(withTitle: "Mute / Unmute Microphone", action: #selector(menuMute), keyEquivalent: "").target = self
-        m.addItem(withTitle: "Emergency Stop  ⌃⌥⌘.", action: #selector(menuStop), keyEquivalent: "").target = self
+        m.addItem(withTitle: hotkeys.stopAvailable ? "Emergency Stop  ⌃⌥⌘. or Esc" : "Emergency Stop (⌃⌥⌘. is taken by another app; allow Accessibility)",
+                  action: #selector(menuStop), keyEquivalent: "").target = self
         m.addItem(.separator())
         let login = NSMenuItem(title: "Launch at Login", action: #selector(menuLogin), keyEquivalent: "")
         login.target = self
@@ -229,7 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// The floating pill. Hidden (and its animations paused) whenever JARVIS is idle.
     private func buildHUD() {
-        let size = NSSize(width: 700, height: 90)
+        let size = NSSize(width: 720, height: 108)
         let panel = NSPanel(contentRect: NSRect(origin: .zero, size: size),
                             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
         panel.isFloatingPanel = true

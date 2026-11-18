@@ -86,7 +86,7 @@
       Built for: 14-inch MacBook Pro (Nov 2024), Apple M4 Pro, 24 GB, macOS Sequoia 15.7.3<br>
       Runs entirely on-device: no Claude, no Anthropic API, no cloud AI, no subscriptions<br>
       Source: github.com/arnavhiteshpatel-cloud/sandbox, branch <span style="font-family:'DejaVu Sans Mono'">claude/project-jarvis-ai-assistant-rddtrw</span><br>
-      Document date: 18 November 2026 · version 0.2.0
+      Document date: 18 November 2026 · version 0.3.0
     </div>
     <div class="status">Status: built and tested off-Mac. Not yet run on your MacBook. See “What has been verified”.</div>
   </div>
@@ -269,7 +269,8 @@
     <tr><td>Follow-ups</td><td>Hands-free listening window after each reply (default 6 s, adjustable, can be turned off).</td></tr>
     <tr><td>Questions and confirmations</td><td>JARVIS can ask you something mid-task (“What’s the web address?”, “Shall I submit?”) and take your answer
       by voice or a click.</td></tr>
-    <tr><td>Interruption</td><td>Talk key or wake word cuts it off mid-sentence. A new instruction replaces the current task.</td></tr>
+    <tr><td>Interruption</td><td>Just start talking over it (it tells your voice apart from its own echo), or press <kbd>Esc</kbd>,
+      the talk key or the wake word. It stops mid-sentence and listens. A new instruction replaces the current task.</td></tr>
     <tr><td>Progress updates</td><td>For tasks longer than ~8 s it says brief progress lines (“Reading the page.”), at most every 25 s.</td></tr>
     <tr><td>Privacy controls</td><td>Mute mic, choose the microphone, chime on/off. Audio is never saved to disk.</td></tr>
     <tr><td>Offline</td><td>All voice processing works without internet.</td></tr>
@@ -312,6 +313,9 @@
     <tr><td>“Make a note saying …”</td><td>Creates an Apple Note.</td></tr>
     <tr><td>“Remind me to … at 5 / tomorrow at 9am / in 20 minutes”</td><td>Creates a Reminder with that time.</td></tr>
     <tr><td>“What’s on my calendar today / tomorrow / this week?”</td><td>Reads your events.</td></tr>
+    <tr><td>“Find my biology document”, “where is my resume”</td><td>Instant file search: says how many and names the top match (file, folder, date).</td></tr>
+    <tr><td>“Open it”, “the next one”, “open the second one / last one”</td><td>Acts on the last results. “It” is never mistaken for an app.</td></tr>
+    <tr><td>“Look up …”, “google …”, “find out …”</td><td>Searches the web in the background and answers in one or two sentences, naming the source.</td></tr>
     <tr><td>“Stop listening”</td><td>Turns the microphone off. The talk key still works.</td></tr>
     <tr><td>“Stop”, “cancel”, “never mind”</td><td>Halts the current task and speech immediately.</td></tr>
   </table>
@@ -378,6 +382,8 @@
       <li>Step limits: 8 (Battery Saver) / 20 (Balanced) / 40 (Max). Time limits: 90 s / 5 min / 15 min.</li>
       <li>Asks you a short question when information is missing or the request is ambiguous.</li>
       <li>Finishes with a short spoken summary, and says plainly when it couldn’t finish.</li>
+      <li><b>Thinks only when needed:</b> answers fast by default. Slow “thinking” mode switches on for complex requests (several steps,
+      comparing, organizing, planning) or automatically mid-task if a fast attempt struggles. Say “think carefully…” or “quickly…” to override.</li>
       <li>Cancellable at any moment.</li></ul></div>
     <div class="card"><h3>What it knows when it starts</h3><ul>
       <li>Time, power mode, frontmost app.</li>
@@ -387,7 +393,7 @@
       <li>The recent conversation and the last list of results (for “open the second one”).</li>
       <li>Only the tools the request plausibly needs (smaller prompt, faster, less energy).</li></ul></div>
   </div>
-  <h3>The agent’s 34 tools</h3>
+  <h3>The agent’s 36 tools</h3>
   <table>
     <tr><th style="width:26%">Area</th><th>Tools</th></tr>
     <tr><td>Seeing</td><td><b>observe</b> (page or app: address, visible text, interactive elements) · <b>read_page</b> (full page text) ·
@@ -399,16 +405,11 @@
     <tr><td>Any app and the system</td><td><b>app_dictionary</b> (what an app can be scripted to do) · <b>script_app</b> (AppleScript/JavaScript; risky scripts ask first) ·
       <b>media</b> · <b>system</b> (dark mode, Wi-Fi, Settings panes, screenshots, window actions, URL schemes, lock) · <b>create_note</b> · <b>create_reminder</b> ·
       <b>calendar</b> · <b>compose_email</b> (draft only) · <b>send_message</b> (always asks)</td></tr>
+    <tr><td>Internet (invisible)</td><td><b>web_search</b> (DuckDuckGo → Bing → Wikipedia, no account) · <b>read_webpage</b>. Lookups run in the background
+      and never open your browser; Arc is used only when you want to see a page or it needs your login.</td></tr>
     <tr><td>You and memory</td><td><b>ask_user</b> · <b>remember</b> · <b>recall</b> · <b>run_shortcut</b> · <b>done</b></td></tr>
   </table>
-  <h3>Examples it is built for</h3>
-  <ul>
-    <li>“Open the most recent assignment, read the instructions and tell me what I need to do.”</li>
-    <li>“Open Canvas, look through my upcoming assignments and make a list.”</li>
-    <li>“Go through my Downloads folder, find duplicate files and organize the research papers.”</li>
-    <li>“Find all my resumes and tell me which is the most recent.”</li>
-    <li>“What’s on my screen?” · “Navigate this website and find the opening hours.”</li>
-  </ul>
+
 </section>
 
 <!-- ======================= MAC CONTROL + MEMORY ======================= -->
@@ -454,6 +455,9 @@
       <li>Also stores your shortcuts, task history with outcomes, and an activity log.</li>
       <li>Searchable, editable, deletable and exportable (JSON) in Command Center → Memory.</li>
       <li>Never claims to remember something that isn’t stored.</li>
+      <li><b>Learns how you talk:</b> when you phrase something your own way and the AI works out it meant one simple action, the phrasing is
+      saved and runs instantly next time. Say “no” right after to unlearn; see or delete all of them under Memory → Learned phrasings. Your app
+      names, shortcuts and sites also tune speech recognition to your words.</li>
       <li>Stored only on your Mac, and survives restarts.</li></ul></div>
     <div class="card"><h3>File search</h3><ul>
       <li>Covers your <b>whole home folder</b> (your choice). Hidden folders, ~/Library, keychains, password vaults, apps and media libraries are excluded.</li>
@@ -490,9 +494,14 @@
   <div class="callout warn"><b>Not yet measured on your Mac</b>The target is under 0.5 W of extra power while idle with the wake word on, and essentially zero on battery
     with hotkey only. These are design targets, not measurements. The built-in profiler measures them against a JARVIS-off baseline (section 14).</div>
 
-  <h1 style="margin-top:14pt">Safety and privacy</h1>
+</section>
+<section class="section">
+  <div class="kicker">Section 12</div>
+  <h1>Safety and privacy</h1>
   <ul>
     <li><b>Always asks first</b> before purchases or payments, moving files to the Trash, and running scripts it didn’t get from you.</li>
+    <li><b>Internet lookups</b> send only the search text (or page address) to DuckDuckGo/Bing, only when you ask for a lookup; they can be
+    turned off in Settings.</li>
     <li><b>Asks unless you said it yourself</b> before submit, send, post, delete, confirm and similar buttons. “Click submit” from you runs directly; the AI
     deciding to click Submit asks first.</li>
     <li><b>Every app is reachable, and sensitive ones ask first.</b> In Terminal, iTerm, Keychain Access, Passwords, System Settings, password managers, Disk Utility
@@ -544,7 +553,7 @@
   Everything that needs macOS is written but <b>not yet run</b>. No simulated result is counted as a pass.</p>
   <table>
     <tr><th style="width:42%">Area</th><th style="width:14%">Status</th><th>Evidence</th></tr>
-    <tr><td>Routing, shortcuts, agent loop, memory, safety, power logic</td><td><span class="tag t-ok">tested</span></td><td>100 automated tests pass, including “open my IB” → “go to the assignments” → “scroll down” → “go back” with zero AI calls.</td></tr>
+    <tr><td>Routing, shortcuts, agent loop, memory, safety, power logic</td><td><span class="tag t-ok">tested</span></td><td>128 automated tests pass, including “open my IB” → “go to the assignments” → “scroll down” → “go back” with zero AI calls.</td></tr>
     <tr><td>Arc page-control code (find, click, type, scroll, read)</td><td><span class="tag t-ok">tested</span></td><td>8/8 in a real Chromium browser (the engine Arc uses).</td></tr>
     <tr><td>Voice pipeline with real models</td><td><span class="tag t-ok">tested</span></td><td>6/6: wake word detected for 4 different voices, no false triggers, exact transcripts, correct commands. Silence filter: 0 of 375 frames processed.</td></tr>
     <tr><td>AI agent with a real local model</td><td><span class="tag t-ok">tested</span></td><td>Qwen3.5-4B: 11/11 JARVIS tasks plus 3/3 app tasks (reminder + calendar, scripting Music, message correctly held for confirmation), 0 invalid actions (one run per case, on a simulated computer).</td></tr>

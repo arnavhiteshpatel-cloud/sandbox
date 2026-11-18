@@ -25,7 +25,6 @@ PROFILES: dict[str, dict] = {
         "label": "Battery Saver",
         "keep_alive": "30s",       # unload the LLM 30 s after the last use
         "prewarm_on_wake": False,  # don't load the LLM until we know it's needed
-        "think": False,
         "stt_model": "small",
         "animations": "minimal",
         "index_allowed": False,
@@ -35,7 +34,6 @@ PROFILES: dict[str, dict] = {
         "label": "Balanced",
         "keep_alive": "5m",
         "prewarm_on_wake": True,   # start loading the LLM while you are still speaking
-        "think": False,
         "stt_model": "turbo",
         "animations": "normal",
         "index_allowed": "charging",
@@ -45,7 +43,6 @@ PROFILES: dict[str, dict] = {
         "label": "Maximum Performance",
         "keep_alive": "30m",
         "prewarm_on_wake": True,
-        "think": True,
         "stt_model": "turbo",
         "animations": "full",
         "index_allowed": "charging",

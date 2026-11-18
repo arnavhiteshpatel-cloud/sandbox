@@ -43,7 +43,7 @@ def test_route(text, name, args):
 
 
 def test_unrecognized_goes_to_ai():
-    assert route("find the paper I downloaded about Parkinson's disease") is None
+    assert route("find all my resumes, compare them and tell me which is newest") is None
     assert route("read the instructions and tell me what I need to do") is None
 
 

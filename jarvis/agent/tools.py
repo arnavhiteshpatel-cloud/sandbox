@@ -389,6 +389,30 @@ async def done(ctx, a):
     return {"ok": True, "final": True}
 
 
+# --- internet (background, never on screen) ----------------------------------------------------
+async def web_search(ctx, a):
+    from .. import web
+
+    if not ctx.settings.get("web.enabled", True):
+        return {"ok": False, "error": "Internet lookups are turned off in Settings."}
+    r = await web.web_search(a["query"], int(a.get("count", 6)))
+    if r.get("error"):
+        return {"ok": False, "error": r["error"]}
+    lines = [f"{i + 1}. {x['title']} — {x['url']}\n   {x['snippet']}" for i, x in enumerate(r["results"])]
+    return {"ok": True, "provider": r["provider"], "results": wrap_untrusted("web search", "\n".join(lines))}
+
+
+async def read_webpage(ctx, a):
+    from .. import web
+
+    if not ctx.settings.get("web.enabled", True):
+        return {"ok": False, "error": "Internet lookups are turned off in Settings."}
+    r = await web.fetch_page(a["url"], int(a.get("max_chars", 6000)))
+    if not r.get("ok"):
+        return r
+    return {"ok": True, "url": r["url"], "title": r["title"], "content": wrap_untrusted("web page", r["text"])}
+
+
 # --- any app / system ------------------------------------------------------------------------
 async def app_dictionary(ctx, a):
     text = await _t(ctx.computer.app_dictionary, a["app"], 6000)
@@ -496,6 +520,10 @@ TOOLS: list[Tool] = [
     Tool("recall", "Look up saved memories.", {"query": S}, ["query"], "read", recall),
     Tool("run_shortcut", "Run one of the user's saved voice shortcuts by name.", {"name": S}, ["name"], "low", run_shortcut),
     Tool("ask_user", "Ask the user a question when required information is missing or a choice is ambiguous.", {"question": S}, ["question"], "low", ask_user),
+    Tool("web_search", "Search the internet in the background (invisible to the user). Use for facts, news, definitions, prices, "
+         "anything you'd look up. Returns titles, URLs and snippets.", {"query": S, "count": {"type": "integer"}}, ["query"], "read", web_search, True),
+    Tool("read_webpage", "Read a web page's text in the background (invisible). Use after web_search when snippets aren't enough.",
+         {"url": S, "max_chars": {"type": "integer"}}, ["url"], "read", read_webpage, True),
     Tool("app_dictionary", "List what an app can be scripted to do (its AppleScript commands and objects). Use before script_app on an unfamiliar app.",
          {"app": S}, ["app"], "read", app_dictionary),
     Tool("script_app", "Run AppleScript (or JXA with language='JavaScript') to control a scriptable app directly, e.g. "
@@ -560,7 +588,7 @@ import re as _re
 
 CORE = {"observe", "open_app", "open_url", "click", "type_text", "press_keys", "scroll", "browser_nav", "read_page",
         "wait", "ask_user", "done", "remember", "recall", "run_shortcut"}
-CORE |= {"menu", "media", "system"}
+CORE |= {"menu", "media", "system", "web_search", "read_webpage"}
 FILES = {"search_files", "list_folder", "read_file", "move_file", "make_folder", "trash_files", "find_duplicates"}
 SCREEN = {"look_at_screen", "click_screen_text"}
 APPS = {"app_dictionary", "script_app", "create_note", "create_reminder", "calendar", "compose_email", "send_message"}

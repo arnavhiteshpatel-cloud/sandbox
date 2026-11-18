@@ -142,8 +142,28 @@ def spoken_combo(s: str) -> str | None:
     return "+".join(out) if out else None
 
 
+COMMAND_VERBS = {"open", "launch", "start", "quit", "close", "play", "pause", "scroll", "go", "click", "turn", "set", "find",
+                 "search", "remind", "make", "take", "what", "whats", "minimize", "hide", "show", "switch", "type", "press",
+                 "lock", "mute", "unmute", "remember", "forget", "create", "delete", "next", "skip", "stop", "volume", "look"}
+FILE_WORDS = re.compile(r"\b(documents?|docs?|files?|pdfs?|papers?|notes|slides?|presentations?|decks?|spreadsheets?|sheets?|"
+                        r"essays?|reports?|worksheets?|homework|assignments?|resumes?|cvs?|screenshots?|photos?|pictures?|images?|"
+                        r"lab reports?|ia|syllabus|study guide|word doc|keynote|powerpoint|excel|downloads?|folder)\b")
+ORDINAL_WORDS = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "top": 1, "1st": 1, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5}
+
+
 def route(text: str, ctx: dict | None = None) -> Intent | None:
     """Recognize built-in commands. `ctx` carries conversation state (browser_active, etc.)."""
+    it = _route(text, ctx)
+    if it is None:
+        # Speech recognition sometimes keeps a stray word from the wake phrase ("is open Arc", "vis scroll down").
+        # Retry without it, but only when what follows clearly starts with a command.
+        words = normalize(text).split()
+        if len(words) >= 2 and words[0] not in COMMAND_VERBS and len(words[0]) <= 6 and words[1] in COMMAND_VERBS:
+            it = _route(" ".join(words[1:]), ctx)
+    return it
+
+
+def _route(text: str, ctx: dict | None = None) -> Intent | None:
     ctx = ctx or {}
     s = normalize(text)
     if not s:
@@ -215,7 +235,7 @@ def route(text: str, ctx: dict | None = None) -> Intent | None:
     # --- media, system and window control (any app) ------------------------------------
     if re.fullmatch(r"(?:play|pause|resume|stop the music|pause the music|play the music|pause (?:the )?(?:song|video|music)|resume (?:the )?(?:song|video|music)|play pause)", s):
         return I("media", key="play")
-    if re.fullmatch(r"(?:next|skip)(?: (?:song|track|this song|this track|one))?|play the next (?:song|track)", s):
+    if re.fullmatch(r"(?:next|skip)(?: (?:song|track|this song|this track))?|play the next (?:song|track)", s):
         return I("media", key="next")
     if re.fullmatch(r"(?:previous|last|go back a) (?:song|track)|play the previous (?:song|track)", s):
         return I("media", key="previous")
@@ -291,6 +311,25 @@ def route(text: str, ctx: dict | None = None) -> Intent | None:
     m = re.fullmatch(r"type (.+)", s)
     if m:
         return I("type", text=raw_after(text, r"type\s+") or m.group(1))
+
+    # --- internet lookups (background; answered from search results) ---------------------------
+    m = re.fullmatch(r"(?:look up|lookup|google|search (?:the web|the internet|online|google) for|search online for|search the web|"
+                     r"look online for|find out|check online)(?: for| about)? (.+)", s)
+    if m:
+        return I("web_lookup", query=m.group(1))
+
+    # --- files: instant search and acting on the results (no AI) -----------------------------
+    m = re.fullmatch(r"(?:find|search for|search|look for|locate|where(?:'s| is| are)|get|pull up|show me) (?:me )?(?:my |the |a |an |all (?:of )?(?:my |the )?)?(.+)", s)
+    if m and FILE_WORDS.search(m.group(1)) and len(m.group(1).split()) <= 9 and not re.search(r"\b(and then|then|and (?:open|tell|summari[sz]e|compare|move|organi[sz]e|read))\b", m.group(1)):
+        return I("find_files", query=m.group(1))
+    m = re.fullmatch(r"(?:open|show|read|play|pull up)(?: up)? (?:it|that|this|that one|this one|that file|this file|the file|the document|the result|"
+                     r"(?:the )?(first|second|third|fourth|fifth|last|next|top|1st|2nd|3rd|4th|5th)(?: one| result| file| document| match)?|number (\d+))", s)
+    if m:
+        word, num = m.group(1), m.group(2)
+        index = int(num) if num else ORDINAL_WORDS.get(word) if word in ORDINAL_WORDS else word  # None = current, "next", "last"
+        return I("open_result", index=index)
+    if re.fullmatch(r"(?:the )?next (?:one|result|file|match)|(?:what about )?the (?:other|next) one|another one", s):
+        return I("next_result")
 
     # --- apps & websites ---------------------------------------------------------------
     m = re.fullmatch(r"(?:quit|close|exit|kill)\s+(?:the\s+)?(.+?)(?:\s+app)?", s)

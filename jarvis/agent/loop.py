@@ -30,6 +30,7 @@ class AgentResult:
     llm_calls: int = 0
     asked_user: bool = False
     error: str | None = None       # set when the model/runtime failed (never counted as success)
+    thought: bool = False          # whether slow thinking mode was used
 
 
 Confirm = Callable[[str], Awaitable[bool]]
@@ -56,7 +57,8 @@ class Agent:
                 messages[i]["content"] = "[older observation removed; call observe for the current state]"
 
     async def run(self, objective: str, ctx: ToolContext, *, mode: str, model: str, cancel: CancelToken,
-                  context: str = "", think: bool = False, max_steps: int | None = None) -> AgentResult:
+                  context: str = "", think: bool = False, max_steps: int | None = None,
+                  may_escalate: bool = False) -> AgentResult:
         max_steps = max_steps or int(self.settings.per_mode("agent.max_steps", mode, 20))
         deadline = time.monotonic() + (90 if mode == "battery_saver" else 300 if mode == "balanced" else 900)
         keep_alive = {"battery_saver": "30s", "balanced": "5m", "max_performance": "30m"}.get(mode, "5m")
@@ -74,7 +76,13 @@ class Agent:
         seen_calls: dict[str, int] = {}
         failures = 0
         nudged = False
+        res.thought = think
         for step in range(max_steps):
+            # Escalate to slow thinking only when the fast attempt is visibly struggling.
+            if not think and may_escalate and (failures >= 2 or (seen_calls and max(seen_calls.values()) >= 2)):
+                think = True
+                res.thought = True
+                self.progress({"type": "agent_escalate", "reason": "fast attempt struggling; thinking it through"})
             cancel.check()
             if time.monotonic() > deadline:
                 res.message = "That's taking longer than I allow for one task, so I've stopped. " + _summary(steps)
@@ -83,6 +91,7 @@ class Agent:
             try:
                 chat_task = asyncio.create_task(self.llm.chat(
                     messages, model=model, tools=tools, think=think, keep_alive=keep_alive,
+                    max_tokens=3072 if think else 1024,
                     temperature=float(self.settings.get("llm.temperature", 0.2)), num_ctx=int(self.settings.get("llm.num_ctx", 16384))))
                 cancel_task = asyncio.create_task(cancel._ev.wait())
                 done_set, _ = await asyncio.wait({chat_task, cancel_task}, return_when=asyncio.FIRST_COMPLETED)
@@ -127,8 +136,9 @@ class Agent:
                 seen_calls[key] = seen_calls.get(key, 0) + 1
                 entry = {"step": step + 1, "tool": tc.name, "args": _short(tc.arguments), "ok": bool(out.get("ok")),
                          "result": _short(out, 300)}
-                steps.append(entry)
                 self.progress({"type": "agent_step", **entry})
+                entry["raw_args"] = tc.arguments
+                steps.append(entry)
                 if tc.name == "done":
                     res.ok = bool(tc.arguments.get("success", True))
                     res.message = tc.arguments.get("summary") or "Done."

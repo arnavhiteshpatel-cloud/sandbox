@@ -85,6 +85,26 @@ with confirmation, Spotify search, any URL scheme), agent tools `app_dictionary`
 risky scripts confirmed), AXManualAccessibility for all apps (Electron apps expose their UI), and 5 new shortcut step types.
 100 tests pass. Real model (Qwen3.5-4B, CPU): the 3 app cases passed 3/3.
 
+### Feedback round 2 (2026-11-18): first real use
+Reported: "open Arc" took 30 s and opened Archive Utility; talks too much and too slowly; Esc and ⌃⌥⌘. didn't stop it;
+couldn't interrupt by talking; black box behind the HUD; wrong biology document and "open it" opened Audio MIDI Setup.
+Root causes and fixes:
+- App matching used substring fuzzy matching ("arc" ⊂ "archive utility", "it" matched an app). Now strict: exact/alias/
+  whole-word prefix/close spelling only; pronouns never resolve to apps; Spotlight-based app discovery; STT aliases (ark→Arc);
+  a stray leading word from the wake phrase is ignored.
+- Max Performance had thinking always on (slow). Now `agent/thinking.py` decides per request (complex → think), escalates
+  mid-task when struggling, and supports "think carefully" / "quickly". Setting `llm.think_policy`.
+- Brevity: replies under 20 words unless detail is requested; spoken text trimmed; TTS 1.25×; end-of-speech 600 ms;
+  settings migration (v2) applies these to existing installs.
+- Stop: Esc is global while JARVIS is active; ⌃⌥⌘. is also detected via the event tap; speech stops within 50 ms.
+- Barge-in by talking (echo-ratio detection, `voice.barge_in`).
+- HUD: html background was opaque. Now transparent; text uses two lines.
+- Files: instant "find …" with spoken top match; "open it / the second one / next one"; file names weighted in ranking.
+- New: background internet lookups (`jarvis/web.py`: DuckDuckGo → Bing → Wikipedia; tools web_search/read_webpage;
+  "look up …" fast path). Never opens the browser.
+- New: phrase learning (`jarvis/learning.py`) plus vocabulary priming of Whisper.
+128 tests pass.
+
 ### Known issues / risks
 - Nothing macOS-specific has been executed yet (see LIMITATIONS.md).
 - Qwen3.5's hybrid architecture limits prompt-cache reuse in llama.cpp-based runtimes, so first-step latency per AI task

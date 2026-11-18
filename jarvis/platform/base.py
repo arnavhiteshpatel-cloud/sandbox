@@ -33,6 +33,58 @@ class AutomationError(Exception):
     """Raised when macOS refuses an automation request (permissions, unsupported app...)."""
 
 
+APP_ALIASES = {
+    "vs code": "Visual Studio Code", "vscode": "Visual Studio Code", "code": "Visual Studio Code", "chrome": "Google Chrome",
+    "google": "Google Chrome", "settings": "System Settings", "system preferences": "System Settings", "preferences": "System Settings",
+    "word": "Microsoft Word", "excel": "Microsoft Excel", "powerpoint": "Microsoft PowerPoint", "teams": "Microsoft Teams",
+    "outlook": "Microsoft Outlook", "edge": "Microsoft Edge", "brave": "Brave Browser", "app store": "App Store",
+    "facetime": "FaceTime", "face time": "FaceTime", "itunes": "Music", "apple music": "Music", "files": "Finder",
+    "ark": "Arc", "arch": "Arc", "arc browser": "Arc", "the arc browser": "Arc", "ark browser": "Arc",
+    "imessage": "Messages", "i message": "Messages", "texts": "Messages", "text messages": "Messages", "email": "Mail",
+    "calculator app": "Calculator", "notion app": "Notion", "chat gpt": "ChatGPT", "chatgpt": "ChatGPT", "claude app": "Claude",
+    "spotify app": "Spotify", "zoom": "zoom.us", "quicktime": "QuickTime Player", "quick time": "QuickTime Player",
+    "activity monitor": "Activity Monitor", "terminal app": "Terminal", "photos app": "Photos", "the finder": "Finder",
+}
+NOT_APPS = {"it", "this", "that", "them", "these", "those", "one", "the one", "the first one", "the second one", "the last one",
+            "the file", "the document", "the link", "the page", "the result", "the first", "the second", "the third", "the next one",
+            "the most recent one", "the latest one", "the newest one", "up", "me", "my", "a", "the"}
+
+
+def resolve_app_name(spoken: str, apps: list[str]) -> str | None:
+    import re as _re
+
+    from rapidfuzz import fuzz
+
+    if not apps:
+        return None
+    s = _re.sub(r"[^\w\s.'+-]", "", spoken.strip().lower())
+    s = _re.sub(r"\s+", " ", s).strip()
+    s = _re.sub(r"^(?:the|my)\s+", "", s)
+    if not s or s in NOT_APPS or _re.fullmatch(r"(?:the )?(?:first|second|third|fourth|fifth|last|next|previous|\d+(?:st|nd|rd|th)?)(?: one| result| file)?", s):
+        return None
+    lower = {a.lower(): a for a in apps}
+    for cand in (s, _re.sub(r"\s+(?:app|application|browser|program)$", "", s)):
+        if cand in lower:
+            return lower[cand]
+        if cand in APP_ALIASES and APP_ALIASES[cand].lower() in lower:
+            return lower[APP_ALIASES[cand].lower()]
+    s = _re.sub(r"\s+(?:app|application|program)$", "", s)
+    if len(s) < 3:
+        return None
+    # Whole-word prefix match: "visual studio" -> "Visual Studio Code", "logic" -> "Logic Pro". Unique only.
+    words = s.split()
+    pref = [name for low, name in lower.items()
+            if len(words) <= len(low.split()) and all(lw.startswith(w) and len(w) >= 3 for w, lw in zip(words, low.split()))]
+    if len(pref) == 1:
+        return pref[0]
+    # Close spelling of the whole name only (handles transcription slips like "spotfy"), never substrings.
+    if len(s) >= 4:
+        scored = sorted(((fuzz.ratio(s, low), name) for low, name in lower.items()), reverse=True)
+        if scored and scored[0][0] >= 85 and (len(scored) == 1 or scored[0][0] - scored[1][0] >= 5):
+            return scored[0][1]
+    return None
+
+
 class Computer:
     name = "abstract"
 
@@ -41,27 +93,12 @@ class Computer:
     def running_apps(self) -> list[str]: raise NotImplementedError
     def frontmost_app(self) -> str | None: raise NotImplementedError
     def resolve_app(self, spoken: str) -> str | None:
-        """Map a spoken app name ("spotify", "vs code") to an installed app name."""
-        from rapidfuzz import fuzz, process
+        """Map a spoken app name ("spotify", "vs code", "ark") to an installed app, or None.
 
-        apps = self.list_apps()
-        if not apps:
-            return None
-        s = spoken.strip().lower()
-        aliases = {"vs code": "Visual Studio Code", "vscode": "Visual Studio Code", "chrome": "Google Chrome",
-                   "settings": "System Settings", "system preferences": "System Settings", "word": "Microsoft Word",
-                   "excel": "Microsoft Excel", "powerpoint": "Microsoft PowerPoint", "teams": "Microsoft Teams",
-                   "outlook": "Microsoft Outlook", "edge": "Microsoft Edge", "brave": "Brave Browser",
-                   "app store": "App Store", "facetime": "FaceTime", "itunes": "Music", "files": "Finder"}
-        if s in aliases and aliases[s] in apps:
-            return aliases[s]
-        lower = {a.lower(): a for a in apps}
-        if s in lower:
-            return lower[s]
-        best = process.extractOne(s, list(lower.keys()), scorer=fuzz.WRatio)
-        if best and best[1] >= 88:
-            return lower[best[0]]
-        return None
+        Deliberately strict: a wrong app is worse than asking. Never matches a fragment inside a word
+        ("arc" must not open "Archive Utility") and never resolves pronouns ("open it").
+        """
+        return resolve_app_name(spoken, self.list_apps())
 
     def open_app(self, name: str) -> ActionResult: raise NotImplementedError
     def quit_app(self, name: str) -> ActionResult: raise NotImplementedError
