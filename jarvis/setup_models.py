@@ -66,6 +66,11 @@ def whisper(sizes=("turbo", "small")) -> None:
 
 def ollama_pull(models: list[str], base_url: str) -> None:
     print("Local language models (Ollama):")
+    try:
+        urllib.request.urlopen(base_url.rstrip("/") + "/api/version", timeout=5).read()
+    except Exception:
+        raise SystemExit("  ✗ Ollama isn't running. Open the Ollama app (Applications), then run this again:\n"
+                         "    /Applications/JARVIS.app/Contents/Resources/python/bin/python3 -m jarvis setup-models")
     for m in models:
         print(f"  ↓ {m}")
         req = urllib.request.Request(base_url.rstrip("/") + "/api/pull", data=json.dumps({"model": m}).encode(),

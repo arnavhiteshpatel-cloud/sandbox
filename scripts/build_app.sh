@@ -30,17 +30,27 @@ echo "==> Embedding Python $PYVER (python-build-standalone via uv)"
 uv python install "$PYVER"
 # --system: never pick up a project .venv (a venv is not relocatable and would ship dev packages)
 PYBIN="$(cd / && uv python find --system --python-preference only-managed "$PYVER")"
-PYHOME="$(cd "$(dirname "$PYBIN")/.." && pwd)"
+# uv reports the interpreter through a symlinked "cpython-3.12-…" folder; `cp -R` would copy only that
+# link. Ask the interpreter for its real install folder and copy the actual files.
+PYHOME="$("$PYBIN" -c 'import sys; print(sys.base_prefix)')"
+[[ -d "$PYHOME" && ! -L "$PYHOME" ]] || { echo "error: could not resolve the Python install folder ($PYHOME)"; exit 1; }
 [[ ! -f "$PYHOME/pyvenv.cfg" ]] || { echo "error: $PYHOME is a virtualenv, not a standalone Python"; exit 1; }
-cp -R "$PYHOME" "$APP/Contents/Resources/python"
+ditto "$PYHOME" "$APP/Contents/Resources/python"
 BUNDLED="$APP/Contents/Resources/python/bin/python3"
+BUNDLED_PREFIX="$("$BUNDLED" -c 'import sys; print(sys.prefix)')"
+case "$BUNDLED_PREFIX" in
+  "$APP/Contents/Resources/python"*) echo "    Python embedded at $BUNDLED_PREFIX" ;;
+  *) echo "error: bundled Python resolves to $BUNDLED_PREFIX instead of the app; refusing to continue"; exit 1 ;;
+esac
 # PEP 668 marker from uv-managed Pythons would block pip inside the bundle; it is our private copy.
 find "$APP/Contents/Resources/python/lib" -maxdepth 2 -name EXTERNALLY-MANAGED -delete || true
 "$BUNDLED" -m ensurepip --upgrade >/dev/null
 
 echo "==> Installing JARVIS and its dependencies into the bundle"
-"$BUNDLED" -m pip install --no-cache-dir --upgrade pip wheel >/dev/null
-"$BUNDLED" -m pip install --no-cache-dir "$ROOT[voice,stt-mlx,files,macos]"
+"$BUNDLED" -m pip install --upgrade pip wheel >/dev/null
+"$BUNDLED" -m pip install "$ROOT[voice,stt-mlx,files,macos]"
+# Prove the packages landed inside the app, not in some other Python.
+(cd / && "$BUNDLED" -c 'import jarvis, sys; assert jarvis.__file__.startswith(sys.prefix), jarvis.__file__; print("    jarvis package:", jarvis.__file__)')
 
 echo "==> Precompiling bytecode (the signed bundle is never written to at runtime)"
 "$BUNDLED" -m compileall -q "$APP/Contents/Resources/python/lib" >/dev/null || true
@@ -63,4 +73,6 @@ codesign --force --sign "$SIGN_ID" "$APP/Contents/Resources/python/bin/python3" 
 codesign --force --sign "$SIGN_ID" "$APP"
 codesign --verify --verbose=1 "$APP" && echo "    signature OK"
 
-du -sh "$APP" | awk '{print "==> Built " $2 " (" $1 ")"}'
+SIZE_MB=$(du -sm "$APP" | awk '{print $1}')
+echo "==> Built $APP (${SIZE_MB} MB)"
+[[ "$SIZE_MB" -gt 200 ]] || { echo "error: the app is only ${SIZE_MB} MB; the embedded Python is missing"; exit 1; }

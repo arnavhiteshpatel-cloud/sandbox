@@ -99,3 +99,14 @@ risky scripts confirmed), AXManualAccessibility for all apps (Electron apps expo
 5. `jarvis bench --models qwen3.5:4b,qwen3.5:9b,qwen3:8b --repeat 3` and pick models per mode (update MODELS.md).
 6. `sudo … -m jarvis.powerprof` unplugged and fill in POWER.md.
 7. Run the remaining acceptance tests; record in ACCEPTANCE_RESULTS.md.
+
+## First run on the Mac (2026-11-18, reported by the user)
+- **Worked:** Swift shell compiled on the first try; all Python packages installed; wake word, Kokoro and Whisper
+  (turbo + small) models downloaded.
+- **Bug 1 (fixed):** `open -a Ollama` ran before Launch Services registered the freshly installed Ollama.app, so the
+  Ollama server wasn't running and `setup-models` crashed with "Connection refused". Fix: start by path, wait up to 45 s,
+  fall back to `ollama serve`, and fail with a clear message; setup-models checks first.
+- **Bug 2 (fixed):** the bundle was 1.3 MB. `uv python find` returns a path through a symlinked `cpython-3.12-…` folder,
+  and `cp -R` copied only the link, so packages were installed into uv's Python instead of the app. Fix: copy
+  `sys.base_prefix` with `ditto`, then assert the bundled `sys.prefix` and the `jarvis` package are inside the app and the
+  app is larger than 200 MB. Verified on Linux with the same uv layout (104 MB real copy; pip installs land inside).

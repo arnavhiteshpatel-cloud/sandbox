@@ -110,7 +110,9 @@ class Assistant:
     async def _check_llm(self) -> bool:
         ok = await self.llm.available()
         if not ok and sys.platform == "darwin" and self.settings.get("llm.provider") == "ollama":
-            subprocess.run(["open", "-g", "-a", "Ollama"], capture_output=True)  # start Ollama.app in the background
+            # start Ollama.app in the background (by path first: right after install, -a may not find it yet)
+            if subprocess.run(["open", "-g", "/Applications/Ollama.app"], capture_output=True).returncode != 0:
+                subprocess.run(["open", "-g", "-a", "Ollama"], capture_output=True)
             for _ in range(20):
                 await asyncio.sleep(0.5)
                 if await self.llm.available():
