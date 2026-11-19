@@ -121,7 +121,14 @@ Legend:
   - **Linux:** the portable unit tests. ✅ green on GitHub.
   - **macOS 15:** `swift test`, building the `.app`, a launch smoke test, and uploading a zipped
     artifact.
-- On this account, the macOS job stayed queued without receiving a runner. Earlier runs in this
-  repository were cancelled instantly at the macOS step. Fixing that is an account-level GitHub
-  Actions setting (billing or spending limit for macOS minutes). Once it runs, the CI artifact
-  **AirMix-macOS** is a ready-to-install app.
+- On this account, GitHub never assigned a macOS runner. On 2026-11-19 the macOS job sat queued
+  for 15 minutes and was then cancelled by GitHub without starting (runs 1–2 of the AirMix
+  workflow). Earlier Parity runs in this repository were cancelled instantly at the macOS step.
+  This is an account-level GitHub Actions restriction, usually billing or a $0 spending limit for
+  macOS minutes on private repositories. Once it's lifted, re-run the workflow and the
+  **AirMix-macOS** artifact is a ready-to-install app.
+- A separate independent review of the uncompiled Swift code went through every Core Audio call
+  against the SDK headers and type-checked the trickier Swift constructs with a Swift compiler.
+  It found no definite compile errors. It did find one real logic bug and a few risks; all were
+  fixed: stale `@Published` reads, a stale index when editing EQ bands, self-test cleanup, and
+  explicit imports.
