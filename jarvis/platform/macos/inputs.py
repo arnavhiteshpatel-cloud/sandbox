@@ -133,3 +133,21 @@ def scroll(direction: str = "down", amount: int = 5) -> ActionResult:
     ev = Quartz.CGEventCreateScrollWheelEvent(None, Quartz.kCGScrollEventUnitLine, 2, dy, dx)
     Quartz.CGEventPost(Quartz.kCGHIDEventTap, ev)
     return ActionResult(True, f"Scrolled {direction}.")
+
+
+def drag(x1: float, y1: float, x2: float, y2: float, steps: int = 20) -> ActionResult:
+    """Press at (x1, y1), move in small steps (apps need the intermediate events), release at (x2, y2)."""
+    btn = Quartz.kCGMouseButtonLeft
+    p1 = Quartz.CGPoint(x1, y1)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventMouseMoved, p1, btn))
+    time.sleep(0.05)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventLeftMouseDown, p1, btn))
+    time.sleep(0.12)
+    for i in range(1, steps + 1):
+        p = Quartz.CGPoint(x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps)
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventLeftMouseDragged, p, btn))
+        time.sleep(0.015)
+    time.sleep(0.1)
+    p2 = Quartz.CGPoint(x2, y2)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, Quartz.CGEventCreateMouseEvent(None, Quartz.kCGEventLeftMouseUp, p2, btn))
+    return ActionResult(True, f"Dragged from ({round(x1)}, {round(y1)}) to ({round(x2)}, {round(y2)}).")

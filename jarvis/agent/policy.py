@@ -122,7 +122,61 @@ def check(tool: str, args: dict, *, user_text: str, settings, element_label: str
         return Verdict(True, confirm=True, reason=f"This moves {n} item{'s' if n != 1 else ''} to the Trash.")
     if tool == "run_shortcut":
         return Verdict(True)
+    if tool == "run_shell":
+        return shell_verdict(str(args.get("command", "")))
+    if tool == "write_file":
+        p = str(args.get("path", ""))
+        if args.get("mode") == "overwrite":
+            return Verdict(True, confirm=True, reason=f"This replaces the contents of {p}.")
+        if p and not within(p, settings.get("security.file_write_roots", [])):
+            return Verdict(True, confirm=True, reason=f"{p} is outside the folders I normally write to.")
+        return Verdict(True)
+    if tool == "copy_file":
+        d = str(args.get("dst", ""))
+        if d and not within(d, settings.get("security.file_write_roots", [])):
+            return Verdict(True, confirm=True, reason=f"{d} is outside the folders I normally write to.")
+        return Verdict(True)
+    if tool == "quit_app" and sensitive_app(str(args.get("name", "")), settings):
+        return Verdict(True, confirm=True, reason=f"{args.get('name')} is a sensitive app.")
     return Verdict(True)
+
+
+# Terminal commands: read-only ones run directly; anything else asks; a few are refused outright.
+SAFE_SHELL = {"ls", "cat", "head", "tail", "grep", "egrep", "rg", "find", "mdfind", "mdls", "which", "whoami", "pwd", "echo",
+              "date", "cal", "df", "du", "uptime", "sw_vers", "uname", "system_profiler", "ps", "wc", "sort", "uniq", "file",
+              "stat", "lsappinfo", "ioreg", "sysctl", "env", "printenv", "hostname", "ifconfig", "ping", "dig", "nslookup",
+              "curl", "top", "vm_stat", "memory_pressure", "log", "plutil", "shasum", "md5", "diff", "less", "more",
+              "git", "brew", "python3", "node", "say", "open", "pbpaste", "osascript", "shortcuts", "tr", "cut", "awk",
+              "sed", "jq", "xargs", "basename", "dirname", "realpath", "readlink", "id", "groups", "locale", "tree"}
+SAFE_SUBCOMMANDS = {
+    "pmset": r"-g\b", "defaults": r"read\b|domains\b|find\b", "networksetup": r"-(?:get|list)", "scutil": r"--get\b|--dns\b",
+    "launchctl": r"list\b|print\b", "diskutil": r"list\b|info\b", "tmutil": r"status\b|listbackups\b|latestbackup\b",
+    "git": r"(?:status|log|diff|show|branch|remote|config --get)\b", "brew": r"(?:list|info|search|outdated|doctor|config)\b",
+    "shortcuts": r"(?:list|view)\b", "sed": r"(?!.*\s-i)", "curl": r"(?!.*\s-(?:X|d|F|T|o|O)\b)", "osascript": r"-e\s+['\"]?(?:get|return)\b",
+    "python3": r"(?:-c\s+['\"]?print|--version)", "node": r"--version", "open": r".", "log": r"show\b", "xargs": r"(?:ls|cat|grep|wc)\b",
+}
+REFUSE_SHELL = re.compile(r"\bsudo\b|\brm\s+-[a-z]*r[a-z]*f?\s+(?:/|~|\$HOME)\s*(?:$|[;&|])|\bmkfs\b|diskutil\s+(?:erase|"
+                          r"partition|zero)|:\(\)\s*\{|\bdd\s+if=.*of=/dev/|csrutil|nvram\b|>\s*/dev/disk", re.I)
+
+
+def shell_verdict(command: str) -> Verdict:
+    cmd = command.strip()
+    if not cmd:
+        return Verdict(False, reason="Empty command.")
+    if REFUSE_SHELL.search(cmd):
+        return Verdict(False, reason="That command needs an administrator password or could wipe data; run it yourself if you mean it.")
+    risky_syntax = re.search(r"(?<![<>])>(?!&)|>>|`|\$\(|\btee\b", cmd)
+    segments = [s.strip() for s in re.split(r"\|\||&&|;|\|", cmd) if s.strip()]
+    def safe(seg: str) -> bool:
+        words = seg.split()
+        prog = os.path.basename(words[0])
+        rest = seg[len(words[0]):].strip()
+        if prog in SAFE_SUBCOMMANDS:
+            return bool(re.match(SAFE_SUBCOMMANDS[prog], rest)) if prog not in ("sed", "curl") else bool(re.match(SAFE_SUBCOMMANDS[prog], " " + rest))
+        return prog in SAFE_SHELL
+    if not risky_syntax and all(safe(s) for s in segments):
+        return Verdict(True)
+    return Verdict(True, confirm=True, reason=f"This runs the Terminal command: {cmd[:160]}")
 
 
 UNTRUSTED_NOTE = (

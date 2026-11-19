@@ -118,6 +118,22 @@ class Computer:
         return resolve_app_name(spoken, self.list_apps(), getattr(self, "user_aliases", None))
 
     def open_app(self, name: str) -> ActionResult: raise NotImplementedError
+    def drag(self, x1: float, y1: float, x2: float, y2: float) -> ActionResult: raise NotImplementedError
+    def clipboard_get(self) -> str: raise NotImplementedError
+    def clipboard_set(self, text: str) -> ActionResult: raise NotImplementedError
+
+    def run_shell(self, command: str, timeout: float = 60) -> dict:
+        """Run a shell command as the user (zsh on macOS), from the home folder. Policy decides what needs asking."""
+        import os as _os
+        import subprocess as _sp
+
+        shell = "/bin/zsh" if _os.path.exists("/bin/zsh") else "/bin/bash"
+        try:
+            p = _sp.run([shell, "-lc", command], capture_output=True, text=True, timeout=timeout, cwd=_os.path.expanduser("~"))
+        except _sp.TimeoutExpired:
+            return {"ok": False, "error": f"Timed out after {int(timeout)} s."}
+        out = (p.stdout or "") + (("\n[stderr]\n" + p.stderr) if p.stderr else "")
+        return {"ok": p.returncode == 0, "exit_code": p.returncode, "output": out[-6000:]}
     def quit_app(self, name: str) -> ActionResult: raise NotImplementedError
     def focus_app(self, name: str) -> ActionResult: raise NotImplementedError
 

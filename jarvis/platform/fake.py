@@ -258,7 +258,23 @@ class FakeComputer(Computer):
         return ActionResult(True, "Typed.")
 
     def click_at(self, x, y, button="left", count=1):
+        self.log.append(f"click_at:{round(x)},{round(y)}:{button}:{count}")
         return ActionResult(True, "Clicked.")
+
+    def drag(self, x1, y1, x2, y2):
+        self.log.append(f"drag:{round(x1)},{round(y1)}->{round(x2)},{round(y2)}")
+        return ActionResult(True, "Dragged.")
+
+    def clipboard_get(self):
+        return getattr(self, "clipboard", "")
+
+    def clipboard_set(self, text):
+        self.clipboard = text
+        return ActionResult(True, "Copied.", verified=True)
+
+    def run_shell(self, command, timeout=60):
+        self.log.append(f"shell:{command}")
+        return {"ok": True, "exit_code": 0, "output": getattr(self, "shell_output", "")}
 
     def scroll(self, direction="down", amount=5):
         return ActionResult(True, "Scrolled.")

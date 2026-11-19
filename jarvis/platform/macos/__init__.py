@@ -354,6 +354,18 @@ class MacComputer(Computer):
 
         return inputs.scroll(direction, amount)
 
+    def drag(self, x1, y1, x2, y2):
+        from . import inputs
+
+        return inputs.drag(x1, y1, x2, y2)
+
+    def clipboard_get(self) -> str:
+        return subprocess.run(["pbpaste"], capture_output=True, text=True, timeout=5).stdout
+
+    def clipboard_set(self, text: str) -> ActionResult:
+        subprocess.run(["pbcopy"], input=text, text=True, timeout=5)
+        return ActionResult(True, "Copied to the clipboard.", verified=self.clipboard_get() == text)
+
     # --- screen -----------------------------------------------------------------------------
     def screenshot(self, max_dim=1280):
         from . import screen
@@ -421,7 +433,13 @@ class MacComputer(Computer):
         p = os.path.expanduser(path)
         if not os.path.exists(p):
             return ActionResult.fail(f"{path} doesn't exist.")
-        args = ["open", "-a", app, p] if app else ["open", p]
+        args = ["open", p]
+        if app:
+            name = self.resolve_app(app) or app
+            ap = self.app_path(name)
+            if not ap:
+                return ActionResult.fail(f"I can't find an app called {app} on this Mac.")
+            args = ["open", "-a", ap, p]          # by path: macOS never has to guess
         proc = subprocess.run(args, capture_output=True, text=True, timeout=15)
         if proc.returncode != 0:
             return ActionResult.fail(proc.stderr.strip())

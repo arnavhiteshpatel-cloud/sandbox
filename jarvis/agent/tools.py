@@ -450,9 +450,8 @@ async def calculate(ctx, a):
     return {"ok": True, "expression": a["expression"], "result": value}
 
 
-async def click_visual(ctx, a):
-    """Find something on screen by description with the vision model, then click it (for canvas, images,
-    PDFs and apps whose controls aren't in the accessibility tree)."""
+async def _locate(ctx, description: str):
+    """Screen point (in macOS points) of something described in words, via the vision model. (x, y) or an error dict."""
     import re as _re
 
     if not (ctx.allow_vision and ctx.llm is not None):
@@ -462,18 +461,103 @@ async def click_visual(ctx, a):
         return {"ok": False, "error": "Couldn't take a screenshot."}
     r = await ctx.llm.chat([
         {"role": "system", "content": "You locate UI elements in screenshots. Reply with JSON only."},
-        {"role": "user", "content": f"Find: {a['description']}\nReply exactly {{\"x\": X, \"y\": Y}} where X and Y are the element's "
+        {"role": "user", "content": f"Find: {description}\nReply exactly {{\"x\": X, \"y\": Y}} where X and Y are the element's "
                                     "center in thousandths of the image width and height (0-1000), or {\"x\": null} if it isn't visible.",
          "images": [base64.b64encode(png).decode()]}],
         model=ctx.vision_model or ctx.model, max_tokens=60, think=False)
     m = _re.search(r'"x"\s*:\s*(\d+(?:\.\d+)?)\s*,\s*"y"\s*:\s*(\d+(?:\.\d+)?)', r.content or "")
     if not m:
-        return {"ok": False, "error": f"Couldn't find “{a['description']}” on screen."}
+        return {"ok": False, "error": f"Couldn't find “{description}” on screen."}
     w, h = await _t(ctx.computer.screen_size)
-    x, y = float(m.group(1)) / 1000 * w, float(m.group(2)) / 1000 * h
-    res = await _t(ctx.computer.click_at, x, y, "left", int(a.get("clicks", 1)))
+    return float(m.group(1)) / 1000 * w, float(m.group(2)) / 1000 * h
+
+
+async def mouse(ctx, a):
+    """Right-click, double-click, drag or hover anywhere: by description (vision) or by screen point."""
+    async def point(desc_key, x_key, y_key):
+        if a.get(x_key) is not None and a.get(y_key) is not None:
+            return float(a[x_key]), float(a[y_key])
+        if a.get(desc_key):
+            return await _locate(ctx, a[desc_key])
+        return {"ok": False, "error": f"Give {desc_key} (a description) or {x_key}/{y_key}."}
+    p = await point("target", "x", "y")
+    if isinstance(p, dict):
+        return p
+    act = a.get("action", "click")
+    if act == "drag":
+        q = await point("to", "to_x", "to_y")
+        if isinstance(q, dict):
+            return q
+        res = await _t(ctx.computer.drag, p[0], p[1], q[0], q[1])
+    elif act == "move":
+        res = ActionResult(True, "Hovering is not needed for anything I do; nothing changed.")
+    else:
+        button = "right" if act == "right_click" else "left"
+        res = await _t(ctx.computer.click_at, p[0], p[1], button, 2 if act == "double_click" else 1)
     out = _res(res)
-    out["clicked_at"] = [round(x), round(y)]
+    out["at"] = [round(p[0]), round(p[1])]
+    out["hint"] = "Verify with observe or look_at_screen (a right-click opens a context menu: observe it, then click an item)."
+    return out
+
+
+async def quit_app(ctx, a):
+    name = ctx.computer.resolve_app(a["name"]) or a["name"]
+    if name.lower() in ("jarvis",):
+        return {"ok": False, "error": "I won't quit myself; use the menu-bar icon."}
+    return _res(await _t(ctx.computer.quit_app, name))
+
+
+async def run_shell(ctx, a):
+    r = await _t(ctx.computer.run_shell, a["command"], float(a.get("timeout", 60)))
+    if "output" in r:
+        r["output"] = wrap_untrusted("command output", r["output"])
+    return r
+
+
+async def clipboard(ctx, a):
+    if a.get("action", "get") == "set":
+        return _res(await _t(ctx.computer.clipboard_set, a.get("text", "")))
+    text = await _t(ctx.computer.clipboard_get)
+    return {"ok": True, "text": wrap_untrusted("clipboard", text[:6000])}
+
+
+async def open_file(ctx, a):
+    return _res(await _t(ctx.computer.open_path, _expand(a["path"]), a.get("app")))
+
+
+async def write_file(ctx, a):
+    p = _expand(a["path"])
+    mode = a.get("mode", "create")
+    if os.path.exists(p) and mode == "create":
+        return {"ok": False, "error": f"{p} already exists. Use mode 'append', or 'overwrite' (asks the user)."}
+    os.makedirs(os.path.dirname(p) or ".", exist_ok=True)
+    with open(p, "a" if mode == "append" else "w", encoding="utf-8") as f:
+        f.write(a.get("text", ""))
+    return {"ok": os.path.exists(p), "path": p, "bytes": os.path.getsize(p)}
+
+
+async def copy_file(ctx, a):
+    s, d = _expand(a["src"]), _expand(a["dst"])
+    if not os.path.exists(s):
+        return {"ok": False, "error": f"{a['src']} doesn't exist."}
+    if os.path.isdir(d):
+        d = os.path.join(d, os.path.basename(s))
+    if os.path.exists(d):
+        return {"ok": False, "error": f"{d} already exists. Choose another name; I never overwrite."}
+    os.makedirs(os.path.dirname(d), exist_ok=True)
+    await _t(shutil.copytree if os.path.isdir(s) else shutil.copy2, s, d)
+    return {"ok": os.path.exists(d), "copied_to": d}
+
+
+async def click_visual(ctx, a):
+    """Find something on screen by description with the vision model, then click it (for canvas, images,
+    PDFs and apps whose controls aren't in the accessibility tree)."""
+    p = await _locate(ctx, a["description"])
+    if isinstance(p, dict):
+        return p
+    res = await _t(ctx.computer.click_at, p[0], p[1], "left", int(a.get("clicks", 1)))
+    out = _res(res)
+    out["clicked_at"] = [round(p[0]), round(p[1])]
     out["hint"] = "Verify with observe or look_at_screen; vision clicks can miss by a few pixels."
     return out
 
@@ -641,6 +725,24 @@ TOOLS: list[Tool] = [
     Tool("compose_email", "Open a Mail draft (not sent).", {"to": {"type": "array", "items": S}, "subject": S, "body": S}, ["subject", "body"], "low", compose_email),
     Tool("send_message", "Send an iMessage to a contact name, phone number or email (the user is always asked first).",
          {"to": S, "text": S}, ["to", "text"], "high", send_message),
+    Tool("quit_app", "Quit (close) an app. It may ask to save unsaved work.", {"name": S}, ["name"], "medium", quit_app),
+    Tool("mouse", "Mouse actions besides a normal click: right_click (context menus), double_click, drag (e.g. a file onto a "
+         "folder, a slider), move. Give target as a description (found with vision) or x/y screen points.",
+         {"action": {"type": "string", "enum": ["right_click", "double_click", "drag", "move", "click"]}, "target": S,
+          "x": {"type": "number"}, "y": {"type": "number"}, "to": S, "to_x": {"type": "number"}, "to_y": {"type": "number"}},
+         ["action"], "medium", mouse),
+    Tool("run_shell", "Run a Terminal (zsh) command as the user, from the home folder: anything the Terminal can do (system "
+         "info, defaults, pmset, networksetup, git, brew, scripts, file work). Read-only commands run directly; anything that "
+         "changes the system asks the user first. No sudo.", {"command": S, "timeout": {"type": "integer"}}, ["command"],
+         "high", run_shell, True),
+    Tool("clipboard", "Read the clipboard (action='get') or put text on it (action='set').",
+         {"action": {"type": "string", "enum": ["get", "set"]}, "text": S}, ["action"], "low", clipboard, True),
+    Tool("open_file", "Open a file or folder, optionally in a specific app (e.g. app='Preview').", {"path": S, "app": S}, ["path"],
+         "low", open_file),
+    Tool("write_file", "Create a text file (mode 'create'), add to one ('append') or replace one ('overwrite', asks the user).",
+         {"path": S, "text": S, "mode": {"type": "string", "enum": ["create", "append", "overwrite"]}}, ["path", "text"],
+         "medium", write_file),
+    Tool("copy_file", "Copy a file or folder. Never overwrites.", {"src": S, "dst": S}, ["src", "dst"], "medium", copy_file),
     Tool("done", "Finish the task. summary = what you did and the answer, in one to three spoken sentences. success=false if you could not complete it.",
          {"summary": S, "success": {"type": "boolean"}}, ["summary"], "low", done),
 ]
@@ -682,12 +784,13 @@ def validate_args(tool: Tool, args: dict) -> str | None:
 # cuts time-to-first-action and energy. Groups are chosen from the request; when unsure, all.
 import re as _re
 
-CORE = {"observe", "open_app", "open_url", "click", "type_text", "press_keys", "scroll", "browser_nav", "read_page",
-        "wait", "ask_user", "done", "remember", "recall", "run_shortcut"}
+CORE = {"observe", "open_app", "quit_app", "open_url", "click", "type_text", "press_keys", "scroll", "browser_nav", "read_page",
+        "wait", "ask_user", "done", "remember", "recall", "run_shortcut", "clipboard"}
 CORE |= {"menu", "media", "system", "web_search", "read_webpage"}
-FILES = {"search_files", "list_folder", "read_file", "move_file", "make_folder", "trash_files", "find_duplicates"}
-SCREEN = {"look_at_screen", "click_screen_text"}
-APPS = {"app_dictionary", "script_app", "create_note", "create_reminder", "calendar", "compose_email", "send_message"}
+FILES = {"search_files", "list_folder", "read_file", "move_file", "make_folder", "trash_files", "find_duplicates",
+         "open_file", "write_file", "copy_file"}
+SCREEN = {"look_at_screen", "click_screen_text", "mouse"}
+APPS = {"app_dictionary", "script_app", "run_shell", "create_note", "create_reminder", "calendar", "compose_email", "send_message"}
 APP_WORDS = _re.compile(r"\b(app|application|notes?|reminders?|remind|calendar|schedule|meeting|events?|mail|email|e-mail|message|text|imessage|"
                         r"music|spotify|song|playlist|podcast|finder|slack|discord|notion|word|excel|powerpoint|keynote|pages|numbers|"
                         r"xcode|vs ?code|zoom|teams|photos|preview|terminal|settings|window|dock|script)\b", _re.I)

@@ -124,3 +124,48 @@ def test_tool_subsetting():
     vague = {t.name for t in select_tools("help me with this")}
     assert "search_files" in vague and "look_at_screen" in vague
     assert "look_at_screen" not in {t.name for t in select_tools("what's on my screen", allow_vision=False)}
+
+
+# --- 2026-11-19: "replicate any function on my computer that I can" ---------------------------------------
+async def test_agent_can_quit_apps(settings, scripted):
+    c = ctx(settings)
+    c.computer.running.append("Notes") if "Notes" not in c.computer.running else None
+    llm = scripted([("tools", [("quit_app", {"name": "notes"})]), ("tools", [("done", {"summary": "Closed Notes."})])])
+    res = await Agent(llm, settings).run("close notes", c, mode="balanced", model="m", cancel=CancelToken())
+    assert res.ok and "Notes" not in c.computer.running
+
+
+async def test_shell_reads_freely_but_asks_before_changing_things(settings, scripted):
+    c = ctx(settings)
+    asked = []
+
+    async def deny(q):
+        asked.append(q)
+        return False
+    llm = scripted([("tools", [("run_shell", {"command": "pmset -g batt"})]),
+                    ("tools", [("run_shell", {"command": "defaults write com.apple.dock autohide -bool true"})]),
+                    ("tools", [("run_shell", {"command": "sudo rm -rf /"})]),
+                    ("tools", [("done", {"summary": "ok"})])])
+    await Agent(llm, settings, confirm=deny).run("hide the dock", c, mode="balanced", model="m", cancel=CancelToken())
+    shell = [e for e in c.computer.log if e.startswith("shell:")]
+    assert shell == ["shell:pmset -g batt"]                      # the write was declined, sudo refused outright
+    assert len(asked) == 1 and "defaults write" in asked[0]
+
+
+async def test_mouse_files_and_clipboard(settings, scripted, tmp_path):
+    c = ctx(settings)
+    settings.set("security.file_write_roots", [str(tmp_path)])
+    src = tmp_path / "a.txt"
+    src.write_text("hello")
+    llm = scripted([("tools", [("mouse", {"action": "right_click", "x": 100, "y": 200})]),
+                    ("tools", [("mouse", {"action": "drag", "x": 10, "y": 10, "to_x": 300, "to_y": 400})]),
+                    ("tools", [("write_file", {"path": str(tmp_path / "todo.txt"), "text": "buy milk"})]),
+                    ("tools", [("copy_file", {"src": str(src), "dst": str(tmp_path / "b.txt")})]),
+                    ("tools", [("clipboard", {"action": "set", "text": "copied!"})]),
+                    ("tools", [("open_file", {"path": str(src), "app": "Notes"})]),
+                    ("tools", [("done", {"summary": "done"})])])
+    res = await Agent(llm, settings).run("do these things", c, mode="balanced", model="m", cancel=CancelToken())
+    assert res.ok
+    assert "click_at:100,200:right:1" in c.computer.log and "drag:10,10->300,400" in c.computer.log
+    assert (tmp_path / "todo.txt").read_text() == "buy milk" and (tmp_path / "b.txt").read_text() == "hello"
+    assert c.computer.clipboard_get() == "copied!"
