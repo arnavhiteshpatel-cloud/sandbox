@@ -15,6 +15,7 @@ from . import paths
 
 DEFAULTS: dict[str, Any] = {
     "settings_version": 4,
+    "apps": {"aliases": {}},          # app names you taught ("arc" -> "Arc")
     "learning": {
         "ask_before_learning": True,   # user choice: ask before remembering a new phrasing
         "suggest_shortcuts": True,     # user choice: suggest shortcuts for things you repeat, whenever useful

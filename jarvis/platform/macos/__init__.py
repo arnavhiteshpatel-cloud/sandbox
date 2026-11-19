@@ -19,6 +19,9 @@ log = logging.getLogger("jarvis.macos")
 
 APP_DIRS = ["/Applications", "/Applications/Utilities", "/System/Applications", "/System/Applications/Utilities",
             str(Path.home() / "Applications"), "/System/Library/CoreServices/Applications"]
+KNOWN_BUNDLE_IDS = {"Arc": "company.thebrowser.Browser", "Google Chrome": "com.google.Chrome", "Spotify": "com.spotify.client",
+                    "Visual Studio Code": "com.microsoft.VSCode", "Brave Browser": "com.brave.Browser", "Notion": "notion.id",
+                    "Microsoft Word": "com.microsoft.Word", "zoom.us": "us.zoom.xos", "Discord": "com.hnc.Discord"}
 BROWSERS = {"Arc", "Google Chrome", "Safari", "Brave Browser", "Microsoft Edge", "Vivaldi", "Chromium", "Firefox"}
 
 
@@ -43,11 +46,13 @@ class MacComputer(Computer):
         if apps and time.time() - ts < 600:
             return apps
         names: set[str] = set()
+        paths: dict[str, str] = {}
         for d in APP_DIRS + ["/Applications/Setapp", str(Path.home() / "Applications" / "Chrome Apps.localized")]:
             try:
                 for entry in os.scandir(d):
                     if entry.name.endswith(".app"):
                         names.add(entry.name[:-4])
+                        paths.setdefault(entry.name[:-4], entry.path)
             except OSError:
                 continue
         # Spotlight knows apps installed anywhere (subfolders, other volumes, Setapp, etc.).
@@ -57,10 +62,40 @@ class MacComputer(Computer):
             for line in out.splitlines():
                 if line.endswith(".app") and "/Library/" not in line and ".app/" not in line[:-4]:
                     names.add(os.path.basename(line)[:-4])
+                    paths.setdefault(os.path.basename(line)[:-4], line)
         except Exception:
             pass
+        # Well-known apps found by bundle id, in case they live somewhere unusual or Spotlight is off.
+        for name, bid in KNOWN_BUNDLE_IDS.items():
+            if name not in paths:
+                p = self._path_for_bundle_id(bid)
+                if p:
+                    names.add(name)
+                    paths[name] = p
+        self._app_paths = paths
         self._apps_cache = (time.time(), sorted(names))
         return self._apps_cache[1]
+
+    @staticmethod
+    def _path_for_bundle_id(bid: str) -> str | None:
+        try:
+            out = subprocess.run(["mdfind", f"kMDItemCFBundleIdentifier == '{bid}'"], capture_output=True, text=True,
+                                 timeout=5).stdout
+        except Exception:
+            return None
+        for line in out.splitlines():
+            if line.endswith(".app") and os.path.isdir(line):
+                return line
+        return None
+
+    def app_path(self, name: str) -> str | None:
+        self.list_apps()
+        p = getattr(self, "_app_paths", {}).get(name)
+        if p and os.path.isdir(p):
+            return p
+        if name in KNOWN_BUNDLE_IDS:
+            return self._path_for_bundle_id(KNOWN_BUNDLE_IDS[name])
+        return None
 
     def running_apps(self) -> list[str]:
         # `lsappinfo list` includes hidden (⌘H) apps; it is always fresh and needs no permission.
@@ -91,15 +126,21 @@ class MacComputer(Computer):
         return m.group(1) if m else None
 
     def open_app(self, name: str) -> ActionResult:
-        proc = subprocess.run(["open", "-a", name], capture_output=True, text=True, timeout=15)
+        """Open exactly this app, by its path. Never `open -a <name>`: macOS guesses on a name it doesn't know
+        exactly, which is how "Arc" opened Archive Utility."""
+        path = self.app_path(name)
+        if not path:
+            return ActionResult.fail(f"I can't find an app called {name} on this Mac.")
+        proc = subprocess.run(["open", path], capture_output=True, text=True, timeout=15)
         if proc.returncode != 0:
-            return ActionResult.fail(f"Couldn't open {name}: {proc.stderr.strip() or 'not found'}")
+            return ActionResult.fail(f"Couldn't open {name}: {proc.stderr.strip() or 'macOS refused'}")
         deadline = time.monotonic() + 10
+        exe_dir = path.rstrip("/") + "/Contents/MacOS/"
         while time.monotonic() < deadline:
-            if self._is_running(name):
-                return ActionResult(True, f"{name} is open.", {"app": name}, verified=True)
+            if name in self.running_apps() or subprocess.run(["pgrep", "-f", exe_dir], capture_output=True).returncode == 0:
+                return ActionResult(True, f"{name} is open.", {"app": name, "path": path}, verified=True)
             time.sleep(0.2)
-        return ActionResult(True, f"Asked macOS to open {name}, but couldn't confirm it started.", {"app": name})
+        return ActionResult.fail(f"I asked macOS to open {name}, but it didn't start.")
 
     def quit_app(self, name: str) -> ActionResult:
         try:

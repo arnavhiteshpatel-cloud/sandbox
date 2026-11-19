@@ -50,7 +50,7 @@ NOT_APPS = {"it", "this", "that", "them", "these", "those", "one", "the one", "t
             "the most recent one", "the latest one", "the newest one", "up", "me", "my", "a", "the"}
 
 
-def resolve_app_name(spoken: str, apps: list[str]) -> str | None:
+def resolve_app_name(spoken: str, apps: list[str], user_aliases: dict | None = None) -> str | None:
     import re as _re
 
     from rapidfuzz import fuzz
@@ -64,17 +64,34 @@ def resolve_app_name(spoken: str, apps: list[str]) -> str | None:
         return None
     lower = {a.lower(): a for a in apps}
     for cand in (s, _re.sub(r"\s+(?:app|application|browser|program)$", "", s)):
+        taught = (user_aliases or {}).get(cand)            # "when I say arc I mean the Arc browser"
+        if taught and taught.lower() in lower:
+            return lower[taught.lower()]
         if cand in lower:
             return lower[cand]
-        if cand in APP_ALIASES and APP_ALIASES[cand].lower() in lower:
-            return lower[APP_ALIASES[cand].lower()]
+        if cand in APP_ALIASES:
+            # A nickname for one specific app: that app or nothing ("arch" is Arc, never Archive Utility).
+            return lower.get(APP_ALIASES[cand].lower())
     s = _re.sub(r"\s+(?:app|application|program)$", "", s)
     if len(s) < 3:
         return None
-    # Whole-word prefix match: "visual studio" -> "Visual Studio Code", "logic" -> "Logic Pro". Unique only.
+    # Whole-word match at the start of the name: "visual studio" -> "Visual Studio Code", "logic" -> "Logic Pro".
+    # Words must match whole; only the last may be abbreviated, and only with 4+ letters ("arc" must never
+    # become "Archive Utility"). Unique only.
     words = s.split()
-    pref = [name for low, name in lower.items()
-            if len(words) <= len(low.split()) and all(lw.startswith(w) and len(w) >= 3 for w, lw in zip(words, low.split()))]
+
+    def _starts(low: str) -> bool:
+        lw = low.split()
+        if len(words) > len(lw):
+            return False
+        for i, w in enumerate(words):
+            if w == lw[i]:
+                continue
+            if i == len(words) - 1 and len(w) >= 4 and lw[i].startswith(w):
+                continue
+            return False
+        return True
+    pref = [name for low, name in lower.items() if _starts(low)]
     if len(pref) == 1:
         return pref[0]
     # Close spelling of the whole name only (handles transcription slips like "spotfy"), never substrings.
@@ -98,7 +115,7 @@ class Computer:
         Deliberately strict: a wrong app is worse than asking. Never matches a fragment inside a word
         ("arc" must not open "Archive Utility") and never resolves pronouns ("open it").
         """
-        return resolve_app_name(spoken, self.list_apps())
+        return resolve_app_name(spoken, self.list_apps(), getattr(self, "user_aliases", None))
 
     def open_app(self, name: str) -> ActionResult: raise NotImplementedError
     def quit_app(self, name: str) -> ActionResult: raise NotImplementedError

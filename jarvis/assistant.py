@@ -63,6 +63,7 @@ class Assistant:
         self.db = db or Database()
         self.events = events or EventBus()
         self.computer = computer or get_computer(self.settings.get("browser.default", "Arc"))
+        self.computer.user_aliases = dict(self.settings.get("apps.aliases", {}) or {})   # app names you taught it
         self.memory = Memory(self.db)
         self.shortcuts = ShortcutStore(self.db)
         self.llm = make_client(self.settings)
@@ -509,8 +510,19 @@ class Assistant:
         return {"route": route, "ok": ok, "message": text, **extra}
 
     # --- routing ----------------------------------------------------------------------------------
-    async def _dispatch(self, text: str, intent, cancel: CancelToken) -> dict:
+    async def _dispatch(self, text: str, intent, cancel: CancelToken, depth: int = 0) -> dict:
         self.events.emit("status", status="thinking")
+        # Phrasings you taught explicitly ("when I say X I mean Y") win over everything else.
+        taught = self.learner.lookup(text) if depth == 0 else None
+        if taught and taught["tool"] == "say_instead":
+            self.events.emit("status", status="acting", detail=taught["args"]["text"])
+            new = taught["args"]["text"]
+            return await self._dispatch(new, router.route(new, {"browser_active": self.session.browser_active}), cancel, depth + 1)
+        if intent and intent.name == "teach":
+            return await self._teach(intent.args["phrase"], intent.args["meaning"])
+        parts = router.split_compound(text, {"browser_active": self.session.browser_active}) if depth < 2 else None
+        if parts:
+            return await self._run_compound(parts, cancel)
         if intent and intent.name == "shortcut_create":
             return await self._create_shortcut_dialog(intent.args.get("name"), intent.args.get("description"))
         m = match_shortcut(text, self.shortcuts.list())
@@ -530,6 +542,42 @@ class Assistant:
             return await self._chat(text, cancel)
         return await self._run_agent(text, cancel)
 
+    async def _run_compound(self, parts, cancel: CancelToken) -> dict:
+        """'close Archive Utility and open Arc': each part in order, no AI. Stops at the first failure."""
+        messages, ok = [], True
+        for part, it in parts:
+            cancel.check()
+            res = await self._builtin(it, cancel)
+            if res is None:
+                res = await self._dispatch(part, it, cancel, depth=2)
+            messages.append(res.get("message", ""))
+            if not res.get("ok", True):
+                ok = False
+                break
+        return {"route": "builtin", "ok": ok, "message": " ".join(m for m in messages if m)}
+
+    async def _teach(self, phrase: str, meaning: str) -> dict:
+        """'Remember that when I say open arc, I mean the Arc browser.' Saved as a phrasing that runs instantly from
+        now on (Memory → Learned phrasings), and as an app alias when it names an app."""
+        verbs = r"(?:open(?: up)?|launch|start|close|quit|switch to|go to|pull up|bring up|show me|show|play)"
+        command = meaning
+        vm = re.match(verbs + r"\s+(.+)", router.normalize(phrase))
+        if router.route(meaning) is None and vm and not re.match(verbs + r"\b", router.normalize(meaning)):
+            command = router.normalize(phrase)[: vm.start(1)].strip() + " " + meaning   # "open" + "the Arc browser"
+        # An app alias makes every phrasing work: "open arc", "close arc", "switch to arc".
+        target = re.sub(r"^(?:the|my)\s+", "", vm.group(1)) if vm else router.normalize(phrase)
+        app = self.computer.resolve_app(re.sub(r"^(?:the|my)\s+", "", meaning))
+        if app:
+            aliases = dict(self.settings.get("apps.aliases", {}) or {})
+            aliases[target] = app
+            self.settings.set("apps.aliases", aliases)
+            self.computer.user_aliases = aliases
+        self.learner.learn(phrase, "say_instead", {"text": command})
+        self.db.log("learning", f"Taught: “{phrase}” means “{command}”" + (f" (app alias {target} → {app})" if app else ""))
+        msg = f"Got it. “{phrase}” opens {app} from now on." if app and re.match(r"open|launch|start|pull up|bring up", router.normalize(phrase)) \
+            else f"Got it. When you say “{phrase}”, I'll {command[0].lower() + command[1:]}."
+        return await self._reply(msg, True, "learning", followup=False)
+
     async def _chat(self, text: str, cancel: CancelToken) -> dict:
         """Conversation and general questions: one short model call (~250 tokens of instructions instead of the
         agent's ~3,300), so the answer starts in about a second. Falls back to a web lookup when it needs to."""
@@ -540,7 +588,9 @@ class Assistant:
         if d.think:                      # "think it through", or a genuinely complex question
             return await self._run_agent(text, cancel)
         self.events.emit("status", status="thinking", detail="local model")
-        msgs = [{"role": "system", "content": chat_prompt(self.settings)}] + [
+        notes = [r["content"] for r in self.memory.search(text, 4)]
+        system = chat_prompt(self.settings) + ("\nThings the user told you to remember: " + " | ".join(notes) if notes else "")
+        msgs = [{"role": "system", "content": system}] + [
             {"role": m["role"], "content": m["content"]} for m in self.session.history[-7:]]
         try:
             reply = await self.llm.chat(msgs, model=self.model, think=False, max_tokens=220, temperature=0.4,

@@ -193,3 +193,16 @@ one utterance at a time; stop drops queued speech; player stops within one block
 speech not key clicks; HUD status stays "listening" during the follow-up window; fast path and lookups).
 Not verified here: real microphones/speakers (no audio hardware in the container), the Swift changes (no Swift
 toolchain here; reviewed by hand), timings on the M4 Pro.
+
+### Same day: "open arc" → Archive Utility again; "remember" didn't work
+- "open up arc" kept "up" ("up arc" matched nothing) and fell to the agent → router accepts "open up / start up / boot up".
+- "close archive browser and open arc" was read as closing an app named "archive browser and open arc" → simple
+  commands joined by "and"/"then"/commas now run one after another without the AI (only when every part is simple).
+- With Arc missing from JARVIS's app list, "arc"/"arch" still prefix-matched **Arc**hive Utility, and apps were opened
+  with `open -a <name>`, which lets macOS guess → the resolver only accepts whole words (the last may be abbreviated,
+  4+ letters), a nickname like "arch" means Arc or nothing, apps open **by path** (never by name), well-known apps are
+  also found by bundle id (Arc: company.thebrowser.Browser), and opening is reported as failed unless that exact app
+  starts.
+- "Remember that when I say open arc, I mean the Arc browser" only saved a note that nothing consulted → it is now a
+  taught phrasing that wins over everything else and an app alias ("arc" → Arc) so "close arc", "switch to arc" work
+  too; visible and deletable under Memory → Learned phrasings. Quick answers now include your saved memories.

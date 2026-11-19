@@ -187,6 +187,13 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
     if re.fullmatch(r"what(?:'s| is) (?:the |today's )?date(?: today)?|what day is (?:it|today)|what's today", s):
         return I("date")
 
+    # --- teaching a phrasing: "remember that when I say open arc I mean the Arc browser" -----------
+    m = re.fullmatch(r"(?:remember(?: that)? |from now on |just so you know |note that )?(?:when(?:ever)? i say|if i say) "
+                     r"[\"']?(.+?)[\"']?,? i (?:mean|want(?: you to)?|am talking about|'m talking about) (.+)", s) \
+        or re.fullmatch(r"(?:remember(?: that)? )[\"']?(.+?)[\"']? (?:means|should mean|is short for) (.+)", s)
+    if m:
+        return I("teach", phrase=m.group(1).strip(" ,.\"'"), meaning=m.group(2).strip(" ,.\"'"))
+
     # --- memory ----------------------------------------------------------------------
     m = re.fullmatch(r"remember (?:that )?(.+)", s)
     if m:
@@ -358,7 +365,7 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
     m = re.fullmatch(r"(?:quit|close|exit|kill)\s+(?:the\s+)?(.+?)(?:\s+app)?", s)
     if m:
         return I("quit_app", name=m.group(1))
-    m = re.fullmatch(r"(?:open|launch|start|run|fire up|pull up|bring up)\s+(?:the\s+)?(?:app\s+)?(.+?)(?:\s+app)?", s)
+    m = re.fullmatch(r"(?:open(?: up)?|launch|start(?: up)?|run|fire up|pull up|bring up|boot up)\s+(?:the\s+)?(?:app\s+)?(.+?)(?:\s+app)?", s)
     if m:
         target = m.group(1)
         url = spoken_to_url(target)
@@ -468,3 +475,23 @@ def classify_question(text: str, last_route: str | None = None) -> str | None:
     if not chatty:
         return None
     return "web" if LIVE_INFO.search(n) else "chat"
+
+
+# --- several commands at once: "close archive utility and open arc" -----------------------------------
+SIMPLE_INTENTS = {"open", "open_url", "quit_app", "goto", "media", "spotify_search", "volume", "appearance", "window",
+                  "browser_nav", "browser_scroll", "settings", "screenshot", "lock", "mute", "unmute", "dictation"}
+
+
+def split_compound(text: str, ctx: dict | None = None) -> list[tuple[str, "Intent"]] | None:
+    """Split "X and Y" / "X then Y" into separate simple commands, but only when every part is one."""
+    parts = [p.strip(" ,.") for p in re.split(r",?\s+(?:and then|and also|and|then|after that)\s+|,\s+", text.strip(), flags=re.I)]
+    parts = [p for p in parts if p]
+    if len(parts) < 2 or len(parts) > 5:
+        return None
+    out = []
+    for p in parts:
+        it = route(p, ctx)
+        if it is None or it.name not in SIMPLE_INTENTS:
+            return None
+        out.append((p, it))
+    return out

@@ -264,3 +264,52 @@ def test_history_pruned_after_30_days(assistant):
     assert assistant.db.one("SELECT count(*) AS n FROM activity WHERE ts < ?", (old + 1,))["n"] == 0
     assert assistant.db.one("SELECT count(*) AS n FROM tasks WHERE started_at < ?", (old + 1,))["n"] == 0
     assert assistant.memory.all()
+
+
+# --- 2026-11-19: "open arc" opened Archive Utility; "remember" didn't change anything ---------------------
+def test_arc_never_resolves_to_archive_utility():
+    from jarvis.platform.base import resolve_app_name as r
+
+    apps = ["Arc", "Archive Utility", "Logic Pro", "Visual Studio Code", "Safari"]
+    no_arc = [a for a in apps if a != "Arc"]
+    assert r("arc", apps) == "Arc" and r("arch", apps) == "Arc" and r("ark", apps) == "Arc"
+    assert r("arc", no_arc) is None and r("arch", no_arc) is None          # never the wrong app
+    assert r("logic", apps) == "Logic Pro" and r("visual studio", apps) == "Visual Studio Code"
+    assert r("archive", apps) == "Archive Utility"
+    assert r("arc", no_arc, {"arc": "Safari"}) == "Safari"                 # taught alias wins
+
+
+def test_open_up_and_compound_commands():
+    from jarvis import router
+
+    assert router.route("open up arc").args["target"] == "arc"
+    parts = router.split_compound("close archive utility and open arc")
+    assert [i.name for _, i in parts] == ["quit_app", "open"] and parts[1][1].args["target"] == "arc"
+    assert router.split_compound("find my notes and summarize them") is None     # not all simple: agent's job
+
+
+async def test_compound_command_runs_both_without_ai(assistant):
+    c = assistant.computer
+    c.running.append("Archive Utility") if "Archive Utility" not in c.running else None
+    c.apps.append("Archive Utility")
+    r = await assistant.handle_text("close archive utility and open arc")
+    assert r["ok"] and "Archive Utility" not in c.running and "Arc" in c.running
+
+
+async def test_teaching_a_phrasing_takes_effect(assistant):
+    c = assistant.computer
+    c.apps.remove("Arc")
+    c.apps.append("Arc Browser Beta")       # an app whose name doesn't match what you say
+    r = await assistant.handle_text("Remember that when I say open arc, I mean the arc browser beta")
+    assert r["route"] == "learning" and "Arc Browser Beta" in r["message"]
+    r = await assistant.handle_text("open arc")
+    assert r["ok"] and "Arc Browser Beta" in c.running
+    assert assistant.computer.resolve_app("arc") == "Arc Browser Beta"        # "close arc" etc. work too
+    assert assistant.settings.get("apps.aliases") == {"arc": "Arc Browser Beta"}
+
+
+async def test_teaching_a_command_phrase(assistant):
+    r = await assistant.handle_text("when I say study mode I mean open spotify")
+    assert r["route"] == "learning"
+    r = await assistant.handle_text("study mode")
+    assert r["ok"] and "Spotify" in assistant.computer.running
