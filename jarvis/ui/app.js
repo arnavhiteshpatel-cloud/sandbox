@@ -497,13 +497,13 @@ async function loadSettings() {
     ${fld("Battery Saver model", inputFor("llm.models.battery_saver", s.llm.models.battery_saver, { list: "mlist" }))}
     ${fld("Balanced model", inputFor("llm.models.balanced", s.llm.models.balanced, { list: "mlist" }))}
     ${fld("Max Performance model", inputFor("llm.models.max_performance", s.llm.models.max_performance, { list: "mlist" }))}
+    ${fld("Smart model for computer tasks", inputFor("llm.smart_model", s.llm.smart_model || "", { list: "mlist" }), "Optional. A bigger model used only for multi-step tasks and “do it”; conversation stays on the fast one. E.g. gemma4:26b (download it first with “ollama pull gemma4:26b”). Empty = use the mode's model. Not used in Battery Saver.")}
     ${fld("Embedding model (file search)", inputFor("llm.embed_model", s.llm.embed_model, { list: "mlist" }))}
     ${fld("Slow “thinking” mode", inputFor("llm.think_policy", s.llm.think_policy, { select: { auto: "Automatic: only for complex requests, or when struggling", never: "Never (fastest)", always: "Always (slowest, most careful)" } }),
       "Say “think carefully…” to force it, or “quickly…” to skip it, for one request.")}
     ${tog("Internet lookups in the background (DuckDuckGo, Bing; no account)", inputFor("web.enabled", s.web.enabled, { bool: 1 }))}
     ${tog("Ask before remembering a new phrasing", inputFor("learning.ask_before_learning", s.learning.ask_before_learning, { bool: 1 }))}
     ${tog("Suggest shortcuts for things I repeat", inputFor("learning.suggest_shortcuts", s.learning.suggest_shortcuts, { bool: 1 }))}
-    ${fld("Smart model for computer tasks", inputFor("llm.smart_model", s.llm.smart_model || "", {}), "Optional. A bigger local model used only for multi-step tasks and “do it” (conversation stays on the fast one). Try gemma4:26b: run “ollama pull gemma4:26b” first. Leave empty to use the mode's model.")}
     ${fld("When “do it” finishes", inputFor("do_it.finish", s.do_it.finish, { select: { ask_then_submit: "Summarize, then ask “Submit?”", stop: "Stop before submitting" } }))}
     ${fld("Keep history for (days)", inputFor("history_days", s.history_days, { num: 1 }), "Commands, task steps and the activity log. Memories and shortcuts are kept until you delete them.")}
     <div class="help">${avail.length ? "Installed: " + avail.map(esc).join(", ") : esc(models.error || "No models found.")} · Run <code>jarvis bench</code> to compare models on your Mac.</div></section>
