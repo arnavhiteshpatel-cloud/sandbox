@@ -218,3 +218,12 @@ toolchain here; reviewed by hand), timings on the M4 Pro.
 - **Conversation is the default:** only clear computer work (command verbs, the screen/this page/files/apps, your
   calendar/emails/etc., instructions about your things like "crank up my tunes") goes to the agent; everything else —
   including "my day was rough", "write a poem", "help me think of a name" — gets the fast streamed path.
+
+### Same day: "I can't find an app called Arc" while Arc was open
+JARVIS only looked in app folders, Spotlight and (for known apps) Spotlight-by-bundle-id; the user's Arc wasn't found by
+any of them (which is also why `open -a Arc` had made macOS guess Archive Utility). Now: **running apps are always
+included** (`lsappinfo` gives each one's real path and bundle id, so "close X" works for anything running), apps seen
+running are **remembered** (`seen_apps.json`) so they open after being quit, known apps are also looked up through
+LaunchServices (`NSWorkspace URLForApplicationWithBundleIdentifier`, no Spotlight needed), one level of subfolders in
+/Applications plus Downloads/Desktop are scanned, and "arc" also answers to a running Browser Company app.
+Teaching accepts "every time I say X, I mean Y" and "the browser I have open" / "this app".

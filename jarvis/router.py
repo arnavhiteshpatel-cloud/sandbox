@@ -188,7 +188,7 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
         return I("date")
 
     # --- teaching a phrasing: "remember that when I say open arc I mean the Arc browser" -----------
-    m = re.fullmatch(r"(?:remember(?: that)? |from now on |just so you know |note that )?(?:when(?:ever)? i say|if i say) "
+    m = re.fullmatch(r"(?:remember(?: that)? |from now on |just so you know |note that )?(?:when(?:ever)?|every ?time|any ?time|each time|if) i say "
                      r"[\"']?(.+?)[\"']?,? i (?:mean|want(?: you to)?|am talking about|'m talking about) (.+)", s) \
         or re.fullmatch(r"(?:remember(?: that)? )[\"']?(.+?)[\"']? (?:means|should mean|is short for) (.+)", s)
     if m:

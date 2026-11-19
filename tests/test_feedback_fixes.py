@@ -313,3 +313,36 @@ async def test_teaching_a_command_phrase(assistant):
     assert r["route"] == "learning"
     r = await assistant.handle_text("study mode")
     assert r["ok"] and "Spotify" in assistant.computer.running
+
+
+def test_running_apps_are_found_wherever_they_live():
+    from jarvis.platform.macos import FAMILY_ALIASES, parse_lsappinfo
+
+    out = '''  1) "Finder" ASN:0x0-0x1001:
+    bundleID="com.apple.finder"
+    bundle path="/System/Library/CoreServices/Finder.app"
+  2) "Arc" ASN:0x0-0x4e04e:
+    bundleID="company.thebrowser.Browser"
+    bundle path="/Users/x/Downloads/Arc.app"
+'''
+    apps = parse_lsappinfo(out)
+    assert {"name": "Arc", "bundle_id": "company.thebrowser.Browser", "path": "/Users/x/Downloads/Arc.app"} in apps
+    assert apps[1]["bundle_id"].startswith(FAMILY_ALIASES["arc"])
+
+
+async def test_teach_every_time_i_say_with_the_browser_i_have_open(assistant):
+    c = assistant.computer
+    c.apps.remove("Arc")
+    c.apps.append("Arc Nightly")
+    c.running.append("Arc Nightly")
+    c.front = "Arc Nightly"
+    import jarvis.assistant as A
+    A.BROWSERS.add("Arc Nightly")
+    try:
+        r = await assistant.handle_text("remember that every time I say arc, I mean the browser I have open")
+        assert r["route"] == "learning" and "Arc Nightly" in r["message"]
+        c.quit_app("Arc Nightly")
+        r = await assistant.handle_text("open up arc")
+        assert r["ok"] and "Arc Nightly" in c.running
+    finally:
+        A.BROWSERS.discard("Arc Nightly")

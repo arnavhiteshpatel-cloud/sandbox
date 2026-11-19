@@ -39,7 +39,7 @@ log = logging.getLogger("jarvis")
 
 YES = re.compile(r"^(yes|yeah|yep|yup|sure|ok|okay|go ahead|do it|confirm|confirmed|affirmative|please do|proceed|"
                  r"correct|that's right|right|save it|absolutely|of course|yes please)\b", re.I)
-BROWSERS = {"Arc", "Google Chrome", "Safari", "Brave Browser", "Microsoft Edge", "Vivaldi", "Chromium"}
+BROWSERS = {"Arc", "Dia", "Google Chrome", "Safari", "Brave Browser", "Microsoft Edge", "Vivaldi", "Chromium", "Firefox"}
 PROGRESS_PHRASES = {"open_url": "Opening the page.", "read_page": "Reading the page.", "search_files": "Searching your files.",
                     "look_at_screen": "Looking at the screen.", "find_duplicates": "Checking for duplicates.",
                     "list_folder": "Going through the folder.", "read_file": "Reading the document.",
@@ -580,17 +580,36 @@ class Assistant:
             command = router.normalize(phrase)[: vm.start(1)].strip() + " " + meaning   # "open" + "the Arc browser"
         # An app alias makes every phrasing work: "open arc", "close arc", "switch to arc".
         target = re.sub(r"^(?:the|my)\s+", "", vm.group(1)) if vm else router.normalize(phrase)
-        app = self.computer.resolve_app(re.sub(r"^(?:the|my)\s+", "", meaning))
+        app = await asyncio.to_thread(self._app_meant_by, meaning)
         if app:
             aliases = dict(self.settings.get("apps.aliases", {}) or {})
             aliases[target] = app
             self.settings.set("apps.aliases", aliases)
             self.computer.user_aliases = aliases
-        self.learner.learn(phrase, "say_instead", {"text": command})
+        if vm or not app:   # a bare name ("arc") is fully handled by the alias: "open arc", "close arc", "switch to arc"
+            self.learner.learn(phrase, "say_instead", {"text": command if not app or not vm else f"{vm.group(0)[:vm.start(1)].strip()} {app}"})
         self.db.log("learning", f"Taught: “{phrase}” means “{command}”" + (f" (app alias {target} → {app})" if app else ""))
-        msg = f"Got it. “{phrase}” opens {app} from now on." if app and re.match(r"open|launch|start|pull up|bring up", router.normalize(phrase)) \
-            else f"Got it. When you say “{phrase}”, I'll {command[0].lower() + command[1:]}."
+        if app:
+            msg = f"Got it. “{target}” means {app} from now on."
+        else:
+            msg = f"Got it. When you say “{phrase}”, I'll {command[0].lower() + command[1:]}."
         return await self._reply(msg, True, "learning", followup=False)
+
+    def _app_meant_by(self, meaning: str) -> str | None:
+        """'the Arc browser', 'spotify', 'the browser I have open', 'this app' -> an app name."""
+        m = re.sub(r"^(?:the|my)\s+", "", router.normalize(meaning))
+        app = self.computer.resolve_app(m)
+        if app:
+            return app
+        running = self.computer.running_apps()
+        front = self.computer.frontmost_app()
+        if re.search(r"\b(?:browser|web ?browser)\b", m):
+            if front in BROWSERS:
+                return front
+            return next((b for b in running if b in BROWSERS), None)
+        if re.search(r"\b(?:this|that|the current|the open|i have open|i'm using|im using)\b", m) and front:
+            return front
+        return None
 
     async def _chat(self, text: str, cancel: CancelToken) -> dict:
         """Conversation and general questions: the fast conversation model, ~250 tokens of instructions instead of

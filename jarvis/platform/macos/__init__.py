@@ -10,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 
-from ..base import ActionResult, AutomationError, Computer
+from ..base import ActionResult, AutomationError, Computer, resolve_app_name
 from . import applescript as AS
 from .ax import AXController
 from .browser import BrowserController
@@ -19,6 +19,43 @@ log = logging.getLogger("jarvis.macos")
 
 APP_DIRS = ["/Applications", "/Applications/Utilities", "/System/Applications", "/System/Applications/Utilities",
             str(Path.home() / "Applications"), "/System/Library/CoreServices/Applications"]
+# Spoken name -> bundle-id prefix of a running app that should answer to it when no app has that exact name.
+FAMILY_ALIASES = {"arc": "company.thebrowser.", "the browser company": "company.thebrowser."}
+
+
+def _seen_apps_file() -> Path:
+    from ... import paths as _paths
+
+    return _paths.data_dir() / "seen_apps.json"
+
+
+def _load_seen_apps() -> dict:
+    try:
+        return json.loads(_seen_apps_file().read_text())
+    except Exception:
+        return {}
+
+
+def _save_seen_apps(d: dict) -> None:
+    try:
+        _seen_apps_file().write_text(json.dumps(d, indent=1, sort_keys=True))
+    except OSError:
+        pass
+
+
+def parse_lsappinfo(out: str) -> list[dict]:
+    """`lsappinfo list` -> [{name, bundle_id, path}] for every running app (no permission needed)."""
+    apps = []
+    for block in re.split(r"(?m)^\s*\d+\)\s+", out)[1:]:
+        m = re.match(r'"([^"]+)"', block)
+        if not m:
+            continue
+        bid = re.search(r'bundleID="([^"]*)"', block)
+        path = re.search(r'bundle path="([^"]*)"', block)
+        apps.append({"name": m.group(1), "bundle_id": bid.group(1) if bid else "", "path": path.group(1) if path else ""})
+    return apps
+
+
 KNOWN_BUNDLE_IDS = {"Arc": "company.thebrowser.Browser", "Google Chrome": "com.google.Chrome", "Spotify": "com.spotify.client",
                     "Visual Studio Code": "com.microsoft.VSCode", "Brave Browser": "com.brave.Browser", "Notion": "notion.id",
                     "Microsoft Word": "com.microsoft.Word", "zoom.us": "us.zoom.xos", "Discord": "com.hnc.Discord"}
@@ -42,42 +79,84 @@ class MacComputer(Computer):
 
     # --- applications -------------------------------------------------------------------
     def list_apps(self) -> list[str]:
+        """Every app JARVIS can open: installed ones (app folders and one level of subfolders, Spotlight,
+        macOS's own app database by bundle id) plus everything that is running right now, wherever it lives."""
         ts, apps = self._apps_cache
-        if apps and time.time() - ts < 600:
-            return apps
-        names: set[str] = set()
-        paths: dict[str, str] = {}
-        for d in APP_DIRS + ["/Applications/Setapp", str(Path.home() / "Applications" / "Chrome Apps.localized")]:
-            try:
-                for entry in os.scandir(d):
-                    if entry.name.endswith(".app"):
-                        names.add(entry.name[:-4])
-                        paths.setdefault(entry.name[:-4], entry.path)
-            except OSError:
-                continue
-        # Spotlight knows apps installed anywhere (subfolders, other volumes, Setapp, etc.).
-        try:
-            out = subprocess.run(["mdfind", "kMDItemContentType == 'com.apple.application-bundle'"],
-                                 capture_output=True, text=True, timeout=8).stdout
-            for line in out.splitlines():
-                if line.endswith(".app") and "/Library/" not in line and ".app/" not in line[:-4]:
-                    names.add(os.path.basename(line)[:-4])
-                    paths.setdefault(os.path.basename(line)[:-4], line)
-        except Exception:
-            pass
-        # Well-known apps found by bundle id, in case they live somewhere unusual or Spotlight is off.
-        for name, bid in KNOWN_BUNDLE_IDS.items():
-            if name not in paths:
-                p = self._path_for_bundle_id(bid)
-                if p:
-                    names.add(name)
-                    paths[name] = p
-        self._app_paths = paths
-        self._apps_cache = (time.time(), sorted(names))
-        return self._apps_cache[1]
+        if not (apps and time.time() - ts < 600):
+            names: set[str] = set()
+            paths: dict[str, str] = {}
+
+            def add(name: str, path: str) -> None:
+                names.add(name)
+                paths.setdefault(name, path)
+
+            home = Path.home()
+            for d in APP_DIRS + ["/Applications/Setapp", str(home / "Applications" / "Chrome Apps.localized"),
+                                 str(home / "Downloads"), str(home / "Desktop")]:
+                try:
+                    for entry in os.scandir(d):
+                        if entry.name.endswith(".app"):
+                            add(entry.name[:-4], entry.path)
+                        elif entry.is_dir() and d in ("/Applications", str(home / "Applications")):
+                            try:     # one level down: /Applications/Browsers/Arc.app
+                                for sub in os.scandir(entry.path):
+                                    if sub.name.endswith(".app"):
+                                        add(sub.name[:-4], sub.path)
+                            except OSError:
+                                pass
+                except OSError:
+                    continue
+            try:     # Spotlight knows apps installed anywhere (other volumes, Setapp, etc.)
+                out = subprocess.run(["mdfind", "kMDItemContentType == 'com.apple.application-bundle'"],
+                                     capture_output=True, text=True, timeout=8).stdout
+                for line in out.splitlines():
+                    if line.endswith(".app") and "/Library/" not in line and ".app/" not in line[:-4]:
+                        add(os.path.basename(line)[:-4], line)
+            except Exception:
+                pass
+            for name, path in _load_seen_apps().items():  # apps seen running before, wherever they live
+                if os.path.isdir(path):
+                    add(name, path)
+            for name, bid in KNOWN_BUNDLE_IDS.items():   # macOS's app database, works even with Spotlight off
+                if name not in paths:
+                    p = self._path_for_bundle_id(bid)
+                    if p:
+                        add(name, p)
+            self._app_paths = paths
+            self._apps_cache = (time.time(), sorted(names))
+        # Running apps, always fresh: "I literally have it open" must always work.
+        names = set(self._apps_cache[1])
+        self._family_aliases = {}
+        seen = None
+        for app in parse_lsappinfo(_sh(["lsappinfo", "list"])):
+            if app.get("path", "").endswith(".app"):
+                names.add(app["name"])
+                if self._app_paths.get(app["name"]) != app["path"] and "/Contents/" not in app["path"]:
+                    seen = seen if seen is not None else _load_seen_apps()
+                    if seen.get(app["name"]) != app["path"]:
+                        seen[app["name"]] = app["path"]          # remember it, so it opens after you quit it too
+                        _save_seen_apps(seen)
+                self._app_paths.setdefault(app["name"], app["path"])
+                for spoken, prefix in FAMILY_ALIASES.items():   # e.g. The Browser Company's browser for "arc"
+                    if app.get("bundle_id", "").startswith(prefix):
+                        self._family_aliases.setdefault(spoken, app["name"])
+        return sorted(names)
+
+    def resolve_app(self, spoken: str) -> str | None:
+        apps = self.list_apps()
+        aliases = {**getattr(self, "_family_aliases", {}), **(getattr(self, "user_aliases", None) or {})}
+        return resolve_app_name(spoken, apps, aliases)
 
     @staticmethod
     def _path_for_bundle_id(bid: str) -> str | None:
+        try:   # LaunchServices: knows every app macOS has seen, no Spotlight needed
+            from AppKit import NSWorkspace  # type: ignore
+
+            url = NSWorkspace.sharedWorkspace().URLForApplicationWithBundleIdentifier_(bid)
+            if url is not None and os.path.isdir(url.path()):
+                return str(url.path())
+        except Exception:
+            pass
         try:
             out = subprocess.run(["mdfind", f"kMDItemCFBundleIdentifier == '{bid}'"], capture_output=True, text=True,
                                  timeout=5).stdout
