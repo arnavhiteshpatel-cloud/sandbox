@@ -341,3 +341,49 @@ def test_held_back_action_and_lookup_are_never_spoken():
 
     s = SpokenStream()
     assert s.feed("ACTION: open my IB150 course.") == [] and s.flush() == [] and s.lookup
+
+
+CHATGPT = {"https://chatgpt.com/": {"title": "ChatGPT", "elements": [
+    {"role": "button", "name": "Canvas"}, {"role": "button", "name": "New chat"}, {"role": "input:text", "name": "Message ChatGPT"}],
+    "text": "What can I help with?"}}
+
+
+async def test_open_canvas_from_a_chatgpt_tab_opens_your_canvas(assistant, hist, scripted):
+    """ChatGPT has a 'Canvas' button; JARVIS clicked it and then wandered around ChatGPT."""
+    assistant.computer.sites.update(CHATGPT)
+    assistant.computer.browser_open_url("https://chatgpt.com/")
+    assistant.session.browser_active, assistant.computer.front = True, "Arc"
+    llm = scripted([("tools", [("done", {"summary": "Found week 13 homework."})])])
+    assistant.llm = assistant.agent.llm = llm
+    await assistant.handle_text("open canvas, find my ib 150 class, navigate to online course resources, and find week 13 homework")
+    assert assistant.computer.tab["url"] == "https://lincoln.instructure.com/"
+    assert not any("Canvas" in e and "click" in e for e in assistant.computer.log)
+
+
+async def test_course_link_on_canvas_is_still_clicked(assistant, hist):
+    assistant.computer.sites.update(CANVAS)
+    assistant.computer.browser_open_url("https://lincoln.instructure.com/")
+    assistant.session.browser_active, assistant.computer.front = True, "Arc"
+    await assistant.handle_text("open my ib biology hl course")
+    assert assistant.computer.tab["url"] == "https://lincoln.instructure.com/courses/77"
+
+
+async def test_battery_rules_for_models(assistant):
+    """2026-11-19: "it's also draining the f*** out of my battery"."""
+    warmed = []
+
+    class LLM:
+        async def warm(self, m, keep):
+            warmed.append((m, keep))
+    assistant.llm = LLM()
+    assistant.settings.set("llm.smart_model", "gemma4:26b")
+    assistant.power.state.source = "battery"
+    assistant.power.mode = "balanced"
+    assert assistant.task_model == "qwen3.5:9b"                     # the 17 GB model is never used on battery…
+    await assistant._warm()
+    assert warmed == [("qwen3.5:4b", "5m")]                         # …or pre-loaded; only the small chat model, 5 min
+    assistant.power.state.source = "ac"
+    warmed.clear()
+    await assistant._warm()
+    assert "gemma4:26b" not in [m for m, _ in warmed]                # never pre-loaded, even plugged in
+    assert assistant.task_model == "gemma4:26b" and assistant._keep_alive("gemma4:26b") == "2m"

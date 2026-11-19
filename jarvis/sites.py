@@ -55,8 +55,8 @@ def terms_for(target: str) -> tuple[list[str], bool]:
     if not name:
         return [], want_home
     terms = list(SYNONYMS.get(name, [])) or [name.replace(" ", "")] + ([w for w in words if len(w) >= 4] if len(words) > 1 else [])
-    for w in words:                          # "my canvas course" -> canvas's synonyms too
-        terms += [s for s in SYNONYMS.get(w, []) if s not in terms]
+    if len(words) == 1:                      # "my canvas course" -> canvas's synonyms; never "ib" inside "ib biology hl"
+        terms += [s for s in SYNONYMS.get(words[0], []) if s not in terms]
     return terms, want_home
 
 

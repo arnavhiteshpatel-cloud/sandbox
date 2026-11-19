@@ -324,3 +324,13 @@ Traceback from the user's daemon.log: `browser.wait_ready` → `st.get("ready")`
 - Your Canvas tips weren't shown to the AI unless the request said "canvas". → notes about the site you're on are
   added to the AI's context (lincoln.instructure.com → canvas).
 - "Untitled is open." → the page's address is shown when the title isn't loaded yet.
+
+### "Started messing around in the ChatGPT tab" + "draining the f*** out of my battery" (2026-11-19)
+- ChatGPT has a "Canvas" button: for "open canvas" the page-click path ran before the user's own sites, clicked it, and
+  the agent carried on inside ChatGPT. Now a site you actually use with that name (history, address match) wins over a
+  same-named button on an unrelated page; generic words never count, so "open my ib biology hl course" on Canvas still
+  clicks the course link (filler like "my … course" is stripped for the page match); word-level nicknames ("ib") only
+  count when they're the whole name.
+- Battery: Balanced on battery kept models 30 min, pre-loaded on wake, and would use/pre-load the 17 GB smart model.
+  Now on battery: smart model never used (unless Max Performance is chosen) and never pre-loaded at all; models kept
+  ≤5 min; only the small chat model pre-loads; speech models unload after 5 idle min; the big model is kept 2 min.

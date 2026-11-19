@@ -63,10 +63,11 @@ class Agent:
     async def run(self, objective: str, ctx: ToolContext, *, mode: str, model: str, cancel: CancelToken,
                   context: str = "", think: bool = False, max_steps: int | None = None,
                   may_escalate: bool = False, tool_names: set[str] | None = None, time_limit_s: float | None = None,
+                  keep_alive: str | None = None,
                   extra_rules: str = "", auto_observe: bool = False, must_act: bool = False) -> AgentResult:
         max_steps = max_steps or int(self.settings.per_mode("agent.max_steps", mode, 20))
         deadline = time.monotonic() + (time_limit_s or (90 if mode == "battery_saver" else 300 if mode == "balanced" else 900))
-        keep_alive = {"battery_saver": "30s", "balanced": "5m", "max_performance": "30m"}.get(mode, "5m")
+        keep_alive = keep_alive or {"battery_saver": "30s", "balanced": "5m", "max_performance": "30m"}.get(mode, "5m")
         offered = [t for t in TOOLS if t.name in tool_names] if tool_names else \
             select_tools(objective, browser_active=bool(ctx.last_elements) or "Browser tab:" in context, allow_vision=ctx.allow_vision)
         offered_names = {t.name for t in offered}
