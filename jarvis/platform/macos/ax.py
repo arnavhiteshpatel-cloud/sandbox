@@ -35,8 +35,10 @@ SKIP_SUBTREE = {"AXMenuBar"}  # menus are reached via menu_select
 
 
 AX_API_DISABLED = -25211   # kAXErrorAPIDisabled: this process really isn't allowed (yet)
-PERMISSION_MESSAGE = ("Accessibility permission missing. Turn JARVIS on in System Settings > Privacy & Security > "
-                      "Accessibility (if it's already on, use Settings > Permissions > Reset in JARVIS).")
+PERMISSION_MESSAGE = ("Accessibility permission missing, so I can't read or click inside this app's own controls. Everything "
+                      "else still works: web pages in the browser (open_url, browser_nav, click/type on pages), keyboard "
+                      "shortcuts, menus by script, files, the web. Continue with those; mention the permission only if "
+                      "nothing else can do the task.")
 
 
 def _attr(el, name: str) -> Any:
