@@ -4,7 +4,7 @@ import type { CatalogSection, Episode, MediaType, Person, TitleDetail, TitleSumm
 import { cached, DAY, fetchJson, HOUR, mapLimit } from '../lib/http.ts';
 import { isFuture, sortEpisodes, type BrowseQuery, type BrowseResult, type MetadataProvider } from './types.ts';
 
-const API = 'https://api.themoviedb.org/3';
+const API = process.env.TMDB_API_BASE ?? 'https://api.themoviedb.org/3';
 const IMG = 'https://image.tmdb.org/t/p';
 
 interface TmItem {

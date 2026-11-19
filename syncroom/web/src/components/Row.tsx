@@ -21,7 +21,7 @@ export function TitleRow({ title, sub, items, href, loading, ranked }: { title: 
   if (!loading && (!items || items.length === 0)) return null;
   return (
     <section className="mb-9 animate-fadeUp" data-testid="row">
-      <SectionTitle sub={sub} action={href && <Link to={href} className="text-sm text-haze-300 hover:text-haze-100">See all →</Link>}>{title}</SectionTitle>
+      <SectionTitle sub={sub} action={href && <Link to={href} className="text-sm text-haze-300 hover:text-haze-100 whitespace-nowrap">See all →</Link>}>{title}</SectionTitle>
       <Scroller>
         {loading
           ? Array.from({ length: 8 }, (_, i) => <PosterSkeleton key={i} className="w-[132px] sm:w-[164px]" />)

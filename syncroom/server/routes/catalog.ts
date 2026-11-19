@@ -29,10 +29,27 @@ catalog.get('/catalog/browse', wrap(async (req, res) => {
   res.json(await withFallback((p) => p.browse(q)));
 }));
 
+/** Verified-playable titles whose name matches — some (short films, obscure PD titles) are missing from provider search. */
+function searchPlayable(query: string, type?: MediaType): TitleSummary[] {
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
+  const rows = db.prepare(`SELECT DISTINCT title_json FROM playable_index WHERE title_json IS NOT NULL AND lower(json_extract(title_json, '$.name')) LIKE ? LIMIT 12`).all(`%${q.replace(/[%_]/g, '')}%`) as { title_json: string }[];
+  return rows.map((r) => JSON.parse(r.title_json) as TitleSummary).filter((t) => !type || t.type === type)
+    .sort((a, b) => Number(b.name.toLowerCase() === q) - Number(a.name.toLowerCase() === q) || Number(b.name.toLowerCase().startsWith(q)) - Number(a.name.toLowerCase().startsWith(q)));
+}
+function merge(primary: TitleSummary[], local: TitleSummary[], q: string) {
+  const ql = q.trim().toLowerCase();
+  const exactLocal = local.filter((t) => t.name.toLowerCase() === ql);
+  const seen = new Set<string>();
+  const out: TitleSummary[] = [];
+  for (const t of [...exactLocal, ...primary, ...local]) if (!seen.has(t.id)) { seen.add(t.id); out.push(t); }
+  return out;
+}
+
 catalog.get('/catalog/search', wrap(async (req, res) => {
   const query = String(req.query.q ?? '').slice(0, 100);
   const type = req.query.type ? asType(req.query.type) : undefined;
-  let items = await withFallback((p) => p.search(query, type));
+  let items = merge(await withFallback((p) => p.search(query, type)), searchPlayable(query, type), query);
   const genre = req.query.genre as string | undefined;
   const yFrom = Number(req.query.yearFrom) || 0;
   const yTo = Number(req.query.yearTo) || 9999;
@@ -49,7 +66,7 @@ catalog.get('/catalog/search', wrap(async (req, res) => {
 catalog.get('/catalog/suggest', wrap(async (req, res) => {
   const query = String(req.query.q ?? '').slice(0, 100);
   if (query.trim().length < 2) return res.json({ items: [] });
-  const items = await withFallback((p) => p.search(query));
+  const items = merge(await withFallback((p) => p.search(query)), searchPlayable(query), query);
   res.json({ items: annotatePlayable(items.slice(0, 8)) });
 }));
 

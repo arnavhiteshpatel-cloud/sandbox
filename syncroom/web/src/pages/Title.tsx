@@ -107,7 +107,7 @@ export default function Title() {
 
   return (
     <div data-testid="title-page">
-      <section className="relative min-h-[88vh] flex items-end overflow-hidden">
+      <section className="relative min-h-[88vh] flex items-end overflow-hidden pt-24">
         {d.background && <img src={d.background} alt="" className="absolute inset-0 w-full h-full object-cover animate-fadeIn" />}
         <div className="absolute inset-0 scrim-l" />
         <div className="absolute inset-0 scrim-b" />
@@ -120,7 +120,7 @@ export default function Title() {
               {d.type === 'movie' && !d.upcoming && (srcLoading ? <Pill><Loader2 className="w-3 h-3 animate-spin" />Checking sources…</Pill> : playable.length ? <Pill tone="ok"><ShieldCheck className="w-3 h-3" />{playable.length} verified source{playable.length > 1 ? 's' : ''}</Pill> : srcs ? <Pill tone="neutral"><CircleSlash className="w-3 h-3" />No playable source found</Pill> : null)}
               {d.type === 'series' && epAvail && epAvail.size > 0 && <Pill tone="ok"><ShieldCheck className="w-3 h-3" />{epAvail.size} episode{epAvail.size > 1 ? 's' : ''} playable</Pill>}
             </div>
-            {d.logo ? <img src={d.logo} alt={d.name} className="max-h-32 max-w-[85%] object-contain object-left mb-5" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} /> : null}
+            {d.logo ? <img src={d.logo} alt={d.name} className="max-h-24 sm:max-h-32 w-auto max-w-[85%] object-contain object-left mb-5 [filter:drop-shadow(0_2px_14px_rgba(0,0,0,.7))_drop-shadow(0_0_1.5px_rgba(255,255,255,.55))]" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} /> : null}
             <h1 className={cx('font-display text-4xl sm:text-6xl font-semibold tracking-tight mb-4', d.logo && 'hidden')}>{d.name}</h1>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-haze-200 mb-4">
               <Rating value={d.rating} />

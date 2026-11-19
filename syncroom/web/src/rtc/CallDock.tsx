@@ -1,16 +1,29 @@
-import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff, Wand2 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Mic, MicOff, Phone, PhoneOff, PictureInPicture2, Video, VideoOff, Wand2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { cx } from '../lib/format';
 import type { RoomClient } from '../sync/roomClient';
 import { CallManager } from './call';
 
 /** Floating call controls + draggable camera bubbles. Calling is optional and never blocks playback. */
 export function CallDock({ room }: { room: RoomClient }) {
-  const call = useMemo(() => new CallManager(room), [room]);
+  // Created and destroyed inside one effect so remounts (incl. React StrictMode) never leave a manager
+  // whose signalling listener has been removed.
+  const [call, setCall] = useState<CallManager | null>(null);
+  useEffect(() => {
+    const c = new CallManager(room);
+    setCall(c);
+    (window as any).__syncroom = { ...((window as any).__syncroom ?? {}), call: c };
+    return () => { c.destroy(); setCall(null); };
+  }, [room]);
+  if (!call) return null;
+  return <CallDockInner call={call} room={room} />;
+}
+
+function CallDockInner({ call, room }: { call: CallManager; room: RoomClient }) {
   const [, force] = useState(0);
   const [err, setErr] = useState<string | null>(null);
   const [blur, setBlur] = useState(false);
-  useEffect(() => { const off = call.subscribe(() => force((x) => x + 1)); return () => { off(); call.destroy(); }; }, [call]);
+  useEffect(() => call.subscribe(() => force((x) => x + 1)), [call]);
   const remote = [...call.peers.entries()].filter(([, p]) => p.stream.getTracks().length > 0);
   const supported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia;
 
@@ -74,6 +87,9 @@ function Bubble({ stream, label, muted, mirrored, showVideo = true, color }: { s
       <video ref={v} autoPlay playsInline muted={muted} className={cx('w-full h-full object-cover', mirrored && '-scale-x-100', !hasVideo && 'opacity-0')} />
       {!hasVideo && <div className="absolute inset-0 grid place-items-center font-display text-2xl" style={{ background: color ?? '#2a2a38', color: '#07070a' }}>{label.slice(0, 1)}</div>}
       <div className="absolute inset-x-0 bottom-0 text-[10px] text-center bg-black/50 py-0.5 truncate">{label}</div>
+      {!muted && hasVideo && 'pictureInPictureEnabled' in document && (
+        <button onPointerDown={(e) => e.stopPropagation()} onClick={() => v.current?.requestPictureInPicture().catch(() => {})} className="absolute top-2 left-1/2 -translate-x-1/2 w-6 h-6 grid place-items-center rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition" aria-label={`Pop out ${label}`} title="Picture-in-picture"><PictureInPicture2 className="w-3.5 h-3.5" /></button>
+      )}
       {!muted && <input type="range" min={0} max={1} step={0.05} value={vol} onChange={(e) => setVol(Number(e.target.value))} onPointerDown={(e) => e.stopPropagation()} className="slim absolute left-2 right-2 top-1/2 opacity-0 group-hover:opacity-100 transition" aria-label={`${label} volume`} />}
     </div>
   );

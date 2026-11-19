@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Play } from 'lucide-react';
 import type { Title } from '../lib/api';
@@ -5,13 +6,14 @@ import { titleHref } from '../lib/api';
 import { cx, fmtDate } from '../lib/format';
 
 export function PosterCard({ t, className, rank }: { t: Title; className?: string; rank?: number }) {
+  const [broken, setBroken] = useState(false);
   return (
     <Link to={titleHref(t)} className={cx('group block shrink-0 snap-start focus:outline-none', className)} data-testid="poster-card" title={t.name}>
       <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-ink-800 ring-1 ring-white/5 transition duration-300 group-hover:ring-white/25 group-hover:-translate-y-1 group-hover:shadow-lift group-focus-visible:ring-ember-400">
-        {t.poster ? (
-          <img src={t.poster} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover transition duration-500 group-hover:scale-[1.04]" onError={(e) => ((e.target as HTMLImageElement).style.opacity = '0')} />
+        {t.poster && !broken ? (
+          <img src={t.poster} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover transition duration-500 group-hover:scale-[1.04]" onError={() => setBroken(true)} />
         ) : (
-          <div className="absolute inset-0 grid place-items-center p-3 text-center font-display text-haze-300">{t.name}</div>
+          <div className="absolute inset-0 grid place-items-center p-3 text-center font-display text-lg leading-snug text-haze-300 bg-gradient-to-br from-ink-700 to-ink-900">{t.name}</div>
         )}
         <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition" />
         <div className="absolute top-2 left-2 flex gap-1">

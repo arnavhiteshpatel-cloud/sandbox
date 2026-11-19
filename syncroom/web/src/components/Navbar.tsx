@@ -16,7 +16,7 @@ export function Navbar() {
   const link = ({ isActive }: { isActive: boolean }) => cx('px-3 h-9 inline-flex items-center rounded-full text-sm font-medium transition', isActive ? 'text-haze-100 bg-white/10' : 'text-haze-300 hover:text-haze-100');
   return (
     <header className={cx('fixed top-0 inset-x-0 z-50 transition-all duration-300', scrolled || loc.pathname !== '/' ? 'glass-strong border-x-0 border-t-0' : 'bg-gradient-to-b from-black/70 to-transparent')}>
-      <div className="h-16 px-4 sm:px-10 flex items-center gap-2 sm:gap-6">
+      <div className="h-16 px-3 sm:px-10 flex items-center gap-2 sm:gap-6">
         <Link to="/" className="flex items-center gap-2 shrink-0" aria-label="SyncRoom home">
           <svg viewBox="0 0 64 64" className="w-8 h-8"><circle cx="26" cy="32" r="13" fill="none" stroke="#f5b971" strokeWidth="5" /><circle cx="38" cy="32" r="13" fill="none" stroke="#f4f1ea" strokeWidth="5" opacity=".9" /></svg>
           <span className="font-display text-xl font-semibold tracking-tight hidden sm:inline">SyncRoom</span>
@@ -28,7 +28,7 @@ export function Navbar() {
           <NavLink to="/free" className={link}>Watch Free</NavLink>
           <NavLink to="/library" className={link}>My List</NavLink>
         </nav>
-        <div className="flex-1 flex justify-end"><SearchBox /></div>
+        <div className="flex-1 min-w-0 flex justify-end"><SearchBox /></div>
         <NavLink to="/rooms" className={({ isActive }) => cx('btn-icon w-10 h-10', isActive && 'bg-white/15')} aria-label="Rooms"><Users className="w-[18px] h-[18px]" /></NavLink>
         <NavLink to="/library" className={({ isActive }) => cx('btn-icon w-10 h-10 md:hidden', isActive && 'bg-white/15')} aria-label="My list"><Library className="w-[18px] h-[18px]" /></NavLink>
         <NavLink to="/settings" className={({ isActive }) => cx('btn-icon w-10 h-10 hidden sm:inline-flex', isActive && 'bg-white/15')} aria-label="Settings"><Settings className="w-[18px] h-[18px]" /></NavLink>

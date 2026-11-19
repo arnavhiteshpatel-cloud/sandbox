@@ -404,7 +404,8 @@ function Grid({ title, items, onPick }: { title: string; items: Title[]; onPick:
         {items.map((t) => (
           <button key={t.type + t.id} onClick={() => onPick(t)} className="text-left group" data-testid="lobby-item">
             <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-ink-800 ring-1 ring-white/5 group-hover:ring-white/30 transition">
-              {t.poster && <img src={t.poster} alt="" className="w-full h-full object-cover" loading="lazy" />}
+              <div className="absolute inset-0 grid place-items-center p-2 text-center font-display text-sm text-haze-300">{t.name}</div>
+              {t.poster && <img src={t.poster} alt="" className="relative w-full h-full object-cover" loading="lazy" onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')} />}
               {t.playable && <span className="absolute top-1.5 left-1.5 rounded-full bg-ok/90 text-ink-950 text-[9px] font-bold px-1.5 h-4 inline-flex items-center">WATCH</span>}
             </div>
             <div className="text-xs mt-1.5 line-clamp-1">{t.name}</div>
