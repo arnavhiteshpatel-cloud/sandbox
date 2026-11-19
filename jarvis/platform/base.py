@@ -151,6 +151,7 @@ class Computer:
     # --- browser (DOM-level control of the user's real browser) ------------------------
     def browser_open_url(self, url: str, browser: str | None = None, new_tab: bool = True) -> ActionResult: raise NotImplementedError
     def browser_state(self, browser: str | None = None) -> dict: raise NotImplementedError
+    def browser_tabs(self, browser: str | None = None) -> list[dict]: return []
     def browser_wait_ready(self, browser: str | None = None, timeout: float = 20, url_contains: str | None = None) -> ActionResult: raise NotImplementedError
     def browser_snapshot(self, browser: str | None = None, max_elements: int = 120) -> dict: raise NotImplementedError
     def browser_click(self, element_id: str | None = None, text: str | None = None, browser: str | None = None) -> ActionResult: raise NotImplementedError

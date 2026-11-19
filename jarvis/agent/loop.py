@@ -21,7 +21,7 @@ MAX_RESULT_CHARS = 6000
 
 
 READ_ONLY_TOOLS = {"observe", "read_page", "look_at_screen", "wait", "recall", "done", "ask_user", "web_search",
-                   "read_webpage", "calendar", "search_files", "list_folder", "read_file", "app_dictionary", "calculate"}
+                   "read_webpage", "calendar", "search_files", "list_folder", "read_file", "app_dictionary", "calculate", "app_shortcuts"}
 
 
 @dataclass

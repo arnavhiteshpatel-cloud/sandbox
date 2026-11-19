@@ -500,6 +500,22 @@ async def mouse(ctx, a):
     return out
 
 
+async def app_shortcuts(ctx, a):
+    from . import app_keys
+
+    app = a.get("app") or await _t(ctx.computer.frontmost_app)
+    return {"ok": True, "app": app, "shortcuts": app_keys.shortcuts_for(app, ctx.settings)}
+
+
+async def learn_app_shortcut(ctx, a):
+    from . import app_keys
+
+    if not app_keys.valid_combo(a["combo"]):
+        return {"ok": False, "error": f"'{a['combo']}' doesn't look like a key combination (e.g. cmd+shift+t)."}
+    app_keys.learn(ctx.settings, a["app"], a["action"], a["combo"])
+    return {"ok": True, "learned": f"{a['app']}: {a['action']} = {a['combo']}"}
+
+
 async def quit_app(ctx, a):
     name = ctx.computer.resolve_app(a["name"]) or a["name"]
     if name.lower() in ("jarvis",):
@@ -728,6 +744,10 @@ TOOLS: list[Tool] = [
     Tool("compose_email", "Open a Mail draft (not sent).", {"to": {"type": "array", "items": S}, "subject": S, "body": S}, ["subject", "body"], "low", compose_email),
     Tool("send_message", "Send an iMessage to a contact name, phone number or email (the user is always asked first).",
          {"to": S, "text": S}, ["to", "text"], "high", send_message),
+    Tool("app_shortcuts", "Keyboard shortcuts known for an app (default: the front app), built in and learned.", {"app": S}, [],
+         "read", app_shortcuts),
+    Tool("learn_app_shortcut", "Save a keyboard shortcut you looked up and confirmed works, so it's known next time.",
+         {"app": S, "action": S, "combo": S}, ["app", "action", "combo"], "low", learn_app_shortcut),
     Tool("quit_app", "Quit (close) an app. It may ask to save unsaved work.", {"name": S}, ["name"], "medium", quit_app),
     Tool("mouse", "Mouse actions besides a normal click: right_click (context menus), double_click, drag (e.g. a file onto a "
          "folder, a slider), move. Give target as a description (found with vision) or x/y screen points.",
@@ -788,7 +808,7 @@ def validate_args(tool: Tool, args: dict) -> str | None:
 import re as _re
 
 CORE = {"observe", "open_app", "quit_app", "open_url", "click", "type_text", "press_keys", "scroll", "browser_nav", "read_page",
-        "wait", "ask_user", "done", "remember", "recall", "run_shortcut", "clipboard"}
+        "wait", "ask_user", "done", "remember", "recall", "run_shortcut", "clipboard", "app_shortcuts", "learn_app_shortcut"}
 CORE |= {"menu", "media", "system", "web_search", "read_webpage"}
 FILES = {"search_files", "list_folder", "read_file", "move_file", "make_folder", "trash_files", "find_duplicates",
          "open_file", "write_file", "copy_file"}

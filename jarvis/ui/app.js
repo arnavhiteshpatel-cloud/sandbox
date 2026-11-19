@@ -503,6 +503,7 @@ async function loadSettings() {
     ${tog("Internet lookups in the background (DuckDuckGo, Bing; no account)", inputFor("web.enabled", s.web.enabled, { bool: 1 }))}
     ${tog("Ask before remembering a new phrasing", inputFor("learning.ask_before_learning", s.learning.ask_before_learning, { bool: 1 }))}
     ${tog("Suggest shortcuts for things I repeat", inputFor("learning.suggest_shortcuts", s.learning.suggest_shortcuts, { bool: 1 }))}
+    ${fld("Smart model for computer tasks", inputFor("llm.smart_model", s.llm.smart_model || "", {}), "Optional. A bigger local model used only for multi-step tasks and “do it” (conversation stays on the fast one). Try gemma4:26b: run “ollama pull gemma4:26b” first. Leave empty to use the mode's model.")}
     ${fld("When “do it” finishes", inputFor("do_it.finish", s.do_it.finish, { select: { ask_then_submit: "Summarize, then ask “Submit?”", stop: "Stop before submitting" } }))}
     ${fld("Keep history for (days)", inputFor("history_days", s.history_days, { num: 1 }), "Commands, task steps and the activity log. Memories and shortcuts are kept until you delete them.")}
     <div class="help">${avail.length ? "Installed: " + avail.map(esc).join(", ") : esc(models.error || "No models found.")} · Run <code>jarvis bench</code> to compare models on your Mac.</div></section>

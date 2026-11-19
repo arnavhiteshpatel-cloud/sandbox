@@ -138,6 +138,9 @@ class FakeComputer(Computer):
         self.log.append(f"open_url:{url}")
         return ActionResult(True, f"Opened {url} in {b}", {"url": url})
 
+    def browser_tabs(self, browser=None):
+        return [{"url": t["url"], "title": self.sites.get(t["url"], {}).get("title", "")} for t in self.tabs]
+
     def browser_state(self, browser=None):
         t = self.tab
         return {"url": t["url"], "title": self._page().get("title")} if t else {"url": None, "title": None}
@@ -250,6 +253,8 @@ class FakeComputer(Computer):
         return ActionResult(True, "Selected.")
 
     def press_keys(self, combo):
+        if f := self._maybe_fail("press_keys"):
+            return f
         self.log.append(f"keys:{combo}")
         return ActionResult(True, f"Pressed {combo}.")
 

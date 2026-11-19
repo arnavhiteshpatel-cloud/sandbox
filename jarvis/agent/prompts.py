@@ -31,6 +31,10 @@ Rules:
    double-click and drag; press_keys covers every keyboard shortcut; run_shell runs Terminal commands (system settings
    via defaults/pmset/networksetup, git, brew, scripts, file work); clipboard reads/sets the clipboard; open_file opens a
    file in a chosen app; write_file and copy_file create files. Prefer the most direct reliable route.
+   PREFER KEYBOARD SHORTCUTS: the app's own shortcuts (listed in context, or app_shortcuts) are faster and more
+   reliable than clicking. If you need one that isn't listed, web_search "<app> keyboard shortcut <action>", use it,
+   and if it worked call learn_app_shortcut so it's known next time. Never use Spotlight (cmd+space) to open apps or
+   sites: use open_app / open_url. For the user's own sites use the addresses in context; never guess a domain.
    A missing permission for one tool is not a reason to stop: use another route (web pages are controlled by script,
    not by Accessibility).
 5. If required information is missing or the request is ambiguous in a way that matters, call ask_user with one short question.
@@ -68,12 +72,22 @@ def system_prompt(settings, mode: str) -> str:
 
 
 def context_block(*, mode: str, frontmost: str | None, browser_state: dict | None, memories: list[str],
-                  shortcuts: list[str], recent: list[dict], last_results: list | None = None) -> str:
+                  shortcuts: list[str], recent: list[dict], last_results: list | None = None, tabs: list | None = None,
+                  sites: list | None = None, app_keys: str | None = None, running: list | None = None) -> str:
     lines = [f"Time: {time.strftime('%A %d %B %Y, %H:%M')}. Power mode: {mode.replace('_', ' ')}."]
     if frontmost:
         lines.append(f"Frontmost app: {frontmost}.")
+    if running:
+        lines.append("Open apps: " + ", ".join(running[:25]) + ".")
     if browser_state and browser_state.get("url"):
         lines.append(f"Browser tab: {browser_state.get('title') or ''} <{browser_state['url']}>.")
+    if tabs:
+        lines.append("Other tabs in this window:\n" + "\n".join(f"- {t.get('title') or ''} <{t['url']}>" for t in tabs[:15]))
+    if sites:
+        lines.append("The user's sites (learned, or visited most; use these instead of guessing addresses):\n"
+                     + "\n".join(f"- {s}" for s in sites[:20]))
+    if app_keys:
+        lines.append(f"Keyboard shortcuts in {frontmost or 'this app'} (prefer these over clicking): {app_keys}")
     if memories:
         lines.append("Saved memories (only these are real):\n" + "\n".join(memories))
     if shortcuts:

@@ -268,3 +268,23 @@ answer from the OLD service and treated it as ready; every real request was then
 Fixes: the app stops any leftover `jarvis serve --port 47823` before starting its own; readiness is checked with the
 app's key (/api/state), so only its own service counts; the service exits within ~3 s if its app goes away
 (verified); a taken port now gives a clear message and exit code 3 (verified); install.sh clears leftovers too.
+
+### "Open my canvas homepage" took 30 s, opened Spotlight, wrong page → "it needs to be WAY smarter", "like the movies"
+Root cause: JARVIS didn't know the user's Canvas address, so the agent improvised (Spotlight, guessed domain).
+- **Sites** (`jarvis/sites.py`): learned sites → the user's browser history (Arc/Chrome/Brave/Edge/Vivaldi, read-only,
+  `immutable=1`; "canvas" → *.instructure.com via a small synonym table) → official site by web search for public names
+  → ask once. Whatever is found is remembered (Memory, kind "website"), so the next time is instant. "my X" checks your
+  sites before links on the current page.
+- **Keyboard shortcuts** (`jarvis/agent/app_keys.py`): well-established shortcuts for Arc, Chrome, Safari, Finder,
+  Spotify, Notes, Mail, Messages, VS Code, Slack, Preview, Word, Pages, Terminal + macOS standards. Saying one
+  ("toggle the sidebar" in Arc) presses it instantly; the agent gets the front app's shortcuts as context, can look up
+  unknown ones and `learn_app_shortcut` them. Never Spotlight; never guess a domain.
+- **More context for every task:** open apps, the other tabs in the browser window, learned + most-visited sites, the
+  front app's shortcuts.
+- **Learns whole tasks:** a multi-step task the AI completed with replayable steps (open app/site, keys, menus, close,
+  system toggles; never screen-dependent clicks) is offered as a recipe; next time it's replayed with no AI. A recipe
+  that stops working is forgotten and worked out again.
+- **Optional smart model** for computer tasks (`llm.smart_model`, e.g. gemma4:26b / qwen3.6:27b, ~17 GB): conversation
+  stays on the fast model; falls back if not downloaded. Not default: on 24 GB it competes with speech models for memory.
+- Found by the tests: "bring up my scribbles" would have asked "What's the address for your scribbles?" ("my" isn't a
+  site) — only explicit site words ask now.

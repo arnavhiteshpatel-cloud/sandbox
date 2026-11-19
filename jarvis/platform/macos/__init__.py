@@ -242,6 +242,9 @@ class MacComputer(Computer):
     def browser_state(self, browser=None):
         return self.browser.current(browser)
 
+    def browser_tabs(self, browser=None):
+        return self.browser.tabs(browser)
+
     def browser_wait_ready(self, browser=None, timeout=20, url_contains=None, expected_url=None):
         return self.browser.wait_ready(browser, timeout, url_contains, expected_url)
 

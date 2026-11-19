@@ -21,6 +21,10 @@ from .router import match_key
 # Only context-free, reversible, low-risk actions are learned. Clicks, typing and file changes depend on what is
 # on screen, so they are never replayed blindly.
 SAFE_TOOLS = {"open_app", "open_url", "run_shortcut", "media", "open_location"}
+# Steps that may be part of a learned multi-step recipe: deterministic (no screen element ids), and checked by the
+# safety policy again when replayed.
+RECIPE_TOOLS = SAFE_TOOLS | {"system", "press_keys", "menu", "quit_app", "browser_nav", "scroll"}
+MAX_RECIPE_STEPS = 8
 SAFE_SYSTEM = {"dark_mode", "light_mode", "toggle_appearance", "open_settings", "screenshot", "minimize", "fullscreen",
                "hide", "new_window", "show_desktop", "mission_control"}
 PASSIVE = {"observe", "wait", "done", "recall", "look_at_screen", "read_page", "web_search", "read_webpage",
@@ -57,6 +61,17 @@ def describe_action(tool: str, args: dict) -> str:
         return {"play": "play or pause", "next": "skip to the next track", "previous": "go to the previous track"}.get(args.get("key"), str(args.get("key")))
     if tool == "system":
         return str(args.get("action", "")).replace("_", " ") + (f" {args.get('value')}" if args.get("value") else "")
+    if tool == "sequence":
+        parts = [describe_action(s["tool"], s["args"]) for s in args.get("steps", [])]
+        return ", then ".join(parts) if parts else "nothing"
+    if tool == "press_keys":
+        return f"press {args.get('combo')}"
+    if tool == "menu":
+        return f"choose {' > '.join(args.get('path') or [])} in {args.get('app')}"
+    if tool == "quit_app":
+        return f"close {args.get('name')}"
+    if tool == "browser_nav":
+        return str(args.get("action", "")).replace("_", " ")
     return tool.replace("_", " ")
 
 
@@ -71,21 +86,32 @@ class PhraseLearner:
         key = match_key(text)
         if not key or len(key.split()) > 10 or CONTEXTUAL.search(key):
             return None
-        actions = [s for s in steps if s["tool"] not in PASSIVE]
-        if len(actions) != 1 or not actions[0]["ok"]:
+        actions = [s for s in steps if s["tool"] not in PASSIVE and s["tool"] not in ("app_shortcuts", "learn_app_shortcut",
+                                                                                     "ask_user", "remember", "calculate")]
+        done = [s for s in actions if s["ok"]]          # failed attempts the AI recovered from are not part of the recipe
+        if not done or len(done) > MAX_RECIPE_STEPS:
             return None
-        tool = actions[0]["tool"]
-        args = actions[0].get("raw_args")
-        if not isinstance(args, dict):
-            try:
-                args = json.loads(actions[0]["args"]) if isinstance(actions[0]["args"], str) else dict(actions[0]["args"])
-            except (json.JSONDecodeError, TypeError):
+        seq = []
+        for s in done:
+            args = s.get("raw_args")
+            if not isinstance(args, dict):
+                try:
+                    args = json.loads(s["args"]) if isinstance(s["args"], str) else dict(s["args"])
+                except (json.JSONDecodeError, TypeError):
+                    return None
+            tool = s["tool"]
+            if tool == "system" and args.get("action") not in SAFE_SYSTEM:
                 return None
-        if tool == "system" and args.get("action") not in SAFE_SYSTEM:
-            return None
-        if tool not in SAFE_TOOLS and tool != "system":
-            return None
-        return tool, args
+            if tool not in RECIPE_TOOLS:
+                return None                              # clicks/typing depend on the screen: never replayed blindly
+            if seq and seq[-1] == {"tool": tool, "args": args}:
+                continue
+            seq.append({"tool": tool, "args": args})
+        if len(seq) == 1:
+            if seq[0]["tool"] not in SAFE_TOOLS and seq[0]["tool"] != "system":
+                return ("sequence", {"steps": seq})
+            return seq[0]["tool"], seq[0]["args"]
+        return "sequence", {"steps": seq}
 
     def declined(self, text: str) -> bool:
         return self.db.one("SELECT key FROM learning_declined WHERE key=?", (match_key(text),)) is not None

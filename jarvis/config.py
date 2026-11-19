@@ -55,6 +55,7 @@ DEFAULTS: dict[str, Any] = {
         },
         "vision_model": "",            # empty = same model (Qwen3.5 is natively multimodal)
         "embed_model": "embeddinggemma:300m",
+        "smart_model": "",             # optional bigger model for computer tasks, e.g. "gemma4:26b" (not in Battery Saver)
         "num_ctx": 16384,
         "temperature": 0.2,
         "think_policy": "auto",        # auto: fast by default, think for complex requests or when struggling | always | never

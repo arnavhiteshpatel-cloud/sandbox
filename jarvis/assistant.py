@@ -139,7 +139,10 @@ class Assistant:
 
         if not await self._wait_for_quiet():
             return
-        if await self.confirm(f"Should I remember that “{text}” means {describe_action(tool, args)}?"):
+        what = describe_action(tool, args)
+        question = (f"Should I remember how to “{text}” ({what})? Next time it'll be instant." if tool == "sequence"
+                    else f"Should I remember that “{text}” means {what}?")
+        if await self.confirm(question):
             self.learner.learn(text, tool, args)
             await self.say("Remembered.")
         else:
@@ -282,6 +285,15 @@ class Assistant:
         return self.settings.per_mode("llm.models", self.power.mode, "qwen3.5:9b")
 
     @property
+    def task_model(self) -> str:
+        """Computer tasks ("do it", multi-step work): the smart model if you set one (Settings → Local AI), otherwise
+        the mode's model. Conversation never waits on it."""
+        smart = (self.settings.get("llm.smart_model") or "").strip()
+        if smart and self.power.mode != "battery_saver":
+            return smart
+        return self.model
+
+    @property
     def chat_model(self) -> str:
         """Conversation uses a smaller, faster model (about twice the speed); tasks use `model`."""
         return self.settings.per_mode("llm.chat_models", self.power.mode, "qwen3.5:4b") or self.model
@@ -312,7 +324,7 @@ class Assistant:
 
     async def _warm(self) -> None:
         """Load the conversation model first (most requests are conversation), then the task model."""
-        for m in dict.fromkeys([self.chat_model, self.model]):
+        for m in dict.fromkeys([self.chat_model, self.task_model]):
             try:
                 await self.llm.warm(m, PROFILES[self.power.mode]["keep_alive"])
             except LLMError:
@@ -575,6 +587,16 @@ class Assistant:
         learned = self.learner.lookup(text)
         if learned:
             return await self._replay_learned(learned, cancel)
+        # The front app's own keyboard shortcut, said in words ("toggle the sidebar" in Arc): instant, no AI.
+        if len(text.split()) <= 6:
+            from .agent import app_keys
+
+            front = await asyncio.to_thread(self.computer.frontmost_app)
+            hit = app_keys.match_action(text, front, self.settings)
+            if hit and hit[0] not in ("quit app", "close window") and not router.CONVERSATIONAL_OPENER.match(router.normalize(text)):
+                r = await self._call(self.computer.press_keys, hit[1])
+                return await self._reply(f"{hit[0].capitalize()} ({hit[1]})." if r.ok else r.message, r.ok, "builtin",
+                                         confirm=True, followup=False)
         kind = router.classify_question(text, self.session.last_route)
         if kind == "web" and self.settings.get("web.enabled", True):
             return await self._web_lookup(text, cancel)
@@ -725,6 +747,8 @@ class Assistant:
         """Run a phrasing JARVIS learned earlier, instantly and without the AI model."""
         from .agent.tools import TOOL_MAP
 
+        if lp["tool"] == "sequence":
+            return await self._replay_recipe(lp, cancel)
         tool = TOOL_MAP.get(lp["tool"])
         if tool is None:
             return await self._run_agent(lp["phrase"], cancel)
@@ -738,6 +762,34 @@ class Assistant:
         else:
             msg = out.get("error") or out.get("message") or "That didn't work."
         return await self._reply(msg, bool(out.get("ok")), "learned", followup=False, confirm=True)
+
+    async def _replay_recipe(self, lp: dict, cancel: CancelToken) -> dict:
+        """Replay a multi-step recipe the AI worked out before: instant, no AI. If a step no longer works (an app
+        changed), forget the recipe and let the AI work it out again (it can then be re-learned)."""
+        from .agent.tools import TOOL_MAP
+        from .learning import describe_action
+
+        ctx = self._tool_ctx(lp["phrase"])
+        ctx.cancel = cancel
+        front = await asyncio.to_thread(self.computer.frontmost_app)
+        self.events.emit("status", status="acting", detail="doing what worked last time")
+        for i, st in enumerate(lp["args"].get("steps", [])):
+            cancel.check()
+            tool = TOOL_MAP.get(st["tool"])
+            verdict = policy.check(st["tool"], st["args"], user_text=lp["phrase"], settings=self.settings, front_app=front)
+            if tool is None or not verdict.allow or verdict.confirm:
+                out = {"ok": False, "error": "needs the AI"}
+            else:
+                out = await tool.fn(ctx, dict(st["args"]))
+            if not out.get("ok"):
+                log.info("learned recipe for %r failed at step %d (%s); re-learning", lp["phrase"], i + 1, out.get("error"))
+                self.learner.delete(lp["id"])
+                self.db.log("learning", f"Forgot the steps for “{lp['phrase']}” (step {i + 1} stopped working); working it out again.")
+                return await self._run_agent(lp["phrase"], cancel)
+            if st["tool"] in ("open_app", "open_url", "quit_app"):
+                await asyncio.sleep(0.6)               # let the app/page come up before the next keystroke
+                front = await asyncio.to_thread(self.computer.frontmost_app)
+        return await self._reply(f"Done: {describe_action('sequence', lp['args'])}.", True, "learned", followup=False, confirm=True)
 
     async def _run_shortcut(self, sc: dict, params: dict, cancel: CancelToken) -> dict:
         self.events.emit("status", status="acting", detail=sc["name"])
@@ -797,17 +849,28 @@ class Assistant:
                     self.session.browser, self.session.browser_active = app, True
                 return await self._reply(f"Opening {app}." if r.ok else r.message, r.ok, confirm=True,
                                          step_for_learning={"action": "open_app", "app": app}, step_label=f"open {app}")
-            site = self._website_from_memory(a["target"])
+            site = self._website_from_memory(a["target"]) or self._learned_site(a["target"])
             if site:
                 return await self._open_url(site, True)
             sc = self.shortcuts.find_by_name(a["target"])
             if sc and sc.get("enabled", True):
                 return await self._run_shortcut(sc, {}, cancel)
-            if self.session.browser_active and await self._is_browser_front():
-                return await self._click_on_page(a["target"], intent.text, cancel, allow_agent=True)
             site = router.known_site(a["target"])
             if site:
                 return await self._open_url(site, True)
+            if self.SITE_WORDS.search(a["target"].lower()):           # "my canvas homepage", "the IB website"
+                res = await self._open_site(a["target"], cancel)
+                if res is not None:
+                    return res
+            elif re.search(r"\b(?:my|our)\b", a["target"].lower()):   # "my canvas": your sites before links on the page
+                res = await self._open_site(a["target"], cancel, ask=False)
+                if res is not None:
+                    return res
+            if self.session.browser_active and await self._is_browser_front():
+                return await self._click_on_page(a["target"], intent.text, cancel, allow_agent=True)
+            res = await self._open_site(a["target"], cancel, ask=False)  # a site you visit, e.g. "open canvas"
+            if res is not None:
+                return res
             if router.looks_like_app_name(a["target"]):
                 return await self._reply(f"I can't find an app called {a['target'].title()} on this Mac. If you call something "
                                          f"else that, tell me: “when I say {a['target']}, I mean …”.", False)
@@ -817,12 +880,20 @@ class Assistant:
             if app:
                 r = await self._call(c.focus_app, app)
                 return await self._reply(f"{app}." if r.ok else r.message, r.ok, confirm=True)
-            if self.session.browser_active:
-                return await self._click_on_page(a["target"], intent.text, cancel, allow_agent=True)
-            site = self._website_from_memory(a["target"])
+            site = self._website_from_memory(a["target"]) or self._learned_site(a["target"]) or router.known_site(a["target"])
             if site:
                 return await self._open_url(site, True)
-            return None
+            if self.SITE_WORDS.search(a["target"].lower()):
+                res = await self._open_site(a["target"], cancel)
+                if res is not None:
+                    return res
+            elif re.search(r"\b(?:my|our)\b", a["target"].lower()):
+                res = await self._open_site(a["target"], cancel, ask=False)
+                if res is not None:
+                    return res
+            if self.session.browser_active:
+                return await self._click_on_page(a["target"], intent.text, cancel, allow_agent=True)
+            return await self._open_site(a["target"], cancel, ask=False)
         if n == "open_url":
             return await self._open_url(a["url"], a.get("new_tab", True))
         if n == "quit_app":
@@ -1013,6 +1084,72 @@ class Assistant:
             return True
         return False
 
+    # Words that make it clearly a website you mean (then JARVIS may ask you for the address once). "my X" alone isn't.
+    SITE_WORDS = re.compile(r"(?:\b(?:home ?page|website|web ?site|site|portal|dashboard|login|log in|sign in page)\b|\.(?:com|org|edu|net|io)\b)")
+
+    def _learned_site(self, target: str) -> str | None:
+        """A site JARVIS learned before ("canvas homepage is https://…"): matched on the name, not filler words."""
+        from .sites import FILLER
+
+        words = [w for w in re.findall(r"[\w.'-]+", target.lower()) if w not in FILLER]
+        if not words:
+            return None
+        for r in self.memory.search(" ".join(words), 8):
+            m = re.search(r"https?://\S+", r["content"])
+            if m and (r.get("kind") == "website" or "http" in r["content"]) and all(w in r["content"].lower() for w in words):
+                return m.group(0).rstrip(".,)")
+        return None
+
+    def _remember_site(self, target: str, url: str, how: str) -> None:
+        from .sites import FILLER
+
+        name = " ".join(w for w in re.findall(r"[\w.'-]+", target.lower()) if w not in ("my", "the", "our", "open", "go", "to"))
+        try:
+            self.memory.add(f"{name} is {url}", kind="website", source="learned")
+            self.db.log("learning", f"Learned a site ({how}): “{name}” → {url}")
+        except Exception as e:
+            log.warning("couldn't remember site: %s", e)
+
+    async def _official_site(self, name: str) -> str | None:
+        """Public site by name, via a background web search ("the IB website" -> ibo.org)."""
+        from urllib.parse import urlparse
+
+        from . import web
+
+        if not self.settings.get("web.enabled", True):
+            return None
+        r = await web.web_search(f"{name} official website", 6)
+        for x in r.get("results", []):
+            host = urlparse(x["url"]).netloc.lower()
+            if host and not re.search(r"wikipedia|youtube|reddit|facebook|twitter|x\.com|linkedin|instagram|quora|bing|duckduckgo", host):
+                return f"https://{host}/"
+        return None
+
+    async def _open_site(self, target: str, cancel: CancelToken, ask: bool = True) -> dict | None:
+        # ask=False: you didn't clearly name a site ("open canvas"), so only sites whose address has the name count.
+        """Open the site you mean, learning it the first time: learned → your browser history → the web → ask you."""
+        from . import sites
+
+        url = self._learned_site(target)
+        if url:
+            return await self._open_url(url, True)
+        self.events.emit("status", status="acting", detail="finding the site")
+        url, how = await asyncio.to_thread(sites.search_history, target, None, not ask), "browser history"
+        if not url and ask and not sites.is_personal(target):
+            url, how = await self._official_site(re.sub(r"\b(?:website|site|home ?page)\b", "", target).strip()), "web search"
+        if not url and ask:
+            ans = await self.ask(f"What's the address for {target.replace('my ', 'your ')}? I'll remember it.")
+            if ans:
+                m = re.search(r"(https?://\S+|[\w-]+(?:\.[\w-]+)+(?:/\S*)?)", ans.strip())
+                url = (m.group(1) if m else None) or router.spoken_to_url(ans)
+                url = url and (url if url.startswith("http") else "https://" + url)
+                how = "you told me"
+        if not url:
+            return None
+        cancel.check()
+        self._remember_site(target, url, how)
+        return await self._open_url(url, True)
+
     def _website_from_memory(self, target: str) -> str | None:
         for r in self.memory.search(target, 5):
             if r["kind"] == "website" or "http" in r["content"]:
@@ -1090,7 +1227,7 @@ class Assistant:
                  "No preamble, no sign-off, no markdown or headings unless asked. Plain paragraphs separated by blank lines. "
                  "Match the requested length, tone and audience." + (f"\nAbout the user:\n{memories}" if memories else "")},
                 {"role": "user", "content": what}],
-                model=self.model, think=d.think, max_tokens=1600, keep_alive=PROFILES[self.power.mode]["keep_alive"])
+                model=self.task_model, think=d.think, max_tokens=1600, keep_alive=PROFILES[self.power.mode]["keep_alive"])
         except LLMError as e:
             return await self._reply(f"I couldn't write that: {e}", False)
         body = re.sub(r"^\s*(?:Sure|Here(?:'s| is)[^\n]*?:)\s*", "", r.content.strip())
@@ -1127,7 +1264,7 @@ class Assistant:
 
         res = await self.agent.run(
             completion_objective(front, request), ctx,
-            mode=mode, model=self.model, cancel=cancel, context=await self._agent_context(request), think=think,
+            mode=mode, model=self.task_model, cancel=cancel, context=await self._agent_context(request), think=think,
             max_steps={"battery_saver": 25, "balanced": 60, "max_performance": 100}.get(mode, 60),
             time_limit_s={"battery_saver": 300, "balanced": 1200, "max_performance": 1800}.get(mode, 1200),
             tool_names=self.COMPLETION_TOOLS if front not in BROWSERS else self.COMPLETION_TOOLS - {"app_dictionary", "script_app"},
@@ -1202,9 +1339,38 @@ class Assistant:
                 bstate = await asyncio.to_thread(self.computer.browser_state, self.session.browser)
             except Exception:
                 bstate = None
+        from .agent import app_keys
+
+        tabs = []
+        if front in BROWSERS:
+            try:
+                tabs = [t for t in await asyncio.to_thread(self.computer.browser_tabs, front)
+                        if not bstate or t["url"] != bstate.get("url")]
+            except Exception:
+                tabs = []
+        try:
+            running = await asyncio.to_thread(self.computer.running_apps)
+        except Exception:
+            running = []
+        keys = app_keys.describe(front, self.settings, 30) if front else None
         return context_block(mode=self.power.mode, frontmost=front, browser_state=bstate,
                              memories=self.memory.context_for(text), shortcuts=[s["name"] for s in self.shortcuts.list()],
-                             recent=self.session.history[:-1], last_results=self.session.last_results)
+                             recent=self.session.history[:-1], last_results=self.session.last_results,
+                             tabs=tabs, sites=await self._known_sites(), app_keys=keys, running=running)
+
+    async def _known_sites(self) -> list[str]:
+        """Sites the AI should know about: ones JARVIS learned, then the ones you visit most (refreshed every 30 min)."""
+        from . import sites
+
+        learned = [r["content"] for r in self.memory.all(200) if r.get("kind") == "website"][:12] if hasattr(self.memory, "all") else []
+        cache = getattr(self, "_sites_cache", None)
+        if not cache or time.time() - cache[0] > 1800:
+            try:
+                freq = await asyncio.to_thread(sites.frequent_sites, 15)
+            except Exception:
+                freq = []
+            self._sites_cache = cache = (time.time(), [f"{t} — https://{h}/" if t else f"https://{h}/" for h, t in freq])
+        return learned + cache[1]
 
     def _tool_ctx(self, text: str) -> ToolContext:
         return ToolContext(computer=self.computer, settings=self.settings, memory=self.memory, search=self.search,
@@ -1239,10 +1405,15 @@ class Assistant:
         d = decide(text, self.power.mode, self.settings.get("llm.think_policy", "auto"))
         self.events.emit("status", status="thinking", detail="thinking it through" if d.think else "local model")
         self.db.log("agent", f"{'Thinking' if d.think else 'Fast'} mode: {d.reason}")
-        res = await self.agent.run(text, ctx, mode=self.power.mode, model=self.model, cancel=cancel,
+        res = await self.agent.run(text, ctx, mode=self.power.mode, model=self.task_model, cancel=cancel,
                                    context=await self._agent_context(text), think=d.think, may_escalate=d.may_escalate)
-        if res.error and not res.steps and await self._revive_llm(res.error):
+        if res.error and not res.steps and self.task_model != self.model and re.search(r"not found|pull", res.error, re.I):
+            self.db.log("agent", f"Smart model {self.task_model} isn't downloaded (ollama pull {self.task_model}); used {self.model}.",
+                        level="warn")
             res = await self.agent.run(text, ctx, mode=self.power.mode, model=self.model, cancel=cancel,
+                                       context=await self._agent_context(text), think=d.think, may_escalate=d.may_escalate)
+        if res.error and not res.steps and await self._revive_llm(res.error):
+            res = await self.agent.run(text, ctx, mode=self.power.mode, model=self.task_model, cancel=cancel,
                                        context=await self._agent_context(text), think=d.think, may_escalate=d.may_escalate)
         self.session.browser = ctx.browser
         if any(s["tool"] in ("open_url", "click", "read_page", "browser_nav") for s in res.steps):
@@ -1260,7 +1431,7 @@ class Assistant:
 
     async def _agent_for_shortcut(self, instruction: str, cancel: CancelToken) -> RunResult:
         ctx = self._tool_ctx(instruction)
-        res = await self.agent.run(instruction, ctx, mode=self.power.mode, model=self.model, cancel=cancel,
+        res = await self.agent.run(instruction, ctx, mode=self.power.mode, model=self.task_model, cancel=cancel,
                                    context=await self._agent_context(instruction))
         self.session.browser = ctx.browser
         return RunResult(res.ok, res.message, res.steps, ctx.browser)

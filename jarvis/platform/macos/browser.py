@@ -83,6 +83,27 @@ class BrowserController:
         url, _, title = out.partition("\n")
         return {"url": url or None, "title": title or None}
 
+    def tabs(self, browser: str | None = None, limit: int = 25) -> list[dict]:
+        """Titles and URLs of the tabs in the front window (context for the AI: "switch to my email tab")."""
+        b = self._b(browser)
+        if _is_safari(b):
+            script = ('tell application "Safari" to set out to ""\n'
+                      'tell application "Safari" to repeat with t in tabs of front window\n'
+                      'set out to out & (URL of t) & tab & (name of t) & linefeed\nend repeat\nreturn out')
+        else:
+            script = (f'set out to ""\ntell application {AS.quote(b)}\nrepeat with t in tabs of front window\n'
+                      f'set out to out & (URL of t) & tab & (title of t) & linefeed\nend repeat\nend tell\nreturn out')
+        try:
+            raw = AS.run(script, timeout=5)
+        except AutomationError:
+            return []
+        out = []
+        for line in raw.splitlines()[:limit]:
+            url, _, title = line.partition("\t")
+            if url:
+                out.append({"url": url, "title": title})
+        return out
+
     # --- navigation ------------------------------------------------------------------
     def open_url(self, url: str, browser: str | None = None, new_tab: bool = True) -> ActionResult:
         b = self._b(browser)
