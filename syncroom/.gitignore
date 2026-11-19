@@ -1,0 +1,9 @@
+node_modules
+data/*.db*
+data/cache
+media/*
+!media/README.md
+web/dist
+test-results
+playwright-report
+.env
