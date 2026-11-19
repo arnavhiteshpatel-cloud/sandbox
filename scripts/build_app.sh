@@ -76,6 +76,10 @@ else
 fi
 
 echo "==> Signing ($([[ "$SIGN_ID" == "-" ]] && echo ad-hoc || echo "$SIGN_ID"))"
+if [[ "$SIGN_ID" != "-" ]]; then
+  echo "    macOS may ask: \"codesign wants to access key … in your keychain\". That's Apple's signing tool using"
+  echo "    JARVIS's local certificate. Enter your Mac login password and click ALWAYS ALLOW (\"Allow\" asks per file)."
+fi
 find "$APP/Contents/Resources/python" -type f \( -name "*.so" -o -name "*.dylib" \) -exec codesign --force --sign "$SIGN_ID" {} + 2>/dev/null || true
 codesign --force --sign "$SIGN_ID" "$APP/Contents/Resources/python/bin/python3" 2>/dev/null || true
 if ! codesign --force --sign "$SIGN_ID" "$APP"; then
