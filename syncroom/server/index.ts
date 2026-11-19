@@ -9,6 +9,7 @@ import { media } from './routes/media.ts';
 import { personal } from './routes/personal.ts';
 import { handleConnection, persistAll } from './rooms/roomManager.ts';
 import { runHealthChecks } from './sources/registry.ts';
+import { autoSeed } from './sources/seed.ts';
 import { metadata } from './metadata/index.ts';
 
 const app = express();
@@ -54,6 +55,11 @@ async function start() {
   });
   runHealthChecks().catch(() => {});
   setInterval(() => runHealthChecks().catch(() => {}), 10 * 60_000).unref();
+  // Populate the verified-playable index on first run; re-verify daily.
+  if (!process.env.SYNCROOM_NO_SEED) {
+    setTimeout(() => autoSeed().catch((e) => console.warn('[seed]', e.message)), 3000);
+    setInterval(() => autoSeed(true).catch(() => {}), 24 * 3600_000).unref();
+  }
   // Warm the home catalogue (stale-while-revalidate keeps it fresh afterwards)
   metadata().home().catch((e) => console.warn('[warmup]', e.message));
 }
