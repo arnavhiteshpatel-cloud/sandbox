@@ -245,3 +245,35 @@ async def test_quitting_jarvis_releases_its_ai_models(assistant):
     assistant.llm = LLM()
     await assistant.shutdown()
     assert {"qwen3.5:9b", "qwen3.5:4b"} <= set(unloaded)
+
+
+async def test_multi_step_request_does_the_first_step_then_the_ai_continues(assistant, hist, scripted):
+    """The exact request that crashed: Canvas opens instantly, the AI is told it's there and continues."""
+    llm = scripted([("tools", [("done", {"summary": "Week 13 homework: lab write-up."})])])
+    assistant.llm = assistant.agent.llm = llm
+    r = await assistant.handle_text("open canvas, find my ib 150 class, navigate to online course resources, "
+                                    "and find week 13 homework")
+    assert r["route"] == "agent" and r["ok"]
+    assert assistant.computer.tab["url"] == "https://lincoln.instructure.com/"
+    first_prompt = "\n".join(str(m) for m in llm.calls)
+    assert "Step already done" in first_prompt and "find my ib 150 class" in first_prompt
+
+
+def test_page_script_results_decode_in_every_browser(monkeypatch):
+    import json
+    import sys
+    import types
+
+    class Stub(types.ModuleType):
+        def __getattr__(self, n):
+            if n.startswith("__"):
+                raise AttributeError(n)
+            return lambda *a, **k: None
+    for m in ("Quartz", "AppKit", "ApplicationServices", "Foundation", "Vision", "AVFoundation", "objc", "CoreFoundation"):
+        monkeypatch.setitem(sys.modules, m, sys.modules.get(m) or Stub(m))
+    from jarvis.platform.macos.browser import decode_js_result as d
+
+    obj = {"url": "https://x", "ready": "complete"}
+    assert d(json.dumps(obj)) == obj                         # Chrome
+    assert d(json.dumps(json.dumps(obj))) == obj             # Arc: a quoted JSON string (this crashed every page action)
+    assert d("") == {} and d("missing value") == {} and d("oops") == {"raw": "oops"}

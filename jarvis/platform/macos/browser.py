@@ -27,6 +27,29 @@ def _is_safari(b: str) -> bool:
     return b in SAFARI
 
 
+
+def decode_js_result(raw) -> dict:
+    """The JSON our page scripts return, as a dict. Browsers differ: Chrome gives the JSON text, Arc can give it as a
+    quoted string ("\"{…}\"") that must be decoded twice. Anything else becomes {"raw": …}, never a crash."""
+    val = raw
+    for _ in range(3):
+        if isinstance(val, (bytes, bytearray)):
+            val = val.decode("utf-8", "replace")
+        if not isinstance(val, str):
+            break
+        txt = val.strip()
+        if not txt or txt in ("missing value", "null", "undefined"):
+            return {}
+        try:
+            val = json.loads(txt)
+        except json.JSONDecodeError:
+            return {"raw": txt[:2000]}
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, list):
+        return {"items": val}
+    return {"raw": str(val)[:2000]}
+
 class BrowserController:
     def __init__(self, default_browser: str = "Arc"):
         self.default = default_browser
@@ -57,11 +80,7 @@ class BrowserController:
             raise
 
     def js_json(self, code: str, browser: str | None = None, timeout: float = 15) -> dict:
-        raw = self.js(code, browser, timeout)
-        try:
-            return json.loads(raw) if raw else {}
-        except json.JSONDecodeError:
-            return {"raw": raw[:2000]}
+        return decode_js_result(self.js(code, browser, timeout))
 
     def window_count(self, browser: str | None = None) -> int:
         b = self._b(browser)

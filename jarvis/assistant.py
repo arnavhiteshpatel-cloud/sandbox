@@ -582,6 +582,14 @@ class Assistant:
         parts = router.split_compound(text, self._route_ctx()) if depth < 2 else None
         if parts:
             return await self._run_compound(parts, cancel)
+        step = router.split_first_step(text, self._route_ctx()) if depth == 0 else None
+        if step:
+            # Several steps: do the first one instantly (e.g. open Canvas), then the AI continues from that page.
+            first, first_intent, rest = step
+            res1 = await self._builtin(first_intent, cancel)
+            if res1 is not None and res1.get("ok"):
+                return await self._run_agent(text, cancel, note=f"Step already done for you: “{first}” → {res1.get('message', 'done')}. "
+                                                              f"You are on that page now. Continue with the rest: {rest}")
         if intent and intent.name == "shortcut_create":
             return await self._create_shortcut_dialog(intent.args.get("name"), intent.args.get("description"))
         m = match_shortcut(text, self.shortcuts.list())
@@ -869,15 +877,16 @@ class Assistant:
                 res = await self._open_site(a["target"], cancel)
                 if res is not None:
                     return res
-            elif re.search(r"\b(?:my|our)\b", a["target"].lower()):   # "my canvas": your sites before links on the page
+            elif re.search(r"\b(?:my|our)\b", a["target"].lower()) and len(a["target"].split()) <= 4:   # "my canvas"
                 res = await self._open_site(a["target"], cancel, ask=False)
                 if res is not None:
                     return res
             if self.session.browser_active and await self._is_browser_front():
                 return await self._click_on_page(a["target"], intent.text, cancel, allow_agent=True)
-            res = await self._open_site(a["target"], cancel, ask=False)  # a site you visit, e.g. "open canvas"
-            if res is not None:
-                return res
+            if len(a["target"].split()) <= 4:
+                res = await self._open_site(a["target"], cancel, ask=False)  # a site you visit, e.g. "open canvas"
+                if res is not None:
+                    return res
             if router.looks_like_app_name(a["target"]):
                 return await self._reply(f"I can't find an app called {a['target'].title()} on this Mac. If you call something "
                                          f"else that, tell me: “when I say {a['target']}, I mean …”.", False)
@@ -1399,7 +1408,7 @@ class Assistant:
         self.db.log("system", "The local AI model stopped responding; starting it again.", level="warn")
         return await self._check_llm()
 
-    async def _run_agent(self, text: str, cancel: CancelToken) -> dict:
+    async def _run_agent(self, text: str, cancel: CancelToken, note: str = "") -> dict:
         if self.llm_ok is False and not await self._check_llm():
             return await self._reply("I can't reach my local AI model right now, so I can only run shortcuts and simple commands. "
                                      "Make sure Ollama is running.", False, "agent")
@@ -1412,8 +1421,9 @@ class Assistant:
         d = decide(text, self.power.mode, self.settings.get("llm.think_policy", "auto"))
         self.events.emit("status", status="thinking", detail="thinking it through" if d.think else "local model")
         self.db.log("agent", f"{'Thinking' if d.think else 'Fast'} mode: {d.reason}")
+        context = await self._agent_context(text) + (f"\n{note}" if note else "")
         res = await self.agent.run(text, ctx, mode=self.power.mode, model=self.task_model, cancel=cancel,
-                                   context=await self._agent_context(text), think=d.think, may_escalate=d.may_escalate)
+                                   context=context, think=d.think, may_escalate=d.may_escalate)
         if res.error and not res.steps and self.task_model != self.model and re.search(r"not found|pull", res.error, re.I):
             self.db.log("agent", f"Smart model {self.task_model} isn't downloaded (ollama pull {self.task_model}); used {self.model}.",
                         level="warn")

@@ -299,3 +299,13 @@ Root cause: JARVIS didn't know the user's Canvas address, so the agent improvise
   those sites. Rules: navigate section by section; don't stop after one page.
 - Lag after quitting: Ollama kept the models loaded (keep-alive) after JARVIS quit: ~10 GB on a 24 GB Mac. JARVIS now
   unloads its models when it quits.
+
+### "open canvas, find my ib 150 class, navigate to online course resources, and find week 13 homework" crashed (2026-11-19)
+Traceback from the user's daemon.log: `browser.wait_ready` → `st.get("ready")` on a str.
+- Root cause: Arc returns the result of `execute javascript` as a *quoted JSON string*; `js_json` decoded it once and
+  got a str. Every JSON page action (state, snapshot, click, type) goes through js_json, so page control in Arc was
+  broken; tests used real Chromium via Playwright, never Arc's AppleScript bridge. Fix: `decode_js_result` decodes up
+  to three layers and always returns a dict (Chrome and Arc formats both tested).
+- Second bug: the whole sentence was routed as `open <"canvas find my ib 150 class navigate…">`. Now a multi-step
+  request does its first step instantly (open Canvas) and hands the rest to the agent with a note that step 1 is done;
+  long targets are never treated as a site name.

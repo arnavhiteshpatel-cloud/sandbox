@@ -607,3 +607,19 @@ def looks_like_app_name(target: str) -> bool:
                  r"document|notes|pdf|page|link|tab|email|message|result|results)\b", t):
         return False
     return True
+
+
+def split_first_step(text: str, ctx: dict | None = None) -> tuple[str, "Intent", str] | None:
+    """'open canvas, find my ib 150 class, … and find week 13 homework' -> ('open canvas', <open canvas>, 'find my …').
+    The first step is done instantly; the rest goes to the AI, which continues from where that step left off."""
+    m = re.match(r"\s*(.+?)(?:\s*,\s*(?:and\s+)?(?:then\s+)?|\s+(?:and\s+)?then\s+|\s+and\s+(?=(?:find|go|navigate|open|click|"
+                 r"search|look|read|show|get|check|scroll)\b))(.+)$", text, re.I | re.S)
+    if not m:
+        return None
+    first, rest = m.group(1).strip(), m.group(2).strip(" ,.")
+    if len(rest.split()) < 2 or len(first.split()) > 6:
+        return None
+    it = route(first, ctx)
+    if it is None or it.name not in ("open", "goto", "open_url"):
+        return None
+    return first, it, rest
