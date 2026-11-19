@@ -36,8 +36,34 @@ final class Daemon {
         return (URL(fileURLWithPath: "/usr/bin/env"), ["python3", "-m", "jarvis", "serve", "--port", "\(port)"])
     }
 
+    /// A service left over from a force-quit app keeps the port and answers with the wrong key, so nothing works.
+    /// Stop any such leftover before starting ours (only `jarvis serve` on our port; never anything else).
+    private func stopLeftoverService() {
+        let pattern = "jarvis serve --port \(port)"
+        func run(_ tool: String, _ args: [String]) -> Int32 {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: tool)
+            p.arguments = args
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError = FileHandle.nullDevice
+            do { try p.run() } catch { return -1 }
+            p.waitUntilExit()
+            return p.terminationStatus
+        }
+        guard run("/usr/bin/pgrep", ["-f", pattern]) == 0 else { return }   // nothing left over (the usual case)
+        NSLog("JARVIS: stopping a leftover service on port \(port)")
+        _ = run("/usr/bin/pkill", ["-TERM", "-f", pattern])
+        for _ in 0..<50 {                                  // up to 5 s for it to shut down cleanly
+            if run("/usr/bin/pgrep", ["-f", pattern]) != 0 { return }
+            usleep(100_000)
+        }
+        _ = run("/usr/bin/pkill", ["-KILL", "-f", pattern])
+        usleep(300_000)
+    }
+
     func start() {
         quitting = false
+        stopLeftoverService()
         let (exe, args) = pythonCommand()
         let p = Process()
         p.executableURL = exe
@@ -93,8 +119,10 @@ final class Daemon {
     }
 
     private func waitUntilHealthy(deadline: Date) {
-        var req = URLRequest(url: baseURL.appendingPathComponent("health"))
-        req.timeoutInterval = 1
+        // Authenticated check: only OUR service (same key) counts as ready, never a leftover one.
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/state"))
+        req.setValue(token, forHTTPHeaderField: "X-Jarvis-Token")
+        req.timeoutInterval = 2
         URLSession.shared.dataTask(with: req) { [weak self] _, resp, _ in
             guard let self = self else { return }
             if (resp as? HTTPURLResponse)?.statusCode == 200 {

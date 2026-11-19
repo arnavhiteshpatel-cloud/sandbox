@@ -395,7 +395,14 @@ async def serve(assistant, host: str = "127.0.0.1", port: int = 47823, voice: bo
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, host, port)
-    await site.start()
+    try:
+        await site.start()
+    except OSError as e:
+        # Usually a JARVIS service left over from a force-quit app. The app clears those on start; say so clearly.
+        log.error("port %d is taken (%s): another JARVIS service is probably still running", port, e)
+        print(f"Port {port} is in use by another process (a leftover JARVIS service?). Run: pkill -f 'jarvis serve'", flush=True)
+        await assistant.shutdown()
+        raise SystemExit(3)
     log.info("JARVIS listening on http://%s:%d", host, port)
     print(f"JARVIS ready on http://{host}:{port}  (token in {paths.token_path()})", flush=True)
     stop_ev = asyncio.Event()
@@ -407,6 +414,18 @@ async def serve(assistant, host: str = "127.0.0.1", port: int = 47823, voice: bo
             loop.add_signal_handler(sig, stop_ev.set)
     except (NotImplementedError, RuntimeError):
         pass
+    if os.environ.get("JARVIS_TOKEN"):
+        # Started by the JARVIS app: if the app goes away (even force-quit), stop too, so no stale service
+        # keeps the port and confuses the next launch.
+        parent = os.getppid()
+
+        async def watch_parent():
+            while not stop_ev.is_set():
+                await asyncio.sleep(3)
+                if os.getppid() != parent:
+                    log.warning("the JARVIS app went away; shutting down")
+                    stop_ev.set()
+        asyncio.create_task(watch_parent())
     await stop_ev.wait()
     await assistant.shutdown()
     await runner.cleanup()

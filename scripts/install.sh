@@ -43,6 +43,9 @@ echo "==> Installing to /Applications"
 if [[ -d /Applications/JARVIS.app ]]; then
   osascript -e 'if application "JARVIS" is running then tell application "JARVIS" to quit' >/dev/null 2>&1 || true
   sleep 1
+  # A force-quit app can leave its background service running, which blocks the new one: stop it.
+  pkill -f "jarvis serve --port" >/dev/null 2>&1 || true
+  sleep 1
   rm -rf /Applications/JARVIS.app
 fi
 ditto build/JARVIS.app /Applications/JARVIS.app

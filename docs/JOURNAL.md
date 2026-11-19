@@ -258,3 +258,13 @@ Three rounds, all through the real code:
   and posted "Something went wrong" over the HUD each time, wiping the answer → reported once, retries back off to
   60 s, and background voice errors go to the activity log instead of the HUD. Chained commands now show the combined
   result on the HUD.
+
+### "It broke the entire thing" (2026-11-19, after the type-box update)
+Symptoms: no wake word (plugged in), ⌥⇧C does nothing, typing in the small panel gets no reply, empty activity list:
+the app couldn't talk to its background service. Most likely cause: I had suggested quitting JARVIS from Activity
+Monitor (the icon was hidden); a force-quit app never stops its service, so the old service kept running on port
+47823. The new service couldn't bind the port, while the app's readiness check (unauthenticated /health) got an
+answer from the OLD service and treated it as ready; every real request was then rejected (wrong key).
+Fixes: the app stops any leftover `jarvis serve --port 47823` before starting its own; readiness is checked with the
+app's key (/api/state), so only its own service counts; the service exits within ~3 s if its app goes away
+(verified); a taken port now gives a clear message and exit code 3 (verified); install.sh clears leftovers too.
