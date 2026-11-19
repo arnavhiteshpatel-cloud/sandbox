@@ -433,3 +433,38 @@ def parse_reminder(text: str, now=None) -> tuple[str, float | None]:
             target += _dt.timedelta(days=1)
         return t[:m.start()].strip(), (target - now).total_seconds()
     return t, None
+
+
+# --- conversation vs. computer work --------------------------------------------------------------
+# A question that doesn't involve your screen, files or apps doesn't need the full agent (36 tool
+# descriptions, ~3,300 tokens to process before the first word). It gets one short model call instead.
+CHAT_START = re.compile(
+    r"^(?:what|what's|whats|who|who's|whos|when|where|why|how|how's|which|is|are|was|were|will|would|should|could|"
+    r"can (?:you|i|we)|do you|does|did|tell me|explain|define|describe|give me (?:a|an|some)|"
+    r"hi|hello|hey|yo|good (?:morning|afternoon|evening|night)|thanks|thank you|cheers|nice|cool|great|"
+    r"i think|i'm|im|i am|you're|youre|you are)\b")
+LOCAL_CONTEXT = re.compile(
+    r"\b(?:this|these|those|here|screen|tab|tabs|window|windows|file|files|folder|folders|document|documents|doc|docs|"
+    r"pdf|email|emails|mail|inbox|message|messages|text|desktop|downloads|my|mine|open|click|type|press|scroll|close|"
+    r"quit|play|pause|skip|find|assignment|form|quiz|worksheet|homework|page|website|site|link|app|apps|arc|safari|"
+    r"chrome|spotify|finder|calendar|reminder|reminders|note|notes|remind|schedule|meeting|battery|volume|brightness|"
+    r"wifi|wi-fi|bluetooth|clipboard|selected|highlighted|copy|paste|save|delete|move|rename|send|shortcut|"
+    r"mac|computer|laptop|settings)\b")
+LIVE_INFO = re.compile(
+    r"\b(?:weather|forecast|temperature outside|news|headlines|price|prices|stock|stocks|score|scores|won|winning|"
+    r"election|today|tonight|tomorrow|yesterday|this week|this weekend|latest|current|currently|right now|recent|"
+    r"recently|20[2-3]\d|open now|release date|exchange rate)\b")
+DO_VERB = re.compile(r"^(?:open|go|show|start|launch|close|find|search|play|turn|set|make|create|delete|move|send|"
+                     r"write|type|click|put|add|remind|schedule|switch|mute|unmute)\b")
+
+
+def classify_question(text: str, last_route: str | None = None) -> str | None:
+    """'chat' (answer directly), 'web' (needs current facts: look it up) or None (computer work: use the agent)."""
+    n = normalize(text)
+    words = n.split()
+    if not words or len(words) > 40 or LOCAL_CONTEXT.search(n):
+        return None
+    chatty = bool(CHAT_START.match(n)) or (last_route in ("chat", "web") and len(words) <= 12 and not DO_VERB.match(n))
+    if not chatty:
+        return None
+    return "web" if LIVE_INFO.search(n) else "chat"

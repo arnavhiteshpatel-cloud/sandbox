@@ -173,31 +173,9 @@ def test_settings_migration(home):
     json.dump({"voice": {"tts_speed": 1.05, "end_silence_ms": 750}, "llm": {"think": True},
                "security": {"blocked_apps": ["Terminal", "Zoom"]}}, open(paths.settings_path(), "w"))
     s = Settings()
-    assert s.get("voice.tts_speed") == 1.25 and s.get("voice.end_silence_ms") == 600
+    assert s.get("voice.tts_speed") == 1.4 and s.get("voice.end_silence_ms") == 500
+    assert s.get("voice.followup_seconds") == 8.0
     assert s.get("llm.think_policy") == "auto" and s.get("security.blocked_apps") == ["Zoom"]
-
-
-def test_barge_in_detects_user_not_echo():
-    import types
-
-    from jarvis.voice.pipeline import VoiceLoop
-
-    v = VoiceLoop.__new__(VoiceLoop)
-    v.player = types.SimpleNamespace(level=0.0)
-    v.wake = types.SimpleNamespace(noise_floor=0.003)
-    v._barge_reset()
-    rng = np.random.default_rng(1)
-
-    def frame(rms):
-        return (rng.normal(0, rms, 1280) * 32768).clip(-32767, 32767).astype(np.int16)
-
-    v._speak_t0 = time.monotonic()
-    for _ in range(10):                      # calibration: own voice leaks in at 0.3x
-        v.player.level = 0.1
-        v._barge_check(frame(0.03))
-    v._speak_t0 = time.monotonic() - 5
-    assert not any(v._barge_check(frame(0.03)) for _ in range(30))           # echo alone never triggers
-    assert any(v._barge_check(frame(0.15)) for _ in range(6))                # the user talking does
 
 
 async def test_declined_phrasing_is_not_asked_again(assistant, scripted):

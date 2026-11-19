@@ -54,6 +54,7 @@ class Session:
     browser: str | None = None
     browser_active: bool = False
     last_results: list = field(default_factory=list)
+    last_route: str | None = None
 
 
 class Assistant:
@@ -81,6 +82,8 @@ class Assistant:
         self.session = Session()
         self.current: dict | None = None        # {"task": asyncio.Task, "cancel": CancelToken, "id": int, "text": str}
         self.pending_question: dict | None = None
+        self._requests_seen = 0                 # counts requests (side questions skip if you asked something new)
+        self._heard: dict | None = None          # when your last voice request ended (latency log)
         self.dictation = False
         self._pending_learning = None
         self.last_activity = time.time()
@@ -99,8 +102,11 @@ class Assistant:
                 from .voice.pipeline import VoiceLoop
 
                 self.voice = VoiceLoop(self.settings, self.events, loop, self.handle_utterance, on_wake=self._on_wake)
+                self.voice.busy_fn = lambda: bool(self.current and not self.current["task"].done())
                 self._apply_voice_profile()
                 self.voice.start()
+                if PROFILES[self.power.mode]["prewarm_on_wake"]:
+                    self.voice.prewarm()       # speech recognition + voice ready before the first "Hey JARVIS"
                 self._refresh_vocabulary()
             except Exception as e:  # missing audio libs or no microphone: keep running text-only
                 log.warning("voice disabled: %s", e)
@@ -124,14 +130,36 @@ class Assistant:
         """User's choice: ask before remembering a new phrasing."""
         from .learning import describe_action
 
-        await asyncio.sleep(0.3)
-        if self.current or self.pending_question:
+        if not await self._wait_for_quiet():
             return
         if await self.confirm(f"Should I remember that “{text}” means {describe_action(tool, args)}?"):
             self.learner.learn(text, tool, args)
             await self.say("Remembered.")
         else:
             self.learner.decline(text)
+
+    async def _wait_for_quiet(self, limit: float = 30.0) -> bool:
+        """Side questions ("Should I remember…?", shortcut offers) wait until the conversation has finished:
+        not speaking, not listening for a follow-up, nothing running. False if you asked for something else."""
+        n = self._requests_seen
+        t0 = time.monotonic()
+        await asyncio.sleep(0.2)
+        while time.monotonic() - t0 < limit:
+            if self._requests_seen != n:
+                return False
+            v = self.voice
+            if not (self.current or self.pending_question or (v and (v.speaking or v.capturing or v.capture_pending))):
+                return True
+            await asyncio.sleep(0.25)
+        return False
+
+    def _idle(self) -> None:
+        """Report idle only when nothing is happening (the HUD hides on idle, so it must not hide while
+        JARVIS is still listening for your follow-up)."""
+        v = self.voice
+        if v and (v.speaking or v.capturing or v.capture_pending):
+            return
+        self.events.emit("status", status="idle")
 
     def _record_action(self, result: dict) -> None:
         """Log simple successful actions so routines can be noticed and offered as shortcuts."""
@@ -142,8 +170,7 @@ class Assistant:
     async def _maybe_suggest_shortcut(self) -> None:
         from .suggest import describe_steps
 
-        await asyncio.sleep(1.0)
-        if self.current or self.pending_question:
+        if not await self._wait_for_quiet():
             return
         sug = self.suggester.find(self.shortcuts.list())
         if not sug:
@@ -291,6 +318,7 @@ class Assistant:
         if not text:
             return
         self.events.emit("response", text=text)
+        self._note_latency(True)
         if self.voice:
             completed = await self.voice.speak(self._brief(text))
             if completed and followup:
@@ -342,7 +370,20 @@ class Assistant:
 
     # --- entry points --------------------------------------------------------------------------
     async def handle_utterance(self, text: str, meta: dict | None = None) -> None:
-        await self.handle_text(text, source=(meta or {}).get("source", "voice"))
+        meta = meta or {}
+        self._heard = {"t": time.monotonic(), "stt_ms": meta.get("stt_ms", 0), "text": text}
+        await self.handle_text(text, source=meta.get("source", "voice"))
+
+    def _note_latency(self, spoken: bool) -> None:
+        """Time from the end of your sentence to JARVIS's answer (spoken or on the HUD), for the activity log."""
+        h = getattr(self, "_heard", None)
+        if not h:
+            return
+        self._heard = None
+        ms = int((time.monotonic() - h["t"]) * 1000) + int(h.get("stt_ms") or 0)
+        self.events.emit("timing", stage="reply", ms=ms, stt_ms=h.get("stt_ms"))
+        self.db.log("latency", f"{ms / 1000:.1f} s from end of speech to {'voice' if spoken else 'HUD'} reply "
+                               f"(speech recognition {h.get('stt_ms')} ms): “{h['text'][:60]}”")
 
     def stop(self, reason: str = "stopped") -> bool:
         stopped = False
@@ -361,6 +402,7 @@ class Assistant:
     async def handle_text(self, text: str, source: str = "text") -> dict:
         """Process one request. Returns a summary dict (also used by tests and the CLI)."""
         t0 = time.monotonic()
+        self._requests_seen += 1
         self.last_activity = time.time()
         text = text.strip()
         intent = router.route(text, {"browser_active": self.session.browser_active})
@@ -434,13 +476,14 @@ class Assistant:
         self.db.task_finish(tid, status, result.get("message", ""), result.get("steps"), ms)
         self.events.emit("task", id=tid, status=status, text=text, route=result.get("route"), message=result.get("message"), ms=ms)
         self._refresh_vocabulary()
+        self.session.last_route = result.get("route")
         self._record_action(result)
         if getattr(self, "_pending_learning", None):
             asyncio.create_task(self._ask_to_learn(*self._pending_learning))
             self._pending_learning = None
         elif self.settings.get("learning.suggest_shortcuts", True) and status == "ok" and not self.dictation:
             asyncio.create_task(self._maybe_suggest_shortcut())
-        self.events.emit("status", status="idle")
+        self._idle()
         if self.current and self.current["id"] == tid:
             self.current = None
         return result
@@ -458,6 +501,7 @@ class Assistant:
         self._remember_turn("assistant", text)
         if confirm and ok and not self.settings.get("voice.speak_confirmations", False):
             self.events.emit("response", text=text, silent=True)
+            self._note_latency(False)
             if followup and self.voice:
                 self.voice.request_followup()
         else:
@@ -479,7 +523,49 @@ class Assistant:
         learned = self.learner.lookup(text)
         if learned:
             return await self._replay_learned(learned, cancel)
+        kind = router.classify_question(text, self.session.last_route)
+        if kind == "web" and self.settings.get("web.enabled", True):
+            return await self._web_lookup(text, cancel)
+        if kind == "chat":
+            return await self._chat(text, cancel)
         return await self._run_agent(text, cancel)
+
+    async def _chat(self, text: str, cancel: CancelToken) -> dict:
+        """Conversation and general questions: one short model call (~250 tokens of instructions instead of the
+        agent's ~3,300), so the answer starts in about a second. Falls back to a web lookup when it needs to."""
+        from .agent.prompts import chat_prompt
+        from .agent.thinking import decide
+
+        d = decide(text, self.power.mode, self.settings.get("llm.think_policy", "auto"))
+        if d.think:                      # "think it through", or a genuinely complex question
+            return await self._run_agent(text, cancel)
+        self.events.emit("status", status="thinking", detail="local model")
+        msgs = [{"role": "system", "content": chat_prompt(self.settings)}] + [
+            {"role": m["role"], "content": m["content"]} for m in self.session.history[-7:]]
+        try:
+            reply = await self.llm.chat(msgs, model=self.model, think=False, max_tokens=220, temperature=0.4,
+                                        keep_alive=PROFILES[self.power.mode]["keep_alive"])
+        except LLMError:
+            return await self._run_agent(text, cancel)   # same "model isn't running" handling as everything else
+        cancel.check()
+        answer = (reply.content or "").strip()
+        if not answer and reply.thinking:
+            # The server ignored "don't think" and ran out of room mid-thought: give it room to finish.
+            try:
+                reply = await self.llm.chat(msgs, model=self.model, think=False, max_tokens=1500, temperature=0.4,
+                                            keep_alive=PROFILES[self.power.mode]["keep_alive"])
+            except LLMError:
+                return await self._reply("Sorry, my local model took too long with that one. Try asking again.", False, "chat")
+            cancel.check()
+            answer = (reply.content or "").strip()
+        m = re.match(r"^\W*LOOKUP:\s*(.+)", answer, re.I | re.S)
+        if m:
+            if self.settings.get("web.enabled", True):
+                return await self._web_lookup(m.group(1).strip().splitlines()[0], cancel)
+            return await self._reply("I'd need to look that up, and internet lookups are off in Settings.", False, "chat")
+        if not answer:
+            return await self._run_agent(text, cancel)
+        return await self._reply(answer, True, "chat")
 
     async def _replay_learned(self, lp: dict, cancel: CancelToken) -> dict:
         """Run a phrasing JARVIS learned earlier, instantly and without the AI model."""
@@ -929,11 +1015,7 @@ class Assistant:
     # --- agent ------------------------------------------------------------------------------------
     def _agent_progress(self, ev: dict) -> None:
         self.events.emit(ev.pop("type"), **ev)
-        if ev.get("tool") in PROGRESS_PHRASES and self.current and not self.current.get("spoke_progress"):
-            started = self.current.get("started", time.time())
-            if time.time() - started > 15 and self.voice and not self.voice.speaking:
-                self.current["spoke_progress"] = True
-                asyncio.create_task(self.voice.speak(PROGRESS_PHRASES[ev["tool"]]))
+        # Progress is shown on the HUD only (your choice): spoken progress lines talked over the real answer.
 
     async def _agent_context(self, text: str) -> str:
         front = await asyncio.to_thread(self.computer.frontmost_app)

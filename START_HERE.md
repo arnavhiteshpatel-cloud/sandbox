@@ -59,6 +59,14 @@ When plugged in, you can also just say **"Hey JARVIS"**. **⌃⌥⌘.** (Ctrl+Op
 /Applications/JARVIS.app/Contents/Resources/python/bin/python3 -m jarvis.acceptance
 ```
 
+## Updating to a new version
+Quit JARVIS from its menu-bar icon, then:
+```bash
+cd ~/JARVIS && git pull && ./scripts/install.sh
+```
+Your settings, shortcuts and memories are kept. Permissions are kept too (the build is signed with your local
+"JARVIS Local Signing" certificate).
+
 ## If something goes wrong
 - Logs: `~/Library/Logs/JARVIS/`
 - Check everything:
@@ -66,3 +74,7 @@ When plugged in, you can also just say **"Hey JARVIS"**. **⌃⌥⌘.** (Ctrl+Op
   /Applications/JARVIS.app/Contents/Resources/python/bin/python3 -m jarvis doctor
   ```
 - "Can't reach my local AI model": open the **Ollama** app.
+- Slow replies: Command Center → Activity shows a "latency" line for every reply (time from the end of your sentence
+  to the answer, and how much of it was speech recognition). Send those lines when reporting slowness.
+- Permissions look off after granting them: wait a few seconds (JARVIS restarts its background service once to pick
+  them up). If Settings → Permissions still shows "missing", click **Reset permissions** and allow again.

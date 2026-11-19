@@ -62,6 +62,12 @@ function onEvent(ev) {
   switch (ev.type) {
     case "hello": S.state = ev.state; renderState(); setStatus(ev.state.status || "idle"); break;
     case "status":
+      if (ev.status === "listening" && ev.reason === "followup") {
+        // Listening for a follow-up: keep the reply on screen, note that it's listening.
+        root.dataset.status = "listening";
+        if (VIEW === "hud") { $("#hud-sub").textContent = "Listening — go ahead"; clearTimeout(S.hudTimer); native({ type: "hud", visible: true }); }
+        break;
+      }
       if (ev.status === "thinking") S.thinking = ev.detail === "thinking it through";
       if (ev.status === "idle") S.thinking = false;
       setStatus(ev.status, ev.detail === "thinking it through" ? "Thinking it through…" : ev.detail); break;
@@ -102,10 +108,17 @@ function onEvent(ev) {
     case "llm": if (S.state) { S.state.llm_available = ev.available; S.state.model = ev.model; renderState(); } break;
     case "voice": refreshState(); break;
     case "permissions": if (location.hash.startsWith("#settings")) loadSettings(); break;
+    case "service_restart":
+      if (VIEW === "hud") { hud("Applying the new permission…", "Restarting in the background"); }
+      addActivity({ ts: Date.now() / 1000, level: "info", category: "system", message: "Restarting the background service to use a newly granted permission." });
+      break;
+    case "wake": if (VIEW === "hud") window.jarvisWake(); break;
     case "error": addActivity({ ts: ev.ts, level: "error", category: ev.where || "error", message: ev.message }); if (VIEW === "hud") { root.dataset.status = "error"; hud("Something went wrong", ev.message); } break;
     case "open_editor": if (VIEW === "center") { location.hash = "#shortcuts"; newShortcut(ev.name, ev.description); } else native({ type: "openCenter", hash: "shortcuts" }); break;
   }
 }
+// Called natively the instant "Hey JARVIS" is heard (the app shows the HUD before this page has caught up).
+window.jarvisWake = () => { S.lastTranscript = ""; root.dataset.status = "listening"; clearTimeout(S.hudTimer); hud("Listening…", ""); };
 async function answer(text) { await api("POST", "/api/answer", { text }); showQuestion(null); }
 function showQuestion(q) {
   const b = $("#l-question"); if (!b) return;
@@ -464,6 +477,7 @@ async function loadSettings() {
     ${permRow("microphone", "Microphone", "Privacy_Microphone")}
     ${permRow("accessibility", "Accessibility (click, type, read apps)", "Privacy_Accessibility")}
     ${permRow("screen_recording", "Screen Recording (screenshots, OCR)", "Privacy_ScreenCapture")}
+    ${perms.needs_restart ? `<div class="banner" style="margin-top:8px"><b>Permission granted. JARVIS is restarting its background service to use it (a few seconds).</b></div>` : ""}
     ${perms.accessibility === false ? `<div class="banner" style="margin-top:8px"><b>${perms.accessibility_app
       ? "JARVIS is allowed, but its background service isn't. Click Reset permissions, then allow JARVIS again."
       : "If JARVIS is already switched on in the Accessibility list, that entry belongs to an older build. Click Reset permissions, then switch JARVIS on again when macOS asks."}</b></div>` : ""}

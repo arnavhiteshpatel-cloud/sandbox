@@ -23,30 +23,30 @@ log = logging.getLogger("jarvis.power")
 PROFILES: dict[str, dict] = {
     "battery_saver": {
         "label": "Battery Saver",
-        "keep_alive": "30s",       # unload the LLM 30 s after the last use
+        "keep_alive": "3m",        # unload the LLM 3 min after the last use (an idle loaded model draws ~no power)
         "prewarm_on_wake": False,  # don't load the LLM until we know it's needed
         "stt_model": "small",
         "animations": "minimal",
         "index_allowed": False,
-        "unload_voice_models_after_s": 60,
+        "unload_voice_models_after_s": 300,
     },
     "balanced": {
         "label": "Balanced",
-        "keep_alive": "5m",
+        "keep_alive": "30m",       # reloading costs seconds per request; holding it in memory costs ~nothing
         "prewarm_on_wake": True,   # start loading the LLM while you are still speaking
         "stt_model": "turbo",
         "animations": "normal",
         "index_allowed": "charging",
-        "unload_voice_models_after_s": 300,
+        "unload_voice_models_after_s": 1800,
     },
     "max_performance": {
         "label": "Maximum Performance",
-        "keep_alive": "30m",
+        "keep_alive": "2h",
         "prewarm_on_wake": True,
         "stt_model": "turbo",
         "animations": "full",
         "index_allowed": "charging",
-        "unload_voice_models_after_s": 1800,
+        "unload_voice_models_after_s": 7200,
     },
 }
 

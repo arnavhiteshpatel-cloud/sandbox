@@ -34,6 +34,11 @@ TEXTUAL = {"AXStaticText", "AXHeading"}
 SKIP_SUBTREE = {"AXMenuBar"}  # menus are reached via menu_select
 
 
+AX_API_DISABLED = -25211   # kAXErrorAPIDisabled: this process really isn't allowed (yet)
+PERMISSION_MESSAGE = ("Accessibility permission missing. Turn JARVIS on in System Settings > Privacy & Security > "
+                      "Accessibility (if it's already on, use Settings > Permissions > Reset in JARVIS).")
+
+
 def _attr(el, name: str) -> Any:
     err, val = AXUIElementCopyAttributeValue(el, name, None)
     return val if err == 0 else None
@@ -60,7 +65,14 @@ class AXController:
 
     @staticmethod
     def trusted() -> bool:
+        """macOS's answer for THIS process. It can stay False after you grant access (the answer is cached
+        per process), so actions never rely on it: they try, and only a real 'API disabled' error counts."""
         return bool(HAVE_AX and AXIsProcessTrusted())
+
+    @staticmethod
+    def api_disabled(el) -> bool:
+        err, _ = AXUIElementCopyAttributeValue(el, "AXRole", None)
+        return err == AX_API_DISABLED
 
     def app_element(self, pid: int):
         el = AXUIElementCreateApplication(pid)
@@ -68,10 +80,10 @@ class AXController:
         return el
 
     def snapshot(self, pid: int, app_name: str, max_elements: int = 150, max_nodes: int = 4000) -> dict:
-        if not self.trusted():
-            return {"error": "Accessibility permission missing. Enable JARVIS in System Settings > Privacy & Security > Accessibility."}
         self._registry.clear()
         app = self.app_element(pid)
+        if self.api_disabled(app):
+            return {"error": PERMISSION_MESSAGE, "permission": "accessibility"}
         window = _attr(app, "AXFocusedWindow") or (_attr(app, "AXWindows") or [None])[0]
         if window is None:
             return {"app": app_name, "window": None, "elements": [], "note": "The app has no open window."}
@@ -131,9 +143,9 @@ class AXController:
         return ActionResult(True, "Entered the text.", verified=(got == text))
 
     def menu_select(self, pid: int, path: list[str]) -> ActionResult:
-        if not self.trusted():
-            return ActionResult.fail("Accessibility permission missing.")
         app = self.app_element(pid)
+        if self.api_disabled(app):
+            return ActionResult.fail(PERMISSION_MESSAGE)
         node = _attr(app, "AXMenuBar")
         for i, title in enumerate(path):
             if node is None:

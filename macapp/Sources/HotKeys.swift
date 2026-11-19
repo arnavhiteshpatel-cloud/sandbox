@@ -23,6 +23,8 @@ final class HotKeys {
     private var tap: CFMachPort?
     private var tapSource: CFRunLoopSource?
     private var tapKeyDown = false
+    private var retryTimer: Timer?
+    var tapActive: Bool { tap != nil }
     static let pushToTalk: UInt32 = 1
     static let emergencyStop: UInt32 = 2
     static let escapeStop: UInt32 = 3
@@ -37,7 +39,14 @@ final class HotKeys {
         } else {
             bindings.append(HotKeys.pttFallback)
             pttDescription = "⌃⌥C"
-            NSLog("JARVIS: event tap unavailable (grant Accessibility); push-to-talk falls back to ⌃⌥C")
+            NSLog("JARVIS: event tap unavailable (grant Accessibility); push-to-talk falls back to ⌃⌥C until it is")
+            // Keep trying: macOS can keep telling a running app "not trusted" after you grant access,
+            // so the only reliable test is to try creating the tap again.
+            retryTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: true) { [weak self] t in
+                guard let self = self else { t.invalidate(); return }
+                self.retryTapIfNeeded()
+                if self.tap != nil { t.invalidate(); self.retryTimer = nil }
+            }
         }
         register(bindings)
     }
@@ -54,7 +63,7 @@ final class HotKeys {
     // MARK: event tap for ⌥⇧C
 
     private func installTap() -> Bool {
-        guard AXIsProcessTrusted() else { return false }
+        // No AXIsProcessTrusted() pre-check: its answer can be stale. Creating the tap is the real test.
         let mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
         guard let port = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
@@ -157,6 +166,8 @@ final class HotKeys {
 
     func unregister() {
         unregisterCarbon()
+        retryTimer?.invalidate()
+        retryTimer = nil
         if let t = tap { CGEvent.tapEnable(tap: t, enable: false) }
         if let s = tapSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), s, .commonModes) }
         tap = nil

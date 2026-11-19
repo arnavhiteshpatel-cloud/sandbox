@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     lazy var web = WebFactory(daemon: daemon)
     let hotkeys = HotKeys()
     let system = SystemEvents()
+    lazy var stream = EventStream(port: daemon.port, token: daemon.token)
+    var hudWebView: WKWebView?
     var statusItem: NSStatusItem!
     var popover: NSPopover?
     var hudPanel: NSPanel?
@@ -47,13 +49,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ note: Notification) {
+        stream.stop()
         hotkeys.unregister()
         daemon.stop()
     }
 
     private func permissionsChanged() {
         hotkeys.retryTapIfNeeded()
-        daemon.post("api/system/event", ["event": "permissions", "app_accessibility": AXIsProcessTrusted(),
+        // The tap only exists if macOS really granted Accessibility; AXIsProcessTrusted() alone can be stale.
+        daemon.post("api/system/event", ["event": "permissions", "app_accessibility": hotkeys.tapActive || AXIsProcessTrusted(),
                                          "talk_key": hotkeys.pttDescription])
     }
 
@@ -61,8 +65,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setIcon("smallcircle.filled.circle")
         permissionsChanged()                // Accessibility may have been granted since launch
         if hudPanel == nil { buildHUD() }   // onReady fires again after a service restart
+        stream.onEvent = { [weak self] ev in self?.serviceEvent(ev) }
+        stream.stop()
+        stream.start()
         if !UserDefaults.standard.bool(forKey: "onboarded") {
             onboard()
+        }
+    }
+
+    /// Live events from the service, handled natively so nothing waits on the (possibly paused) HUD page.
+    private func serviceEvent(_ ev: [String: Any]) {
+        switch ev["type"] as? String {
+        case "wake":
+            showHUD(true)    // the moment "Hey JARVIS" is heard, top-left
+            hudWebView?.evaluateJavaScript("window.jarvisWake && window.jarvisWake()")
+        case "status":
+            let s = (ev["status"] as? String) ?? "idle"
+            updateIcon(status: s)
+            if s == "listening" && (ev["reason"] as? String) != "followup" { showHUD(true) }
+            if ["transcribing", "thinking", "acting", "speaking"].contains(s) { showHUD(true) }
+        case "service_restart":
+            // A permission was granted after the service started; a fresh process picks it up.
+            statusText = "Service: restarting to use a new permission"
+            stream.stop()
+            daemon.stop()
+            daemon.start()
+        default:
+            break
         }
     }
 
@@ -251,7 +280,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.hasShadow = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.hidesOnDeactivate = false
-        panel.contentView = web.make(view: "hud", transparent: true)
+        let wv = web.make(view: "hud", transparent: true)
+        panel.contentView = wv
+        hudWebView = wv
         panel.alphaValue = 0
         hudPanel = panel
     }

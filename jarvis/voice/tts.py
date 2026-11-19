@@ -28,7 +28,9 @@ KOKORO_VOICES = {
 }
 
 
-def split_sentences(text: str) -> list[str]:
+def split_sentences(text: str, first_short: bool = False) -> list[str]:
+    """Split for speaking. With first_short, a long first sentence is cut at its first comma after a few
+    words, so the voice starts sooner (the rest is synthesized while the first part plays)."""
     text = re.sub(r"\s+", " ", text).strip()
     if not text:
         return []
@@ -42,6 +44,11 @@ def split_sentences(text: str) -> list[str]:
             p = p[cut + 1:].strip()
         if p:
             out.append(p)
+    if first_short and out and len(out[0]) > 70:
+        m = re.search(r",\s", out[0][25:])
+        if m:
+            cut = 25 + m.start() + 1
+            out[0:1] = [out[0][:cut].strip(), out[0][cut:].strip()]
     return out
 
 
@@ -93,6 +100,12 @@ class TTS:
     def unload(self) -> None:
         with self._lock:
             self._kokoro = None
+
+    def warm(self) -> None:
+        """Load the voice and run it once so the first real sentence isn't slow."""
+        if self.backend != "kokoro":
+            return
+        self.synth("Yes.")
 
     def synth(self, sentence: str) -> tuple[np.ndarray, int]:
         self.load()

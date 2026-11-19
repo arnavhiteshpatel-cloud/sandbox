@@ -14,7 +14,7 @@ from typing import Any
 from . import paths
 
 DEFAULTS: dict[str, Any] = {
-    "settings_version": 3,
+    "settings_version": 4,
     "learning": {
         "ask_before_learning": True,   # user choice: ask before remembering a new phrasing
         "suggest_shortcuts": True,     # user choice: suggest shortcuts for things you repeat, whenever useful
@@ -71,11 +71,11 @@ DEFAULTS: dict[str, Any] = {
         "tts_backend": "auto",         # auto | kokoro | say
         "tts_voice": "bm_george",      # Kokoro British male voice; `say` fallback uses Daniel
         "say_voice": "Daniel",
-        "tts_speed": 1.25,
-        "followup_seconds": 6.0,       # listen for a follow-up without the wake word
+        "tts_speed": 1.4,
+        "followup_seconds": 8.0,       # listen for a follow-up without the wake word
         "hands_free": True,
         "barge_in": True,              # interrupt JARVIS by simply talking over it (turn off if it cuts itself off)
-        "end_silence_ms": 600,
+        "end_silence_ms": 500,
         "max_utterance_s": 15,
         "muted": False,
         "chime": False,                # user choice: no listening sound
@@ -147,7 +147,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return out
 
 
-SETTINGS_VERSION = 3
+SETTINGS_VERSION = 4
 
 
 def _migrate(data: dict, stored_version: int) -> dict:
@@ -166,6 +166,14 @@ def _migrate(data: dict, stored_version: int) -> dict:
         v["chime"] = False
         v["speak_confirmations"] = False
         data.setdefault("ui", {})["hud_position"] = "top_left"
+    if stored_version < 4:   # feedback 2026-11-19: talk faster, respond sooner, follow-up window that works
+        v = data.setdefault("voice", {})
+        if float(v.get("tts_speed", 1.4)) < 1.4:
+            v["tts_speed"] = 1.4
+        if float(v.get("followup_seconds", 8.0)) < 8.0:
+            v["followup_seconds"] = 8.0
+        if int(v.get("end_silence_ms", 500)) > 500:
+            v["end_silence_ms"] = 500        # speech end is now detected by a voice model, not loudness
     data["settings_version"] = SETTINGS_VERSION
     return data
 

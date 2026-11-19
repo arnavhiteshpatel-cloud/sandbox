@@ -1,9 +1,12 @@
 """Real macOS implementation of the Computer interface."""
 from __future__ import annotations
 
+import json
+import logging
 import os
 import re
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -11,6 +14,8 @@ from ..base import ActionResult, AutomationError, Computer
 from . import applescript as AS
 from .ax import AXController
 from .browser import BrowserController
+
+log = logging.getLogger("jarvis.macos")
 
 APP_DIRS = ["/Applications", "/Applications/Utilities", "/System/Applications", "/System/Applications/Utilities",
             str(Path.home() / "Applications"), "/System/Library/CoreServices/Applications"]
@@ -440,14 +445,47 @@ class MacComputer(Computer):
         from . import integrations as I
         return I.send_message(to, text)
 
+    _FRESH_CHECK = (
+        "import json\n"
+        "out = {}\n"
+        "try:\n"
+        "    from ApplicationServices import AXIsProcessTrusted\n"
+        "    out['accessibility'] = bool(AXIsProcessTrusted())\n"
+        "except Exception: pass\n"
+        "try:\n"
+        "    import Quartz\n"
+        "    out['screen_recording'] = bool(Quartz.CGPreflightScreenCaptureAccess())\n"
+        "except Exception: pass\n"
+        "print(json.dumps(out))\n")
+
+    def fresh_permissions(self) -> dict:
+        """Ask macOS from a brand-new process. A running process can keep getting the answer from when it
+        started, which is why granting access in System Settings seemed to do nothing."""
+        now = time.monotonic()
+        cached = getattr(self, "_fresh_cache", None)
+        if cached and now - cached[0] < 2.0:
+            return cached[1]
+        try:
+            r = subprocess.run([sys.executable, "-c", self._FRESH_CHECK], capture_output=True, text=True, timeout=15)
+            res = json.loads(r.stdout.strip().splitlines()[-1]) if r.stdout.strip() else {}
+        except Exception as e:
+            log.warning("fresh permission check failed: %s", e)
+            res = {}
+        self._fresh_cache = (now, res)
+        return res
+
     def permissions(self):
-        perms = {"accessibility": self.ax.trusted()}
+        here = {"accessibility": self.ax.trusted()}
         try:
             import Quartz  # type: ignore
 
-            perms["screen_recording"] = bool(Quartz.CGPreflightScreenCaptureAccess())
+            here["screen_recording"] = bool(Quartz.CGPreflightScreenCaptureAccess())
         except Exception:
-            perms["screen_recording"] = None
+            here["screen_recording"] = None
+        fresh = self.fresh_permissions()
+        perms = {k: fresh.get(k, v) for k, v in here.items()}
+        # Granted now, but this process still has the old "no": the service must restart to use it.
+        perms["needs_restart"] = any(fresh.get(k) and not here.get(k) for k in here)
         try:
             import AVFoundation  # type: ignore
 

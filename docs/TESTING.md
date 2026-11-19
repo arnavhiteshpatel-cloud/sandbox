@@ -6,7 +6,7 @@
 JARVIS_PLATFORM=fake python -m pytest -q
 ```
 
-100 tests, all passing (Linux, Python 3.12, 2026-11-18). They cover:
+162 tests, all passing (Linux, Python 3.12, 2026-11-19). They cover:
 
 | File | What |
 |---|---|
@@ -16,6 +16,8 @@ JARVIS_PLATFORM=fake python -m pytest -q
 | `test_agent.py` | invalid/unknown tool recovery, failed-click recovery, step limits, repeated-failure abort, mid-task cancellation, Trash confirmation, untrusted-content wrapping, Qwen JSON/XML tool-call parsing, tool subsetting |
 | `test_memory_search_policy.py` | explicit vs inferred memory, indexing (hidden/Library folders excluded), relevance, recency, duplicates, incremental re-index, deletions, Office extraction, safety policy, power-mode policy (wake word only on AC, task-aware switching) |
 | `test_any_app.py` | media/system/window/app commands with zero LLM calls, reminder time parsing, calendar summaries, follow-ups in non-browser apps, Wi-Fi-off and Terminal confirmations, script and message gating in the agent |
+| `test_voice_conversation.py` | **talking over JARVIS** with real recorded speech and key clicks mixed at four echo levels: its own echo and typing never stop it, your voice does (even quieter than the echo); its own words removed from an interruption; one utterance at a time; stop drops queued speech; the player goes silent within one 40 ms block and never hangs; recording starts at speech, not key clicks; the HUD keeps "listening" during the follow-up window; quick answers skip the agent; current-facts questions are looked up |
+| `test_feedback_fixes.py`, `test_complete_task.py` | fixes from real use (app-name matching, "open it", thinking policy, web lookups, learning phrasings, shortcut suggestions, settings migrations) and "do it" on practice quizzes |
 | `test_browser_js.py` | the JavaScript injected into Arc, run in **real Chromium**: discovery including shadow DOM, stable ids, clicks, React-style inputs, inner scroll containers, page reading |
 
 These use `platform/fake.py`, a simulated computer. They prove the logic, **not** that macOS automation works.
@@ -52,7 +54,7 @@ session. I don't count simulated results as passes. What exists for each:
 | 2 | Understands a spoken instruction | human | synthetic transcripts + intents 4/4 |
 | 3 | Local speech synthesis | human | Kokoro runs ~1.1–1.5× real time on 4 x86 cores |
 | 4 | Follow-up conversation | human | flow test passes on simulator |
-| 5 | Interruption | human | stop/replace tests pass; barge-in path not run with audio |
+| 5 | Interruption | human | stop/replace tests pass; talk-over detection tested with recorded speech + simulated echo, not real speakers |
 | 6 | No paid AI services | auto | by construction (local endpoints only) |
 | 7–14 | Arc, apps, navigate, click, scroll, read, multistep, recovery | auto | browser JS in Chromium 8/8; logic on simulator |
 | 15–19 | Shortcuts | auto (+restart) | logic on simulator |

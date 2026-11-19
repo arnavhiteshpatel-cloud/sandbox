@@ -89,6 +89,9 @@ def _strip_think(content: str) -> tuple[str, str]:
     m = re.search(r"<think>(.*?)</think>", content or "", re.S)
     if m:
         return (content[: m.start()] + content[m.end():]).strip(), m.group(1).strip()
+    i = (content or "").find("<think>")
+    if i >= 0:   # cut off mid-thought (length limit): none of it is the answer, and it must never be spoken
+        return content[:i].strip(), content[i + 7:].strip()
     return content, ""
 
 

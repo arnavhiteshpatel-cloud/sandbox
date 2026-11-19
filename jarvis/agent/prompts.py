@@ -81,3 +81,15 @@ def context_block(*, mode: str, frontmost: str | None, browser_state: dict | Non
             conv.append(f"{who}: {m['content'][:300]}")
         lines.append("Recent conversation (for follow-ups like 'open the first one'):\n" + "\n".join(conv))
     return "\n".join(lines)
+
+
+CHAT_RULES = """This is a spoken conversation, not computer work. Answer directly from what you know, in one or two
+short sentences (more only if asked to explain). You can also control the user's Mac (apps, browsers, typing,
+files, notes, reminders, calendar), look things up online, and complete assignments when they say "do it".
+If a good answer needs current or specific facts you don't reliably know (news, scores, prices, schedules,
+anything recent), reply with exactly: LOOKUP: <a short web search query> and nothing else."""
+
+
+def chat_prompt(settings) -> str:
+    persona = PERSONA.replace("{honorific}", settings.get("assistant.honorific", "sir") or "sir")
+    return persona + "\n\n" + CHAT_RULES + f"\nNow: {time.strftime('%A %d %B %Y, %H:%M')}."

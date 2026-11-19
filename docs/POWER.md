@@ -11,7 +11,7 @@ without access to your MacBook, so no Mac power numbers exist yet. Every figure 
 | Idle, on battery (default: hotkey only) | native shell (event-driven), Python service blocked on events, Ollama server idle | microphone **closed**, no models in memory beyond unload timers, no polling except a 5-minute housekeeping tick |
 | Idle, on AC (wake word on) | mic stream at 16 kHz, 80 ms frames; energy gate skips wake-word inference in silence | STT, TTS, LLM unloaded on timers |
 | Talking | wake/PTT → capture → Whisper → router; LLM only when needed | |
-| After use | LLM unloads after keep-alive (30 s / 5 min / 30 min by mode); Whisper and Kokoro after 60 s / 5 min / 30 min | |
+| After use | LLM unloads after keep-alive (3 min / 30 min / 2 h by mode); Whisper and Kokoro after 5 min / 30 min / 2 h. An idle model in memory draws essentially no power; reloading it costs seconds on every request (changed 2026-11-19 after "too slow" feedback) | |
 
 Further measures:
 * **Wake word only on AC** (your choice), so on battery there is no open microphone at all.
@@ -35,7 +35,7 @@ Further measures:
 
 | | Battery Saver | Balanced (default on battery) | Max Performance (default on AC) |
 |---|---|---|---|
-| LLM | qwen3.5:4b, unload after 30 s | qwen3.5:9b, 5 min | qwen3.5:9b + thinking, 30 min |
+| LLM | qwen3.5:4b, unload after 3 min | qwen3.5:9b, 30 min | qwen3.5:9b, 2 h (thinking only when the request needs it) |
 | Speech recognition | Whisper small | Whisper large-v3-turbo | large-v3-turbo |
 | Agent step limit | 8 | 20 | 40 |
 | Screenshot vision | off (OCR only) | on | on |

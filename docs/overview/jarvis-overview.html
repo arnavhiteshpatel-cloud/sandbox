@@ -86,7 +86,7 @@
       Built for: 14-inch MacBook Pro (Nov 2024), Apple M4 Pro, 24 GB, macOS Sequoia 15.7.3<br>
       Runs entirely on-device: no Claude, no Anthropic API, no cloud AI, no subscriptions<br>
       Source: github.com/arnavhiteshpatel-cloud/sandbox, branch <span style="font-family:'DejaVu Sans Mono'">claude/project-jarvis-ai-assistant-rddtrw</span><br>
-      Document date: 18 November 2026 · version 0.5.0
+      Document date: 19 November 2026 · version 0.6.0
     </div>
     <div class="status">Status: built and tested off-Mac. Not yet run on your MacBook. See “What has been verified”.</div>
   </div>
@@ -176,7 +176,8 @@
   <h3>Continuous conversation</h3>
   <p>JARVIS keeps context for about 10 minutes: the app and web page you’re on, what it just did, the last list of results and the
   recent back-and-forth. That is why “Open my IB” → “Go to the assignments” → “Open the most recent one” works without
-  repeating yourself. After it answers, it listens for a few seconds for a follow-up without needing the wake word. A new instruction
+  repeating yourself. After it answers, it keeps listening for about 8 seconds for a follow-up without the wake word (the HUD says
+  “Listening — go ahead”); noise doesn’t use up that window. It says one thing at a time and finishes it. A new instruction
   replaces whatever it was doing, and “stop” halts everything.</p>
 
   <h3>The pieces</h3>
@@ -268,12 +269,15 @@
     <tr><td>Speaking style</td><td>Simple commands get a short functional reply (“Opening Spotify.”). Complex, multistep or conversational
       requests get a polite, dry-witted, JARVIS-like reply that occasionally says “sir”. No markdown or URLs read aloud.</td></tr>
     <tr><td>Fast replies</td><td>Speech starts after the first sentence is synthesized while the rest is still being generated.</td></tr>
-    <tr><td>Follow-ups</td><td>Hands-free listening window after each reply (default 6 s, adjustable, can be turned off).</td></tr>
+    <tr><td>Follow-ups</td><td>Hands-free listening window after each reply (default 8 s, adjustable, can be turned off).</td></tr>
     <tr><td>Questions and confirmations</td><td>JARVIS can ask you something mid-task (“What’s the web address?”, “Shall I submit?”) and take your answer
       by voice or a click.</td></tr>
-    <tr><td>Interruption</td><td>Just start talking over it (it tells your voice apart from its own echo), or press <kbd>Esc</kbd>,
-      the talk key or the wake word. It stops mid-sentence and listens. A new instruction replaces the current task.</td></tr>
-    <tr><td>Progress updates</td><td>For tasks longer than ~8 s it says brief progress lines (“Reading the page.”), at most every 25 s.</td></tr>
+    <tr><td>Interruption</td><td>Just start talking over it. It dips its volume the instant it hears a voice, and stops if it’s you
+      (keyboard typing and its own echo don’t count). Its own words are never mistaken for your request. Or press <kbd>Esc</kbd>,
+      the talk key or say “Hey JARVIS”. A new instruction replaces the current task.</td></tr>
+    <tr><td>Progress updates</td><td>On the HUD only (silent), so nothing talks over the answer.</td></tr>
+    <tr><td>Quick answers</td><td>Questions that don’t involve your screen, files or apps (“what’s the capital of Australia?”, “tell me a joke”)
+      get a short, fast answer without the full agent; ones that need current facts are looked up in the background.</td></tr>
     <tr><td>Privacy controls</td><td>Mute mic, choose the microphone, chime on/off. Audio is never saved to disk.</td></tr>
     <tr><td>Offline</td><td>All voice processing works without internet.</td></tr>
   </table>
@@ -602,7 +606,7 @@
   Everything that needs macOS is written but <b>not yet run</b>. No simulated result is counted as a pass.</p>
   <table>
     <tr><th style="width:42%">Area</th><th style="width:14%">Status</th><th>Evidence</th></tr>
-    <tr><td>Routing, shortcuts, agent loop, memory, safety, power logic</td><td><span class="tag t-ok">tested</span></td><td>144 automated tests pass, including “open my IB” → “go to the assignments” → “scroll down” → “go back” with zero AI calls.</td></tr>
+    <tr><td>Routing, shortcuts, agent loop, memory, safety, power logic</td><td><span class="tag t-ok">tested</span></td><td>162 automated tests pass, including “open my IB” → “go to the assignments” → “scroll down” → “go back” with zero AI calls.</td></tr>
     <tr><td>Arc page-control code (find, click, type, scroll, read)</td><td><span class="tag t-ok">tested</span></td><td>8/8 in a real Chromium browser (the engine Arc uses).</td></tr>
     <tr><td>Voice pipeline with real models</td><td><span class="tag t-ok">tested</span></td><td>6/6: wake word detected for 4 different voices, no false triggers, exact transcripts, correct commands. Silence filter: 0 of 375 frames processed.</td></tr>
     <tr><td>AI agent with a real local model</td><td><span class="tag t-ok">tested</span></td><td>Qwen3.5-4B: 11/11 JARVIS tasks plus 3/3 app tasks (reminder + calendar, scripting Music, message correctly held for confirmation), 0 invalid actions (one run per case, on a simulated computer).</td></tr>
@@ -624,7 +628,8 @@
     <li><b>Wake phrase is “Hey JARVIS”.</b> “JARVIS” alone may not trigger it; use the talk key. Similar-sounding phrases can come close (“Hey Travis” scored 0.48
     vs. a 0.5 threshold), so tune sensitivity for your voice and room. The wake-word model is licensed for personal, non-commercial use.</li>
     <li><b>The orange microphone dot</b> shows whenever the wake word is listening (on AC power).</li>
-    <li><b>No echo cancellation:</b> interrupt with the talk key or wake word, not by just talking over it.</li>
+    <li><b>No true echo cancellation:</b> talking over JARVIS uses voice detection, a measured echo model and volume ducking. With very
+    loud speakers it may need a louder word; headphones make it instant. <kbd>Esc</kbd> and the talk key always work.</li>
     <li><b>Local AI is not frontier AI.</b> Long, ambiguous, multi-site tasks will sometimes fail, and it reports failures. The first AI step of each task takes
     noticeably longer than follow-up steps.</li>
     <li><b>Some web content is unreachable</b> by page control: other-site embedded frames, canvas-drawn apps. Screenshot fallback is slower.</li>

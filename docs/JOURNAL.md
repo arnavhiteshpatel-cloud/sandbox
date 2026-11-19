@@ -167,3 +167,29 @@ stuck on a native dropdown → clicking an option's text now selects it; third r
   fixes: `scripts/create_signing_identity.sh` makes a local "JARVIS Local Signing" certificate that the build uses
   automatically (permissions now survive rebuilds); the app listens for `com.apple.accessibility.api` and re-arms the ⌥⇧C
   tap with no restart; Settings → Permissions re-checks every 3 s and has a **Reset permissions** button with an explanation.
+
+## Feedback round 3 (2026-11-19): conversation, interruption, speed, permissions
+User report: interrupting made JARVIS restart what it was saying; keyboard typing interrupted it; it didn't stop
+immediately; the HUD appeared when it started talking instead of at "Hey JARVIS"; still slow; permissions still not
+recognized; the follow-up window "straight up doesn't work"; it "has 6 thoughts and interrupts itself"; talk faster.
+
+| Problem | Root cause | Fix |
+|---|---|---|
+| Restarts what it was saying | The interruption recording kept the last 0.6 s of audio, which contained JARVIS's own voice; Whisper transcribed it and it was answered as a new request | Echo words matching what JARVIS was saying are removed from the transcript (`strip_echo`); if nothing of yours is left it was a false alarm and it **carries on from the interrupted sentence** |
+| Keyboard interrupts it | Detection was loudness-only | Silero voice-activity model (bundled with openWakeWord; key clicks score < 0.5, speech ~1.0) + click-proof loudness (median of 10 ms slices) + an **echo model**: the delay from speaker to mic and the echo level are measured from JARVIS's own speech, so each 80 ms frame is compared with the echo expected at that moment |
+| Hard case: your voice no louder than its echo | MacBook speakers sit next to the mics | **Ducking**: a suspected voice drops JARVIS to 15 % volume within one 40 ms block; with JARVIS that quiet a real voice is easy to confirm → stop. Not confirmed in ~0.4 s → volume back, nothing lost. The trigger level self-tunes per room (false alarm → stricter, real interruption → more sensitive) |
+| Doesn't stop immediately | ~320 ms detection, then the speaker buffer kept playing | Callback-driven player: stop empties the queue (silent within one block), cannot hang |
+| "6 thoughts", interrupts itself | Several `speak()` calls could overlap (progress lines, answer, "should I remember…?"), each cancelling the last | One utterance at a time (FIFO lock); stop drops anything queued; spoken progress lines removed (HUD only, per the user's choice); side questions wait until the conversation is quiet |
+| Follow-up window doesn't work | (a) the end of the request emitted "idle", which hid the HUD while it was actually listening; (b) any noise started a "recording" that ended as an empty transcript and used up the window; (c) a queued reply could be recorded as your follow-up | Idle only when nothing is speaking/listening/pending; the HUD keeps the reply and says "Listening — go ahead"; recording starts on voice (not noise) and empty results keep listening for the rest of the window; the window pauses while JARVIS talks; default 8 s |
+| HUD late | Hidden WKWebViews are throttled by macOS, so the page saw the wake event late | The app listens to the event stream natively (`EventStream.swift`) and shows the top-left HUD on `wake` |
+| Slow | Plain questions went through the agent: ~3,300 tokens (36 tool descriptions) to process before the first word; models unloaded after 30 s / 5 min | **Fast conversation path**: questions that don't involve the screen/files/apps get one short call (~250 tokens); current-facts questions go straight to a background web lookup; the model can answer `LOOKUP: …`. Measured on the Linux test box with Qwen3.5-4B: 19 s vs **173 s** for the same question through the agent (absolute times on the M4 Pro will be far lower; the ratio is what matters). Models stay loaded 3 min / 30 min / 2 h by mode; speech recognition and voice pre-load at start-up and on wake; first sentence split at a comma so the voice starts sooner; end-of-speech 500 ms (voice model, not loudness); latency of every reply is written to the activity log |
+| Talk faster | — | Voice speed 1.4 (settings migration v4) |
+| Permissions still not recognized | A running process can keep getting macOS's answer from when it started; `ax.snapshot`/`menu_select` and the ⌥⇧C tap refused to even try when that cached answer was "no" | Actions always try and only a real `kAXErrorAPIDisabled` counts; the tap retries every 4 s; permissions are checked from a fresh process; if granted-but-stale, the service restarts itself once (the app restarts it) |
+| Leaked reasoning | When a server ignores "don't think" and the reply is cut off mid-thought, `<think>…` was returned as the answer | Unclosed think blocks are stripped; the fast path retries with room |
+
+Tests: 162 pass (new `tests/test_voice_conversation.py`: real speech + key clicks mixed at four echo levels; JARVIS's
+echo and typing never stop it, your voice does at 0.15–0.8 echo gain even when quieter than the echo; echo removal;
+one utterance at a time; stop drops queued speech; player stops within one block and never hangs; recording starts at
+speech not key clicks; HUD status stays "listening" during the follow-up window; fast path and lookups).
+Not verified here: real microphones/speakers (no audio hardware in the container), the Swift changes (no Swift
+toolchain here; reviewed by hand), timings on the M4 Pro.

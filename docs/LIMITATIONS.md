@@ -30,8 +30,10 @@ Honest list, newest understanding first. "Unverified" means designed and written
 * **Wake word:** the pre-trained `hey_jarvis` model expects "hey JARVIS". "JARVIS" alone may not trigger it; use the hot key
   or train a custom openWakeWord model. The sound-alike "Hey Travis" scored 0.48 against a 0.5 threshold in testing, so tune
   sensitivity to your voice and room. The `hey_jarvis` model is CC BY-NC-SA 4.0: fine for personal use, not for selling.
-* **No acoustic echo cancellation:** barge-in works through the wake word or hot key while JARVIS speaks, not by simply talking
-  over it (that would let JARVIS hear itself).
+* **No true acoustic echo cancellation:** talking over JARVIS works through a voice-activity model, a measured echo model and
+  ducking (see JOURNAL, 2026-11-19). It was tested with recorded speech and simulated echo, not with your Mac's speakers.
+  With very loud speakers and a quiet voice it may need a second or a louder word; Esc, the talk key and "Hey JARVIS" always
+  work. Headphones make it near-instant.
 * **The microphone indicator** (orange dot) is on whenever the wake word is listening (on AC by your choice).
 * **Do Not Disturb/Focus** has no public API. It works through a Shortcuts-app shortcut you create once.
 * **Web pages:** cross-origin iframes, canvas-rendered apps and closed shadow DOMs are invisible to DOM control. Screenshot +
@@ -42,8 +44,9 @@ Honest list, newest understanding first. "Unverified" means designed and written
 * **Local model quality:** a 9B model is far below frontier cloud models. Long, ambiguous, multi-site tasks will sometimes fail.
   The agent is bounded and verifies outcomes, so failures are reported rather than hidden. Accuracy numbers: [MODELS.md](MODELS.md).
 * **First AI step latency:** Qwen3.5 is a hybrid (recurrent + attention) model, and llama.cpp-based runtimes can't reuse a
-  *partially* matching prompt cache for it. Every new AI task therefore pays for a full prompt evaluation of about 1.4k–2.4k
-  tokens. Follow-up steps within a task are cheap. Measure with `jarvis bench`; consider a non-hybrid model if it's too slow.
+  *partially* matching prompt cache for it. Every agent task therefore pays for a full prompt evaluation of about 3k tokens.
+  Questions that don't involve your computer skip the agent (~250 tokens) and simple commands skip the AI entirely. Every
+  reply's latency is in the activity log; measure with `jarvis bench`.
 * **Arc's future:** The Browser Company moved Arc to maintenance mode in 2025. JARVIS also supports Chrome, Brave, Edge and Safari
   (Settings → Browser).
 * **Permissions after rebuilds:** builds are signed with a local certificate so permissions persist. If that certificate couldn't be created, each rebuild needs permissions granted again ([SETUP.md](SETUP.md)).

@@ -106,6 +106,7 @@ def make_app(assistant, token: str, port: int) -> web.Application:
         if ev == "permissions":
             a.app_permissions = {"accessibility_app": b.get("app_accessibility"), "talk_key": b.get("talk_key")}
             a.events.emit("permissions", **a.app_permissions)
+            asyncio.create_task(check_permissions())
         if ev == "will_sleep":
             a.power.will_sleep()
             if a.voice:
@@ -253,13 +254,34 @@ def make_app(assistant, token: str, port: int) -> web.Application:
         r = await asyncio.to_thread(a.computer.reveal_in_finder if request.query.get("reveal") else a.computer.open_path, p)
         return J(r.to_dict())
 
+    async def check_permissions() -> dict:
+        perms = await asyncio.to_thread(a.computer.permissions)
+        if perms.get("needs_restart"):
+            restart_for_permissions()
+        return perms
+
+    def restart_for_permissions() -> None:
+        """A permission was granted after this process started, and macOS keeps giving this process the old
+        answer. Restart the service (the app does it; we exit as a fallback). At most once per 10 minutes."""
+        marker = paths.data_dir() / ".permission_restart"
+        try:
+            if marker.exists() and time.time() - marker.stat().st_mtime < 600:
+                return
+            marker.write_text(str(time.time()))
+        except OSError:
+            return
+        log.info("permission granted since start-up: restarting the service to pick it up")
+        a.db.log("system", "New permission granted: restarting JARVIS's background service to use it")
+        a.events.emit("service_restart", reason="permissions")
+        asyncio.get_running_loop().call_later(5.0, os._exit, 75)   # the app restarts a service that exits
+
     async def permissions(request):
         b = await body(request)
         if b.get("reset") and hasattr(a.computer, "reset_permissions"):
             await asyncio.to_thread(a.computer.reset_permissions)
         if (b.get("request") or b.get("reset")) and hasattr(a.computer, "request_permissions"):
             await asyncio.to_thread(a.computer.request_permissions)
-        return J({**a.computer.permissions(), **getattr(a, "app_permissions", {})})
+        return J({**(await check_permissions()), **getattr(a, "app_permissions", {})})
 
     # --- events ---------------------------------------------------------------------------------
     async def ws(request):
