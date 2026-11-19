@@ -63,7 +63,16 @@ def resolve_app_name(spoken: str, apps: list[str], user_aliases: dict | None = N
     if not s or s in NOT_APPS or _re.fullmatch(r"(?:the )?(?:first|second|third|fourth|fifth|last|next|previous|\d+(?:st|nd|rd|th)?)(?: one| result| file)?", s):
         return None
     lower = {a.lower(): a for a in apps}
+    # "photoshop" for "Adobe Photoshop 2025", "word" for "Microsoft Word": vendor prefixes and versions don't count.
+    short: dict[str, list[str]] = {}
+    for low, name in lower.items():
+        k = _re.sub(r"^(?:adobe|microsoft|google|apple|affinity|autodesk|jetbrains|mozilla)\s+", "", low)
+        k = _re.sub(r"\s+(?:\d{4}|\d+(?:\.\d+)*|cc|beta|nightly)$", "", k).strip()
+        if k and k != low:
+            short.setdefault(k, []).append(name)
     for cand in (s, _re.sub(r"\s+(?:app|application|browser|program)$", "", s)):
+        if cand in short and len(short[cand]) == 1 and cand not in lower:
+            return short[cand][0]
         taught = (user_aliases or {}).get(cand)            # "when I say arc I mean the Arc browser"
         if taught and taught.lower() in lower:
             return lower[taught.lower()]
@@ -84,6 +93,8 @@ def resolve_app_name(spoken: str, apps: list[str], user_aliases: dict | None = N
         lw = low.split()
         if len(words) > len(lw):
             return False
+        if len(words) == 1 and len(lw) > 1 and len(words[0]) < 0.4 * len(low):
+            return False          # "audio" is not "Audio MIDI Setup"; "logic" is "Logic Pro"
         for i, w in enumerate(words):
             if w == lw[i]:
                 continue

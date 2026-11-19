@@ -117,7 +117,9 @@ class Intent:
         return f"Intent({self.name}, {self.args})"
 
 
-STOP_RE = re.compile(r"^(stop|stop it|stop that|cancel|cancel that|abort|halt|never ?mind|shut up|be quiet|quiet|enough|that's enough|stop talking|emergency stop)$")
+STOP_RE = re.compile(r"^(?:(?:never ?mind|ok(?:ay)?|no|wait|hey|actually|please|just|jarvis|stop)[, ]+)*"
+                     r"(stop|stop it|stop that|cancel|cancel that|abort|halt|never ?mind|shut up|be quiet|quiet|enough|"
+                     r"that's enough|stop talking|emergency stop|forget it)(?: please| now| jarvis)?$")
 
 POWER_MODES = {"battery saver": "battery_saver", "battery saving": "battery_saver", "low power": "battery_saver",
                "power saving": "battery_saver", "balanced": "balanced", "normal": "balanced",
@@ -170,6 +172,14 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
         return Intent("empty", text=text)
     if STOP_RE.match(s):
         return Intent("stop", text=s)
+    # Speech recognition sometimes repeats you: "open arc open arc" -> "open arc".
+    w = s.split()
+    if len(w) >= 4 and len(w) % 2 == 0 and w[: len(w) // 2] == w[len(w) // 2:]:
+        return _route(" ".join(w[: len(w) // 2]), ctx)
+    # A command word with nothing after it (cut off, or you paused): ask instead of guessing.
+    m = re.fullmatch(r"(open|launch|start|close|quit|play|find|search for|go to|switch to|type|click)(?: (?:the|a|an|my|up))?", s)
+    if m:
+        return Intent("clarify", {"question": f"{m.group(1).capitalize()} what?"}, s)
 
     def I(intent_name, **args):
         return Intent(intent_name, args, s)
@@ -177,7 +187,7 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
     # --- assistant control ---------------------------------------------------------
     if re.fullmatch(r"(stop listening|mute yourself|go to sleep|mute the microphone|stop listening to me)", s):
         return I("mute_mic")
-    m = re.fullmatch(r"(?:switch to|enable|activate|use|go to|turn on|set)\s+(?:the\s+)?(.+?)(?:\s+mode)?", s)
+    m = re.fullmatch(r"(?:(?:switch to|enable|activate|use|go to|go into|turn on|set|put (?:it|you|me) (?:in|on|into))\s+)?(?:the\s+)?(.+?)(?:\s+mode)?(?: please| now)?", s)
     if m and m.group(1) in POWER_MODES:
         return I("power_mode", mode=POWER_MODES[m.group(1)])
     if re.fullmatch(r"(?:what(?:'s| is) (?:the |my )?)?(?:battery|power)(?: level| status| percentage)?|how much battery(?: do i have)?(?: left)?", s):
@@ -206,9 +216,10 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
         return I("recall", query=m.group(1) or m.group(2))
 
     # --- shortcuts -------------------------------------------------------------------
-    m = re.fullmatch(r"(?:create|make|add|new|set up|record)\s+(?:a\s+)?(?:new\s+)?(?:voice\s+)?shortcut(?:\s+(?:called|named|for))?\s*(.*)", s)
+    m = re.fullmatch(r"(?:create|make|add|new|set up|record)\s+(?:a\s+)?(?:new\s+)?(?:voice\s+)?shortcut(?:\s+(?:called|named|for))?\s*(.*?)"
+                     r"(?:,?\s+(?:that|which|to|where it|so it)\s+(.+))?", s)
     if m:
-        return I("shortcut_create", name=m.group(1).strip() or None)
+        return I("shortcut_create", name=m.group(1).strip(" '\"") or None, description=m.group(2))
     raw = WAKE_RE.sub("", text.strip()).strip()
     m = re.fullmatch(r"(?:please\s+)?whenever i say\s+[\"'“‘]?(.+?)[\"'”’]?\s*(?:,|:|\byou should\b|\bplease\b|\bi want you to\b)\s*(.+?)[.!]?", raw, re.I)
     if m:
@@ -216,7 +227,8 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
     m = re.fullmatch(r"whenever i say (.+?) (open|launch|start|go to|turn|activate|arrange|play|set) (.+)", s)
     if m:
         return I("shortcut_create", name=m.group(1).strip(" '"), description=m.group(2) + " " + m.group(3))
-    m = re.fullmatch(r"(?:delete|remove)\s+(?:the\s+)?(?:voice\s+)?shortcut(?:\s+(?:called|named))?\s+(.+)", s)
+    m = re.fullmatch(r"(?:delete|remove)\s+(?:the\s+)?(?:voice\s+)?shortcut(?:\s+(?:called|named))?\s+(.+)", s) \
+        or re.fullmatch(r"(?:delete|remove)\s+(?:the\s+|my\s+)?(.+?)\s+shortcut", s)
     if m:
         return I("shortcut_delete", name=m.group(1))
     if re.fullmatch(r"(?:list|show|what are)(?: me)? (?:all )?(?:of )?my shortcuts", s):
@@ -231,6 +243,9 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
         return I("volume", delta=10)
     if re.fullmatch(r"(?:turn (?:it|the volume|volume) down|volume down|quieter|softer|decrease (?:the )?volume|lower (?:the )?volume)", s):
         return I("volume", delta=-10)
+    m = re.fullmatch(r"(?:turn (?:the )?)?volume (up|down|minus|plus) (?:by )?(.+?)(?: percent)?", s)
+    if m and parse_number(m.group(2)) is not None:
+        return I("volume", delta=parse_number(m.group(2)) * (-1 if m.group(1) in ("down", "minus") else 1))
     m = re.fullmatch(r"(?:set |change |turn )?(?:the )?volume (?:to |at )?(.+)", s)
     if m and parse_number(m.group(1)) is not None:
         return I("volume", level=parse_number(m.group(1)))
@@ -239,9 +254,22 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
     if re.fullmatch(r"unmute(?: the)?(?: volume| sound| audio| computer)?", s):
         return I("volume", mute=False)
 
+    # --- everyday editing keys, in any app -----------------------------------------------------
+    for pat, combo in ((r"copy(?: (?:this|that|it|the selection|that text|this text))?", "cmd+c"),
+                       (r"paste(?: (?:it|that|this|here))?", "cmd+v"), (r"cut(?: (?:this|that|it))?", "cmd+x"),
+                       (r"undo(?: that| it)?", "cmd+z"), (r"redo(?: that| it)?", "cmd+shift+z"),
+                       (r"select (?:all|everything)", "cmd+a"), (r"save(?: (?:this|it|that|the (?:file|document)))?", "cmd+s"),
+                       (r"print(?: (?:this|it|that|the (?:page|document)))?", "cmd+p"),
+                       (r"(?:zoom in|make (?:it|this|the text) bigger)", "cmd+="), (r"(?:zoom out|make (?:it|this|the text) smaller)", "cmd+-"),
+                       (r"(?:switch|go back) to the (?:last|previous) app", "cmd+tab")):
+        if re.fullmatch(pat, s):
+            return I("keys", combo=combo)
+
     # --- media, system and window control (any app) ------------------------------------
     if re.fullmatch(r"(?:play|pause|resume|stop the music|pause the music|play the music|pause (?:the )?(?:song|video|music)|resume (?:the )?(?:song|video|music)|play pause)", s):
         return I("media", key="play")
+    if re.fullmatch(r"next one|the next one", s) and ctx.get("has_results"):
+        return I("next_result")
     if re.fullmatch(r"(?:next|skip)(?: (?:song|track|this song|this track))?|play the next (?:song|track)", s):
         return I("media", key="next")
     if re.fullmatch(r"(?:previous|last|go back a) (?:song|track)|play the previous (?:song|track)", s):
@@ -270,7 +298,7 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
                         (r"(?:make (?:this|it|the window) )?full ?screen|(?:enter|exit|toggle) full ?screen", "fullscreen"),
                         (r"(?:open )?(?:a )?new window", "new_window"),
                         (r"close (?:this|the) window", "close_window"),
-                        (r"show (?:me )?(?:the )?desktop", "show_desktop"),
+                        (r"show (?:me )?(?:the |my )?desktop|go to (?:the |my )?desktop", "show_desktop"),
                         (r"(?:open |show )?mission control|show (?:me )?all (?:my )?windows", "mission_control")):
         if re.fullmatch(pat, s):
             return I("window", action=action)
@@ -456,11 +484,16 @@ COMPUTER_WORK = re.compile(
     r"(?:read|summari[sz]e|explain|translate|check|fix|edit|finish|answer|look at|go through) (?:this|that|it|these|the)\b|"
     r"(?:my|this|that|these|the|current|open) " + COMPUTER_OBJECT + r"\b|"
     r"\b(?:arc|safari|chrome|spotify|finder|notion|canvas|word|excel|powerpoint|keynote|pages|terminal|vs code|xcode)\b|"
+    r"\b(?:does|is|in|on|of|about|says?|mean|means) (?:this|that)\b(?! (?:is|was|would|could|will))|\bthis (?:say|says|mean|means)\b|"
     r"\b(?:tabs|windows|desktop|downloads|clipboard|inbox|calendar|reminders)\b)")
 DO_VERB = re.compile(r"^(?:open|go|show|start|launch|close|quit|find|search|play|turn|set|make|create|delete|move|send|"
+                     r"hide|empty|log (?:out|off|in)|lock|restart|reboot|shut|sleep|minimi[sz]e|maximi[sz]e|resize|"
+                     r"copy|paste|undo|redo|save|print|enable|disable|toggle|increase|decrease|lower|raise|right[- ]click|"
+                     r"double[- ]click|drag|select|connect|disconnect|pair|eject|install|uninstall|update|change|rename|"
+                     r"duplicate|zip|unzip|compress|convert|scroll|zoom|maximize|press|hit|tap|enter|fill|"
                      r"bring|pull|fire|boot|get|grab|fetch|take|summari[sz]e|list|sort|compare|check|look up|"
                      r"type|click|put|add|remind|schedule|switch|mute|unmute|save|rename|organi[sz]e|clean|"
-                     r"download|install|book|order|buy|email|text|message|call|do|complete|run)\b")
+                     r"download|install|book|order|buy|email|text|message|call|do (?:it|this|that|these|my|the)|complete|run)\b")
 POLITE = re.compile(r"^(?:(?:can|could|would|will) you(?: please)?|please|jarvis|hey jarvis|i (?:want|need) you to|"
                     r"go ahead and|i'd like you to)\s+")
 LIVE_INFO = re.compile(
@@ -497,7 +530,8 @@ def classify_question(text: str, last_route: str | None = None) -> str | None:
 
 # --- several commands at once: "close archive utility and open arc" -----------------------------------
 SIMPLE_INTENTS = {"open", "open_url", "quit_app", "goto", "media", "spotify_search", "volume", "appearance", "window",
-                  "browser_nav", "browser_scroll", "settings", "screenshot", "lock", "mute", "unmute", "dictation"}
+                  "browser_nav", "browser_scroll", "settings", "screenshot", "lock", "mute", "unmute", "dictation", "keys",
+                  "lock_screen", "power_mode", "wifi", "note", "reminder"}
 
 
 def split_compound(text: str, ctx: dict | None = None) -> list[tuple[str, "Intent"]] | None:
@@ -509,7 +543,52 @@ def split_compound(text: str, ctx: dict | None = None) -> list[tuple[str, "Inten
     out = []
     for p in parts:
         it = route(p, ctx)
+        if it is None and out and out[-1][1].name in ("open", "quit_app", "goto") and looks_like_app_name(p) \
+                and not DO_VERB.match(normalize(p)) and not CONVERSATIONAL_OPENER.match(normalize(p)):
+            # "open safari and spotify": the second part borrows the verb
+            verb = {"open": "open", "quit_app": "close", "goto": "switch to"}[out[-1][1].name]
+            p = f"{verb} {p}"
+            it = route(p, ctx)
         if it is None or it.name not in SIMPLE_INTENTS:
             return None
         out.append((p, it))
     return out
+
+
+# --- websites people open by name ----------------------------------------------------------------
+KNOWN_SITES = {
+    "youtube": "https://www.youtube.com", "gmail": "https://mail.google.com", "google": "https://www.google.com",
+    "google docs": "https://docs.google.com", "docs": "https://docs.google.com", "google drive": "https://drive.google.com",
+    "drive": "https://drive.google.com", "google classroom": "https://classroom.google.com", "classroom": "https://classroom.google.com",
+    "google calendar": "https://calendar.google.com", "google sheets": "https://sheets.google.com", "google slides": "https://slides.google.com",
+    "netflix": "https://www.netflix.com", "reddit": "https://www.reddit.com", "twitter": "https://x.com", "instagram": "https://www.instagram.com",
+    "facebook": "https://www.facebook.com", "github": "https://github.com", "chatgpt": "https://chatgpt.com", "wikipedia": "https://www.wikipedia.org",
+    "amazon": "https://www.amazon.com", "linkedin": "https://www.linkedin.com", "twitch": "https://www.twitch.tv", "tiktok": "https://www.tiktok.com",
+    "pinterest": "https://www.pinterest.com", "quizlet": "https://quizlet.com", "khan academy": "https://www.khanacademy.org",
+    "desmos": "https://www.desmos.com/calculator", "duolingo": "https://www.duolingo.com", "canva": "https://www.canva.com",
+    "figma": "https://www.figma.com", "whatsapp": "https://web.whatsapp.com", "outlook": "https://outlook.live.com", "maps": "https://maps.google.com",
+    "google maps": "https://maps.google.com", "translate": "https://translate.google.com", "google translate": "https://translate.google.com",
+    "spotify web": "https://open.spotify.com", "youtube music": "https://music.youtube.com", "hulu": "https://www.hulu.com",
+    "disney plus": "https://www.disneyplus.com", "prime video": "https://www.primevideo.com", "wolfram alpha": "https://www.wolframalpha.com",
+}
+
+
+def known_site(target: str) -> str | None:
+    t = re.sub(r"^(?:the|my)\s+", "", normalize(target))
+    t = re.sub(r"\s+(?:website|site|web ?site|page|homepage|dot com)$", "", t)
+    return KNOWN_SITES.get(t)
+
+
+def looks_like_app_name(target: str) -> bool:
+    """A short name ("photoshop", "final cut") rather than a reference ("it", "the first one", "my biology notes")."""
+    t = normalize(target)
+    t = re.sub(r"^(?:the|a|an|up)\s+", "", t)
+    words = [x for x in t.split() if x not in ("the", "a", "an", "up", "app")]
+    if not words or len(words[0]) < 2:
+        return False
+    if not words or len(words) > 3:
+        return False
+    if re.search(r"\b(?:it|this|that|these|those|one|my|your|our|the first|the last|next|previous|file|files|folder|doc|"
+                 r"document|notes|pdf|page|link|tab|email|message|result|results)\b", t):
+        return False
+    return True

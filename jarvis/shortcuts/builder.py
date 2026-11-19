@@ -22,13 +22,40 @@ def parse_description(desc: str, resolve_app, current_url: str | None, clipboard
                       default_browser: str = "Arc") -> tuple[list[dict] | None, list[str]]:
     """Return (steps or None, notes). None means: ask the LLM."""
     text = normalize(desc)
+    # "that opens arc and spotify" -> "open arc and spotify"; third-person verbs from "a shortcut that opens…"
+    text = re.sub(r"^(?:that|which|it|to|so it|where it|it should|you should|should)\s+", "", text)
+    text = re.sub(r"\b(open|launch|start|play|turn|set|go|close|quit|switch|show|mute|unmute|navigate|visit|load|"
+                  r"arrange|activate|say|tell)s\b", r"\1", text)
+    text = re.sub(r"\bgoes\b", "go", text)
     steps: list[dict] = []
     notes: list[str] = []
     browser = default_browser
     opened_apps: list[str] = []
+    last_verb = None
     for part in [p for p in SPLIT.split(text) if p]:
         part = part.strip()
+        if last_verb and resolve_app(part) and not re.match(r"(?:open|launch|start|activate|close|quit|go|turn|set|play)\b", part):
+            part = f"{last_verb} {part}"           # "open arc and spotify": spotify borrows "open"
+        m = re.fullmatch(r"(?:close|quit)\s+(.+)", part)
+        if m and resolve_app(m.group(1)):
+            steps.append({"action": "quit_app", "app": resolve_app(m.group(1))})
+            last_verb = "close"
+            continue
+        m = re.fullmatch(r"(?:turn (?:on|off) |switch to |enable |disable )?(?:the )?(dark|light) mode(?: (?:on|off))?|"
+                         r"(?:turn )?dark mode (on|off)|(?:turn )?(on|off) dark mode", part)
+        if m:
+            on = (m.group(1) == "dark") if m.group(1) else (m.group(2) or m.group(3)) == "on"
+            if m.group(1) == "dark" and re.search(r"\boff\b", part):
+                on = False
+            steps.append({"action": "system", "command": "dark_mode" if on else "light_mode"})
+            continue
+        m = re.fullmatch(r"(?:play|pause|resume)(?: (?:the )?music)?|(?:next|skip)(?: song| track)?", part)
+        if m:
+            steps.append({"action": "media", "key": "next" if re.match(r"next|skip", part) else "play"})
+            continue
         m = re.fullmatch(r"(?:open|launch|start|activate)\s+(?:up\s+)?(.+)", part)
+        if m:
+            last_verb = "open"
         if m and not THIS_URL.search(part):
             target = m.group(1)
             url = spoken_to_url(target)
@@ -131,6 +158,23 @@ def describe(sc: dict) -> str:
             parts.append(f"say “{st['text']}”")
         elif a == "agent":
             parts.append(f"have me {st['instruction']}")
+        elif a == "quit_app":
+            parts.append(f"close {st['app']}")
+        elif a == "system":
+            parts.append({"dark_mode": "turn on dark mode", "light_mode": "turn on light mode", "wifi_on": "turn Wi-Fi on",
+                          "wifi_off": "turn Wi-Fi off", "screenshot": "take a screenshot"}.get(st.get("command"),
+                                                                                            str(st.get("command", "")).replace("_", " ")))
+        elif a == "media":
+            parts.append({"play": "play or pause the music", "next": "skip to the next track", "previous": "go back a track"}.get(
+                st.get("key"), str(st.get("key", "")).replace("_", " ")))
+        elif a == "volume":
+            parts.append(f"set the volume to {st.get('level')}%" if st.get("level") is not None else "change the volume")
+        elif a == "keys":
+            parts.append(f"press {st['combo']}")
+        elif a == "type":
+            parts.append(f"type “{st['text'][:40]}”")
+        elif a == "open_location":
+            parts.append(f"open {st['url'].split(':')[0].capitalize()}")
         else:
             parts.append(a.replace("_", " "))
     if not parts:

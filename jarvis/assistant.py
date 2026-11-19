@@ -416,7 +416,7 @@ class Assistant:
         self._requests_seen += 1
         self.last_activity = time.time()
         text = text.strip()
-        intent = router.route(text, {"browser_active": self.session.browser_active})
+        intent = router.route(text, self._route_ctx())
         if getattr(self, "dictation", False) and source not in ("text", "ui") and not (intent and intent.name in ("stop", "dictation")):
             # Dictation: everything you say is typed where the cursor is.
             chunk = dictation_text(text)
@@ -432,7 +432,12 @@ class Assistant:
                 await self.say("Stopped.")
             return {"route": "builtin", "intent": "stop", "ok": True, "message": "Stopped."}
         if intent and intent.name == "empty":
+            if text.strip() and self.voice:      # just "Hey JARVIS" and a pause: keep listening for the command
+                self.voice.request_followup()
             return {"route": "none", "ok": False, "message": ""}
+        if intent and intent.name == "clarify":
+            self._remember_turn("user", text)
+            return await self._reply(intent.args["question"], False, "builtin", followup=True)
         # A typed message while a question is pending is the answer to it.
         if self.pending_question and source in ("text", "ui"):
             self.answer(text)
@@ -449,7 +454,7 @@ class Assistant:
                 await self.say(msg)
                 return {"route": "learning", "ok": True, "message": msg}
             text = rest
-            intent = router.route(text, {"browser_active": self.session.browser_active})
+            intent = router.route(text, self._route_ctx())
         # A new instruction replaces the running one ("change its instructions").
         if self.current and not self.current["task"].done():
             self.current["cancel"].cancel("replaced by a new instruction")
@@ -531,10 +536,14 @@ class Assistant:
         if taught and taught["tool"] == "say_instead":
             self.events.emit("status", status="acting", detail=taught["args"]["text"])
             new = taught["args"]["text"]
-            return await self._dispatch(new, router.route(new, {"browser_active": self.session.browser_active}), cancel, depth + 1)
+            return await self._dispatch(new, router.route(new, self._route_ctx()), cancel, depth + 1)
         if intent and intent.name == "teach":
             return await self._teach(intent.args["phrase"], intent.args["meaning"])
-        parts = router.split_compound(text, {"browser_active": self.session.browser_active}) if depth < 2 else None
+        alias = (self.settings.get("apps.aliases", {}) or {}).get(router.normalize(text))
+        if alias and depth == 0:                  # you said just a name you taught ("tunes"): open it
+            new = f"open {alias}"
+            return await self._dispatch(new, router.route(new, self._route_ctx()), cancel, depth + 1)
+        parts = router.split_compound(text, self._route_ctx()) if depth < 2 else None
         if parts:
             return await self._run_compound(parts, cancel)
         if intent and intent.name == "shortcut_create":
@@ -555,6 +564,9 @@ class Assistant:
         if kind == "chat":
             return await self._chat(text, cancel)
         return await self._run_agent(text, cancel)
+
+    def _route_ctx(self) -> dict:
+        return {"browser_active": self.session.browser_active, "has_results": bool(self.session.last_results)}
 
     async def _run_compound(self, parts, cancel: CancelToken) -> dict:
         """'close Archive Utility and open Arc': each part in order, no AI. Stops at the first failure."""
@@ -619,10 +631,11 @@ class Assistant:
         from .agent.thinking import decide
         from .llm import SpokenStream
 
-        d = decide(text, self.power.mode, self.settings.get("llm.think_policy", "auto"))
-        if d.think:                      # "think it through", or a genuinely complex question
-            return await self._run_agent(text, cancel)
-        self.events.emit("status", status="thinking", detail="local model")
+        from .agent.thinking import FORCE_THINK
+
+        # Conversation stays on the fast path; it reasons step by step only when you ask ("think it through").
+        think = bool(FORCE_THINK.search(text)) and self.settings.get("llm.think_policy", "auto") != "never"
+        self.events.emit("status", status="thinking", detail="thinking it through" if think else "local model")
         notes = [r["content"] for r in self.memory.search(text, 4)]
         system = chat_prompt(self.settings) + ("\nThings the user told you to remember: " + " | ".join(notes) if notes else "")
         msgs = [{"role": "system", "content": system}] + [
@@ -649,15 +662,18 @@ class Assistant:
                 r = await self.llm.chat(msgs, model=model, think=False, max_tokens=220, temperature=0.4, keep_alive=keep)
                 ss.feed(r.content or "")
             else:
-                async for piece in stream(msgs, model, think=False, max_tokens=220, temperature=0.4, keep_alive=keep):
+                async for piece in stream(msgs, model, think=think, max_tokens=900 if think else 220, temperature=0.4,
+                                          keep_alive=keep):
                     cancel.check()
                     say_now(ss.feed(piece))
                     if ss.text:
                         self.events.emit("partial", text=ss.text)
                     if speaking is not None and speaking.done():
                         break            # you talked over it or said stop: don't keep generating
-        except LLMError:
+        except LLMError as e:
             if q is None:
+                if await self._revive_llm(e):
+                    return await self._chat(text, cancel)
                 return await self._run_agent(text, cancel)   # same "model isn't running" handling as everything else
         finally:
             if q is not None:
@@ -739,8 +755,12 @@ class Assistant:
             if not res:
                 return None if n == "open_result" else await self._builtin(router.Intent("media", {"key": "next"}, ""), cancel)
             idx = a.get("index")
-            i = self.session.result_index if idx is None else (self.session.result_index + 1 if idx == "next" or n == "next_result"
-                                                                else len(res) - 1 if idx == "last" else int(idx) - 1)
+            if n == "next_result" or idx == "next":
+                i = self.session.result_index + 1
+            elif idx is None:
+                i = self.session.result_index
+            else:
+                i = len(res) - 1 if idx == "last" else int(idx) - 1
             if not 0 <= i < len(res):
                 return await self._reply(f"There are only {len(res)} results.", False)
             self.session.result_index = i
@@ -766,6 +786,12 @@ class Assistant:
                 return await self._run_shortcut(sc, {}, cancel)
             if self.session.browser_active and await self._is_browser_front():
                 return await self._click_on_page(a["target"], intent.text, cancel, allow_agent=True)
+            site = router.known_site(a["target"])
+            if site:
+                return await self._open_url(site, True)
+            if router.looks_like_app_name(a["target"]):
+                return await self._reply(f"I can't find an app called {a['target'].title()} on this Mac. If you call something "
+                                         f"else that, tell me: “when I say {a['target']}, I mean …”.", False)
             return None
         if n == "goto":
             app = c.resolve_app(a["target"])
@@ -1018,7 +1044,9 @@ class Assistant:
     async def _compose(self, what: str, cancel: CancelToken) -> dict:
         """“Write a paragraph about photosynthesis”: compose with the local model, then type it at the cursor."""
         if await asyncio.to_thread(self.computer.focused_editable) is False:
-            return await self._reply("Click where you want the text first, then ask again.", False)
+            if re.search(r"\b(?:type|here|in(?:to)? (?:this|the) (?:doc|document|box|field|email))\b", what, re.I):
+                return await self._reply("Click where you want the text first, then ask again.", False)
+            return await self._chat("write " + what, cancel)    # nothing to type into: just say it
         if self.llm_ok is False and not await self._check_llm():
             return await self._reply("I need my local AI model to write that.", False)
         self.events.emit("status", status="thinking", detail="writing")
@@ -1156,6 +1184,18 @@ class Assistant:
                            ask=self.ask, user_text=text,
                            browser=self.session.browser or self.settings.get("browser.default", "Arc"))
 
+    async def _revive_llm(self, err) -> bool:
+        """The model runtime stopped answering mid-session (Ollama quit or crashed): start it again (once a minute at most)."""
+        msg = str(err)
+        if not re.search(r"isn't reachable|dropped the connection|refused|not running", msg):
+            return False
+        if time.time() - getattr(self, "_last_revive", 0) < 60:
+            return False
+        self._last_revive = time.time()
+        self.llm_ok = False
+        self.db.log("system", "The local AI model stopped responding; starting it again.", level="warn")
+        return await self._check_llm()
+
     async def _run_agent(self, text: str, cancel: CancelToken) -> dict:
         if self.llm_ok is False and not await self._check_llm():
             return await self._reply("I can't reach my local AI model right now, so I can only run shortcuts and simple commands. "
@@ -1171,6 +1211,9 @@ class Assistant:
         self.db.log("agent", f"{'Thinking' if d.think else 'Fast'} mode: {d.reason}")
         res = await self.agent.run(text, ctx, mode=self.power.mode, model=self.model, cancel=cancel,
                                    context=await self._agent_context(text), think=d.think, may_escalate=d.may_escalate)
+        if res.error and not res.steps and await self._revive_llm(res.error):
+            res = await self.agent.run(text, ctx, mode=self.power.mode, model=self.model, cancel=cancel,
+                                       context=await self._agent_context(text), think=d.think, may_escalate=d.may_escalate)
         self.session.browser = ctx.browser
         if any(s["tool"] in ("open_url", "click", "read_page", "browser_nav") for s in res.steps):
             self.session.browser_active = True
