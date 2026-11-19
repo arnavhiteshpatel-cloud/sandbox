@@ -477,7 +477,7 @@ async function loadSettings() {
     ${tog("Keep the Mac awake during long tasks I start", inputFor("power.prevent_sleep_during_tasks", s.power.prevent_sleep_during_tasks, { bool: 1 }))}
     <div class="help">Mode changes never interrupt a running task. Indexing only runs while charging unless you start it.</div></section>
   <section class="panel"><h2>Voice</h2>
-    ${fld("“Hey JARVIS” wake word", inputFor("voice.wake_word_policy", s.voice.wake_word_policy, { select: { ac_only: "Only when plugged in (hold ⌥⇧C on battery)", always: "Always", except_battery_saver: "Except in Battery Saver", never: "Never — hotkey only" } }))}
+    ${fld("“Hey JARVIS” wake word", inputFor("voice.wake_word_policy", s.voice.wake_word_policy, { select: { ac_only: "Only when plugged in (⌥⇧C then Return on battery)", always: "Always", except_battery_saver: "Except in Battery Saver", never: "Never — hotkey only" } }))}
     ${fld("Wake-word sensitivity", inputFor("voice.wake_threshold", s.voice.wake_threshold, { range: [0.2, 0.9, 0.05] }), "Lower = triggers more easily (more false alarms).")}
     ${fld("Voice", inputFor("voice.tts_voice", s.voice.tts_voice, { select: VOICES }))}
     ${fld("Speaking speed", inputFor("voice.tts_speed", s.voice.tts_speed, { range: [0.8, 1.4, 0.05] }))}
@@ -562,6 +562,19 @@ bindForm("#c-form", "#c-input"); bindForm("#l-form", "#l-input");
 $$(".seg [data-mode]").forEach(b => b.onclick = () => setMode(b.dataset.mode));
 ["#c-stop", "#sf-stop"].forEach(id => $(id) && ($(id).onclick = stopAll));
 $("#c-open") && ($("#c-open").onclick = () => native({ type: "openCenter" }));
+// "Hey JARVIS" on battery: off by default (the wake word keeps the microphone open, which costs a little power).
+function renderWakeSwitch() {
+  const b = $("#c-wake"); if (!b || !S.settings) return;
+  b.setAttribute("aria-checked", String(S.settings.voice.wake_word_policy === "always"));
+}
+if ($("#c-wake")) {
+  api("GET", "/api/settings").then(s => { S.settings = s; renderWakeSwitch(); }).catch(() => {});
+  $("#c-wake").onclick = async () => {
+    const on = $("#c-wake").getAttribute("aria-checked") !== "true";
+    S.settings = await api("PUT", "/api/settings", { voice: { wake_word_policy: on ? "always" : "ac_only" } });
+    renderWakeSwitch(); refreshState();
+  };
+}
 $("#c-mute") && ($("#c-mute").onclick = async () => { const muted = !(S.state?.voice?.muted); await api("POST", "/api/mute", { muted }); refreshState(); });
 $("#l-refresh") && ($("#l-refresh").onclick = () => { loadTasks(); loadActivity(); });
 window.addEventListener("hashchange", route);

@@ -242,3 +242,10 @@ main { overflow: auto; padding: 18px 22px 30px; background: radial-gradient(90% 
 .typebox button:hover { border-color: var(--cyan); }
 /* while typing with nothing to show yet, hide the empty pill */
 html[data-typing="1"] .pill.empty { display: none; }
+
+/* small panel: "Hey JARVIS" on battery switch */
+.toggle { width: 100%; justify-content: flex-start; gap: 10px; background: transparent; }
+.toggle .knob { width: 30px; height: 17px; border-radius: 999px; background: var(--line2); position: relative; flex: none; transition: background .15s; }
+.toggle .knob::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #cfe9f5; transition: left .15s; }
+.toggle[aria-checked="true"] .knob { background: var(--cyan); }
+.toggle[aria-checked="true"] .knob::after { left: 15px; }

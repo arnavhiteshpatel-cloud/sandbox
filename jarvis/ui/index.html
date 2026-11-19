@@ -34,7 +34,7 @@
     <span class="chip" id="c-status">Idle</span>
   </header>
   <form class="cmd" id="c-form" autocomplete="off">
-    <input id="c-input" placeholder="Type a command…  (or hold ⌥⇧C to talk)" aria-label="Command">
+    <input id="c-input" placeholder="Type a command…  (⌥⇧C works anywhere)" aria-label="Command">
   </form>
   <div class="c-row">
     <div class="seg" id="c-mode" role="radiogroup" aria-label="Power mode">
@@ -42,6 +42,12 @@
       <button data-mode="balanced" title="Balanced">Balanced</button>
       <button data-mode="max_performance" title="Maximum Performance">Max</button>
     </div>
+  </div>
+  <div class="c-row">
+    <button class="toggle" id="c-wake" role="switch" aria-checked="false"
+            title="Listen for “Hey JARVIS” on battery too (uses a little more power). Off by default.">
+      <span class="knob" aria-hidden="true"></span><span>“Hey JARVIS” on battery</span>
+    </button>
   </div>
   <div class="c-meta" id="c-meta"></div>
   <ul class="c-tasks" id="c-tasks"></ul>

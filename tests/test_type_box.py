@@ -96,3 +96,15 @@ async def test_mac_settings_still_open_system_settings(assistant):
 
     assert router.route("open system settings").name == "settings"
     assert router.route("open wifi settings").name == "settings"
+
+
+def test_hey_jarvis_on_battery_switch(assistant):
+    """Small panel switch: off by default; on = "always" (listens on battery too)."""
+    p = assistant.power
+    p.state.source = "battery"
+    assert assistant.settings.get("voice.wake_word_policy") == "ac_only" and not p.wake_word_allowed()
+    assistant.settings.set("voice.wake_word_policy", "always")
+    assert p.wake_word_allowed()
+    p.state.source = "ac"
+    assistant.settings.set("voice.wake_word_policy", "ac_only")
+    assert p.wake_word_allowed()
