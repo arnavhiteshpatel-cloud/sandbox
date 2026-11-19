@@ -3,6 +3,7 @@ name: Build macOS app
 on:
   push:
     branches: ["**"]
+    paths-ignore: ["AirMix/**", ".github/workflows/airmix.yml"]
   workflow_dispatch:
 
 jobs:

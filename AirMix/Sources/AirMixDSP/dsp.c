@@ -207,6 +207,14 @@ void amx_read_meters(amx_processor *p, amx_meters *out) {
     out->current_gain = atomic_load_explicit(&p->meter_gain, memory_order_relaxed);
 }
 
+uint32_t amx_callback_count(const amx_processor *p) {
+    return p ? atomic_load_explicit(&((amx_processor *)p)->meter_callbacks, memory_order_relaxed) : 0;
+}
+
+float amx_input_rms(const amx_processor *p) {
+    return p ? atomic_load_explicit(&((amx_processor *)p)->meter_input_rms, memory_order_relaxed) : 0.0f;
+}
+
 // ---------------------------------------------------------------- processing
 
 static inline double biquad_tick(const amx_biquad *c, double *z, double x) {
@@ -502,6 +510,58 @@ double amx_cascade_magnitude_db(const amx_biquad *bands, int count, double fs, d
     return db;
 }
 
+// ---------------------------------------------------------------- recorder
+
+struct amx_recorder {
+    uint32_t capacity;
+    _Atomic uint32_t frames;
+    float *data;
+};
+
+amx_recorder *amx_recorder_create(uint32_t capacity) {
+    amx_recorder *r = (amx_recorder *)calloc(1, sizeof(amx_recorder));
+    if (!r) return NULL;
+    r->data = (float *)calloc(capacity ? capacity : 1, sizeof(float));
+    if (!r->data) { free(r); return NULL; }
+    r->capacity = capacity;
+    atomic_init(&r->frames, 0u);
+    return r;
+}
+
+void amx_recorder_destroy(amx_recorder *r) {
+    if (!r) return;
+    free(r->data);
+    free(r);
+}
+
+void amx_recorder_write(amx_recorder *r, const amx_buffer *in, uint32_t in_count) {
+    if (!r || !in) return;
+    const amx_buffer *src = NULL;
+    for (int k = (int)in_count - 1; k >= 0; k--)
+        if (in[k].data && in[k].channels > 0 && in[k].byte_size > 0) { src = &in[k]; break; }
+    if (!src) return;
+    uint32_t have = atomic_load_explicit(&r->frames, memory_order_relaxed);
+    if (have >= r->capacity) return;
+    const uint32_t ch = src->channels;
+    uint32_t n = src->byte_size / (uint32_t)(sizeof(float) * ch);
+    if (n > r->capacity - have) n = r->capacity - have;
+    const float *s = (const float *)src->data;
+    for (uint32_t f = 0; f < n; f++) {
+        r->data[have + f] = ch >= 2 ? 0.5f * (s[f * ch] + s[f * ch + 1]) : s[f * ch];
+    }
+    atomic_store_explicit(&r->frames, have + n, memory_order_release);
+}
+
+uint32_t amx_recorder_frames(const amx_recorder *r) {
+    return r ? atomic_load_explicit(&((amx_recorder *)r)->frames, memory_order_acquire) : 0;
+}
+
+const float *amx_recorder_data(const amx_recorder *r) { return r ? r->data : NULL; }
+
+void amx_recorder_reset(amx_recorder *r) {
+    if (r) atomic_store_explicit(&r->frames, 0u, memory_order_release);
+}
+
 // ---------------------------------------------------------------- Core Audio glue
 
 #ifdef __APPLE__
@@ -521,5 +581,49 @@ OSStatus amx_core_audio_ioproc(AudioObjectID device, const AudioTimeStamp *now,
     const uint32_t in_count = input_data ? input_data->mNumberBuffers : 0;
     amx_process_buffers(p, in, in_count, (amx_buffer *)output_data->mBuffers, output_data->mNumberBuffers);
     return noErr;
+}
+
+static OSStatus amx_recorder_ioproc(AudioObjectID device, const AudioTimeStamp *now,
+                                    const AudioBufferList *input_data, const AudioTimeStamp *input_time,
+                                    AudioBufferList *output_data, const AudioTimeStamp *output_time,
+                                    void *client_data) {
+    (void)device; (void)now; (void)input_time; (void)output_time;
+    amx_recorder *r = (amx_recorder *)client_data;
+    if (output_data) {
+        for (UInt32 k = 0; k < output_data->mNumberBuffers; k++)
+            if (output_data->mBuffers[k].mData)
+                memset(output_data->mBuffers[k].mData, 0, output_data->mBuffers[k].mDataByteSize);
+    }
+    if (r && input_data)
+        amx_recorder_write(r, (const amx_buffer *)input_data->mBuffers, input_data->mNumberBuffers);
+    return noErr;
+}
+
+OSStatus amx_create_ioproc(AudioObjectID device, amx_processor *p, AudioDeviceIOProcID *out_id) {
+    return AudioDeviceCreateIOProcID(device, amx_core_audio_ioproc, p, out_id);
+}
+
+OSStatus amx_create_recorder_ioproc(AudioObjectID device, amx_recorder *r, AudioDeviceIOProcID *out_id) {
+    return AudioDeviceCreateIOProcID(device, amx_recorder_ioproc, r, out_id);
+}
+
+OSStatus amx_keep_trailing_input_streams(AudioObjectID device, AudioDeviceIOProcID proc, uint32_t keep_trailing) {
+    AudioObjectPropertyAddress addr = {kAudioDevicePropertyIOProcStreamUsage, kAudioObjectPropertyScopeInput,
+                                       kAudioObjectPropertyElementMain};
+    UInt32 size = 0;
+    OSStatus st = AudioObjectGetPropertyDataSize(device, &addr, 0, NULL, &size);
+    if (st != noErr) return st;
+    if (size < offsetof(AudioHardwareIOProcStreamUsage, mStreamIsOn)) return noErr;
+    AudioHardwareIOProcStreamUsage *usage = (AudioHardwareIOProcStreamUsage *)calloc(1, size);
+    if (!usage) return kAudioHardwareUnspecifiedError;
+    usage->mIOProc = (void *)proc;
+    st = AudioObjectGetPropertyData(device, &addr, 0, NULL, &size, usage);
+    if (st == noErr) {
+        const UInt32 n = usage->mNumberStreams;
+        for (UInt32 i = 0; i < n; i++) usage->mStreamIsOn[i] = (i + keep_trailing >= n) ? 1u : 0u;
+        st = AudioObjectSetPropertyData(device, &addr, 0, NULL, size, usage);
+    }
+    free(usage);
+    return st;
 }
 #endif

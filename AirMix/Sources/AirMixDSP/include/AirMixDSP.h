@@ -76,6 +76,10 @@ void amx_set_input_layout(amx_processor *p, int buffer_index, int channel_offset
 // ---- meters (any non-RT thread) ----
 /// Reads meters; peaks and clip counters are reset by the read.
 void amx_read_meters(amx_processor *p, amx_meters *out);
+/// Monotonic I/O callback count (does not reset anything). Used by the health monitor.
+uint32_t amx_callback_count(const amx_processor *p);
+/// Current smoothed pre-gain RMS without resetting peaks.
+float amx_input_rms(const amx_processor *p);
 
 // ---- processing (audio thread) ----
 /// Processes planar stereo audio. In-place operation (in == out) is allowed.
@@ -104,6 +108,18 @@ amx_biquad amx_design(amx_filter_type type, double sample_rate, double frequency
 /// Magnitude response in dB of a cascade at `frequency`.
 double amx_cascade_magnitude_db(const amx_biquad *bands, int count, double sample_rate, double frequency);
 
+// ---- capture recorder (used by the end-to-end self test) ----
+/// Records a mono mix of the last input buffer into a fixed, preallocated buffer.
+typedef struct amx_recorder amx_recorder;
+amx_recorder *amx_recorder_create(uint32_t capacity_frames);
+void amx_recorder_destroy(amx_recorder *r);
+/// Real-time safe; stops writing when full.
+void amx_recorder_write(amx_recorder *r, const amx_buffer *in, uint32_t in_count);
+uint32_t amx_recorder_frames(const amx_recorder *r);
+const float *amx_recorder_data(const amx_recorder *r);
+/// Only call while the recorder's I/O proc is stopped.
+void amx_recorder_reset(amx_recorder *r);
+
 #ifdef __APPLE__
 #include <CoreAudio/CoreAudio.h>
 /// Core Audio I/O proc. Pass the amx_processor pointer as client data.
@@ -114,6 +130,14 @@ OSStatus amx_core_audio_ioproc(AudioObjectID device,
                                AudioBufferList *output_data,
                                const AudioTimeStamp *output_time,
                                void *client_data);
+
+/// Registers amx_core_audio_ioproc on `device` with `p` as client data.
+OSStatus amx_create_ioproc(AudioObjectID device, amx_processor *p, AudioDeviceIOProcID *out_id);
+/// Registers a recording I/O proc (writes silence to all outputs).
+OSStatus amx_create_recorder_ioproc(AudioObjectID device, amx_recorder *r, AudioDeviceIOProcID *out_id);
+/// Turns off all input streams of `device` for `proc` except the last `keep_trailing` ones
+/// (the process tap streams). Avoids engaging a duplex device's microphone.
+OSStatus amx_keep_trailing_input_streams(AudioObjectID device, AudioDeviceIOProcID proc, uint32_t keep_trailing);
 #endif
 
 #ifdef __cplusplus

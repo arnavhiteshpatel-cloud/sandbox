@@ -82,6 +82,11 @@ public final class AudioProcessor {
                             callbacks: m.callbacks)
     }
 
+    /// Monotonic count of I/O callbacks (health monitoring; does not reset meters).
+    public var callbackCount: UInt32 { amx_callback_count(raw) }
+    /// Smoothed pre-gain RMS (does not reset meters).
+    public var inputRMS: Double { Double(amx_input_rms(raw)) }
+
     /// Opaque client-data pointer for `amx_core_audio_ioproc`.
     public var clientData: UnsafeMutableRawPointer { UnsafeMutableRawPointer(raw) }
 }
