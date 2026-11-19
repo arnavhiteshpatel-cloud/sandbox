@@ -8,3 +8,6 @@ test-results
 artifacts/tmp
 artifacts/
 *.tsbuildinfo
+DragShelf/.build
+DragShelf/build
+DragShelf/.swiftpm

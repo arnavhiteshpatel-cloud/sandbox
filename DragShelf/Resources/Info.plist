@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>DragShelf</string>
+	<key>CFBundleExecutable</key>
+	<string>DragShelf</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>app.dragshelf.DragShelf</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>DragShelf</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<!-- Background utility: no Dock icon, no app menu bar. -->
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSHumanReadableCopyright</key>
+	<string>DragShelf — local, free and private. No accounts, analytics or cloud.</string>
+	<!-- Shown only if macOS asks when DragShelf restores a reference to a file in these folders. -->
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>DragShelf keeps references to files you drop on the shelf so you can drag them out again later. It never moves, changes or uploads them.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>DragShelf keeps references to files you drop on the shelf so you can drag them out again later. It never moves, changes or uploads them.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>DragShelf keeps references to files you drop on the shelf so you can drag them out again later. It never moves, changes or uploads them.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>DragShelf keeps references to files you drop on the shelf, including files on external drives, so you can drag them out again later.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>DragShelf keeps references to files you drop on the shelf, including files on network volumes, so you can drag them out again later.</string>
+</dict>
+</plist>

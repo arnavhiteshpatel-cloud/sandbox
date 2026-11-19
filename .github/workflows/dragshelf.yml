@@ -1,0 +1,41 @@
+name: DragShelf
+
+on:
+  push:
+    paths: ["DragShelf/**", ".github/workflows/dragshelf.yml"]
+  workflow_dispatch:
+
+jobs:
+  core-tests-linux:
+    runs-on: ubuntu-24.04
+    container: swift:6.0-noble
+    defaults:
+      run:
+        working-directory: DragShelf
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests (DragShelfCore — activation, hiding, shelves, storage, retention, layout)
+        run: swift test
+
+  macos-app:
+    needs: core-tests-linux
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: DragShelf
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build DragShelf.app + DMG, run tests and the AppKit self-test
+        run: scripts/build-app.sh --test --dmg
+      - name: Idle CPU measurement (20 s)
+        run: build/DragShelf.app/Contents/MacOS/DragShelf --measure-idle 20 || true
+      - name: Package
+        run: ditto -c -k --keepParent build/DragShelf.app build/DragShelf.app.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DragShelf-macOS
+          path: |
+            DragShelf/build/DragShelf.dmg
+            DragShelf/build/DragShelf.app.zip
+            DragShelf/build/selftest.json
+          retention-days: 90

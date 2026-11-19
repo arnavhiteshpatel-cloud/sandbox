@@ -1,5 +1,7 @@
 # Parity
 
+> This repository also contains **DragShelf**, a hidden drag-and-drop shelf for macOS — see [`DragShelf/README.md`](DragShelf/README.md).
+
 A premium, local-first speedcubing timer for macOS (Apple Silicon), built to replace csTimer —
 with a futuristic HUD design, a live 3D scramble cube, full csTimer import, deep analytics and
 training tools. Everything runs offline. No account, subscription, cloud service or AI is needed.
