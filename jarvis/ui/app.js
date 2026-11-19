@@ -76,6 +76,9 @@ function onEvent(ev) {
       if (!ev.text) break;
       S.lastTranscript = ev.text; addConvo("u", ev.text);
       if (VIEW === "hud") hud(ev.text, "…"); break;
+    case "partial":   // a streamed reply, as it's being written and spoken
+      if (VIEW === "hud") { hud(ev.text, S.lastTranscript ? `“${S.lastTranscript}”` : ""); clearTimeout(S.hudTimer); native({ type: "hud", visible: true }); }
+      break;
     case "response": case "say":
       if (ev.type === "response") addConvo("a", ev.text);
       if (VIEW === "hud") { hud(ev.text, S.lastTranscript && ev.type === "response" ? `“${S.lastTranscript}”` : ""); native({ type: "hud", visible: true }); }
