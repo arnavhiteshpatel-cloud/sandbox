@@ -20,6 +20,11 @@ log = logging.getLogger("jarvis.sites")
 
 FILLER = {"my", "the", "a", "an", "our", "school", "s", "homepage", "home", "page", "website", "site", "web", "portal",
           "dashboard", "login", "log", "in", "main", "account", "app", "online", "official", "open", "go", "to"}
+# Words that describe a kind of page, not which site: "course" matched some LabFlow page and got remembered as "ib150".
+GENERIC = {"course", "courses", "class", "classes", "homework", "assignment", "assignments", "resources", "resource",
+           "week", "weeks", "notes", "grades", "grade", "lecture", "lectures", "module", "modules", "unit", "lab", "labs",
+           "syllabus", "calendar", "files", "file", "quiz", "quizzes", "exam", "test", "section", "chapter", "lesson",
+           "and", "of", "for", "with", "on", "at", "find", "navigate", "go", "get", "show", "online"}
 HOME_WORDS = re.compile(r"\b(?:home ?page|home|dashboard|main page|website|site|portal|login)\b")
 # Names whose site has a different domain than the name ("canvas" lives on instructure.com).
 SYNONYMS = {
@@ -45,7 +50,7 @@ def terms_for(target: str) -> tuple[list[str], bool]:
     """Search terms for a spoken target, and whether you asked for the site's home page."""
     t = re.sub(r"[^\w\s.'-]", " ", target.lower())
     want_home = bool(HOME_WORDS.search(t))
-    words = [w for w in re.findall(r"[\w.'-]+", t) if w not in FILLER]
+    words = [w for w in re.findall(r"[\w.'-]+", t) if w not in FILLER and w not in GENERIC]
     name = " ".join(words).strip()
     if not name:
         return [], want_home
@@ -123,3 +128,16 @@ def frequent_sites(limit: int = 15, files: list[str] | None = None) -> list[tupl
             h[0] += visits or 1
     top = sorted(hosts.items(), key=lambda kv: -kv[1][0])[:limit]
     return [(host, (v[1] or "")[:60]) for host, v in top]
+
+
+SITE_NAMES = {v: k for k, vs in SYNONYMS.items() for v in vs}   # "instructure" -> "canvas"
+
+
+def names_for_url(url: str | None) -> list[str]:
+    """What you'd call the site you're on: lincoln.instructure.com -> ["canvas", "instructure", "lincoln"]."""
+    if not url:
+        return []
+    host = urlparse(url).netloc.lower()
+    out = [SITE_NAMES[k] for k in SITE_NAMES if k in host]
+    out += [p for p in host.split(".") if len(p) > 3 and p not in ("www", "com", "org", "edu", "net")]
+    return list(dict.fromkeys(out))

@@ -309,3 +309,18 @@ Traceback from the user's daemon.log: `browser.wait_ready` → `st.get("ready")`
 - Second bug: the whole sentence was routed as `open <"canvas find my ib 150 class navigate…">`. Now a multi-step
   request does its first step instantly (open Canvas) and hands the rest to the agent with a note that step 1 is done;
   long targets are never treated as a site name.
+
+### The user's conversation log (2026-11-19, 16:44–16:48): what went wrong and the fixes
+- "learn this, for canvas, …" went to chat, which replied "I have memorized that instruction" — nothing was saved.
+  → "learn / note / note to self / keep in mind / tip / for future reference / from now on" are memory commands.
+- "open my ib150 course" matched a LabFlow page in history on the word "course", opened it AND remembered it, so
+  "open ib150" went straight back to LabFlow. → generic words (course, class, homework, resources, week…) never pick
+  a site; a history match is only remembered when the name is in the address; "no, that's wrong" forgets the last
+  learned site; while you're on a site, "my X" first looks for a matching link on the page.
+- "why are you on labflow?" got nonsense and "yes" got "Opening IB150 now, sir" with nothing done: chat had no idea
+  what JARVIS had done and could claim actions. → chat gets "what's happening now" (front app, page, last action),
+  must never claim to act or save, and replies `ACTION: <request>` to hand work to the part that can act (never
+  back to chat).
+- Your Canvas tips weren't shown to the AI unless the request said "canvas". → notes about the site you're on are
+  added to the AI's context (lincoln.instructure.com → canvas).
+- "Untitled is open." → the page's address is shown when the title isn't loaded yet.

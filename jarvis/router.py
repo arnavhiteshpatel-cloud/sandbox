@@ -215,9 +215,12 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
         return I("teach", phrase=m.group(1).strip(" ,.\"'"), meaning=m.group(2).strip(" ,.\"'"))
 
     # --- memory ----------------------------------------------------------------------
-    m = re.fullmatch(r"remember (?:that )?(.+)", s)
-    if m:
-        return I("remember", content=raw_after(text, r"remember\s+(?:that\s+)?") or m.group(1))
+    m = re.fullmatch(r"(?:remember|learn|memori[sz]e|note to self|note|keep in mind|for future reference|from now on|just so you know|"
+                     r"fyi|tip)(?: (?:this|that|the following))?[,:]? (?:that )?(.+)", s)
+    if m and len(m.group(1).split()) >= 2:
+        raw = raw_after(text, r"(?:remember|learn|memori[sz]e|note to self|note|keep in mind|for future reference|from now on|just so you know|"
+                              r"fyi|tip)(?:\s+(?:this|that|the following))?[,:]?\s+(?:that\s+)?")
+        return I("remember", content=raw or m.group(1))
     m = re.fullmatch(r"forget (?:that |about |what i said about )?(.+)", s)
     if m:
         return I("forget", query=m.group(1))

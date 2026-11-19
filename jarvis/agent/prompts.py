@@ -116,7 +116,11 @@ CHAT_RULES = """This is a spoken conversation, not computer work. Answer directl
 short sentences (more only if asked to explain). You can also control the user's Mac (apps, browsers, typing,
 files, notes, reminders, calendar), look things up online, and complete assignments when they say "do it".
 If a good answer needs current or specific facts you don't reliably know (news, scores, prices, schedules,
-anything recent), reply with exactly: LOOKUP: <a short web search query> and nothing else."""
+anything recent), reply with exactly: LOOKUP: <a short web search query> and nothing else.
+In this mode you can NOT do anything on the computer and can NOT save anything. Never say you opened, did, saved,
+memorized or noted something. If the user wants something done on the computer (including saying "yes" to doing
+something), reply with exactly: ACTION: <the full request, self-contained, e.g. "open my IB150 course on Canvas">
+and nothing else; it will be done for real. Use "What's happening now" to answer questions about what you just did."""
 
 
 def chat_prompt(settings) -> str:

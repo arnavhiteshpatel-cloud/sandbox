@@ -47,6 +47,12 @@ PROGRESS_PHRASES = {"open_url": "Opening the page.", "read_page": "Reading the p
                     "move_file": "Organizing the files.", "click": "Working through the page."}
 
 
+def _host_of(url: str) -> str:
+    from urllib.parse import urlparse
+
+    return urlparse(url if "://" in url else "https://" + url).netloc.removeprefix("www.") or url
+
+
 # True while handling a typed request: answers are written on the HUD, not spoken (setting voice.speak_typed_replies).
 SILENT = contextvars.ContextVar("jarvis_silent", default=False)
 
@@ -61,6 +67,7 @@ class Session:
     browser_active: bool = False
     last_results: list = field(default_factory=list)
     last_route: str | None = None
+    last_action: str | None = None        # e.g. "opened https://…labflow.com/…" (so "why are you on labflow?" makes sense)
 
 
 class Assistant:
@@ -480,6 +487,11 @@ class Assistant:
         neg = NEGATION.match(router.normalize(text))
         if neg:
             forgotten = self.learner.undo_recent()
+            ls = getattr(self, "_last_learned_site", None)
+            if not forgotten and ls and ls[0] and time.time() - ls[1] < 180:   # "no, that's the wrong site"
+                self.memory.delete(ls[0])
+                self._last_learned_site = None
+                forgotten = {"phrase": ls[2]}
             rest = router.normalize(text)[neg.end():].strip()
             if not rest:
                 msg = f"Understood. I won't treat “{forgotten['phrase']}” that way again." if forgotten else "Okay."
@@ -679,6 +691,26 @@ class Assistant:
             return front
         return None
 
+    async def _now_context(self) -> str:
+        """One line for the chat model: the front app, the page you're on, and what JARVIS did last."""
+        bits = []
+        try:
+            front = await asyncio.to_thread(self.computer.frontmost_app)
+            if front:
+                bits.append(f"front app {front}")
+            if front in BROWSERS:
+                st = await asyncio.to_thread(self.computer.browser_state, front)
+                if st.get("url"):
+                    bits.append(f"page “{st.get('title') or ''}” <{st['url']}>")
+        except Exception:
+            pass
+        last = next((m["content"] for m in reversed(self.session.history[:-1]) if m["role"] == "assistant"), None)
+        if self.session.last_action:
+            bits.append(f"last action: {self.session.last_action}")
+        elif last:
+            bits.append(f"last reply: {last[:120]}")
+        return "; ".join(bits) or "nothing in particular"
+
     async def _chat(self, text: str, cancel: CancelToken) -> dict:
         """Conversation and general questions: the fast conversation model, ~250 tokens of instructions instead of
         the agent's ~3,300, and the reply is streamed: JARVIS starts speaking the first sentence while the model is
@@ -694,6 +726,7 @@ class Assistant:
         self.events.emit("status", status="thinking", detail="thinking it through" if think else "local model")
         notes = [r["content"] for r in self.memory.search(text, 4)]
         system = chat_prompt(self.settings) + ("\nThings the user told you to remember: " + " | ".join(notes) if notes else "")
+        system += "\nWhat's happening now: " + await self._now_context()
         msgs = [{"role": "system", "content": system}] + [
             {"role": m["role"], "content": m["content"]} for m in self.session.history[-7:]]
         model, keep = self.chat_model, PROFILES[self.power.mode]["keep_alive"]
@@ -738,6 +771,17 @@ class Assistant:
                         q.put(x)
                 q.put(None)
         cancel.check()
+        act = re.match(r"^\W*ACTION:\s*(.+)", ss.text, re.I | re.S)
+        if act:
+            # Chat can't act: the request goes to the part of JARVIS that can (it used to *claim* it had done it).
+            request = act.group(1).strip().splitlines()[0].strip(" \"'")
+            self.db.log("chat", f"Handing to the agent: {request}")
+            new_intent = router.route(request, self._route_ctx())
+            if new_intent is not None:
+                res = await self._builtin(new_intent, cancel)
+                if res is not None:
+                    return res
+            return await self._run_agent(request, cancel)            # never back to chat: no loop
         if ss.lookup:
             m = re.match(r"^\W*LOOKUP:\s*(.+)", ss.text, re.I | re.S)
             if self.settings.get("web.enabled", True) and m:
@@ -878,6 +922,10 @@ class Assistant:
                 if res is not None:
                     return res
             elif re.search(r"\b(?:my|our)\b", a["target"].lower()) and len(a["target"].split()) <= 4:   # "my canvas"
+                if self.session.browser_active and await self._is_browser_front():
+                    res = await self._click_on_page(a["target"], intent.text, cancel, allow_agent=False, quiet_miss=True)
+                    if res is not None:
+                        return res
                 res = await self._open_site(a["target"], cancel, ask=False)
                 if res is not None:
                     return res
@@ -1117,11 +1165,18 @@ class Assistant:
         return None
 
     def _remember_site(self, target: str, url: str, how: str) -> None:
-        from .sites import FILLER
+        from urllib.parse import urlparse
+
+        from .sites import terms_for
 
         name = " ".join(w for w in re.findall(r"[\w.'-]+", target.lower()) if w not in ("my", "the", "our", "open", "go", "to"))
+        host = urlparse(url).netloc.lower()
+        terms, _ = terms_for(target)
+        if how == "browser history" and not any(t.replace(" ", "") in host for t in terms):
+            return          # not confident (the name isn't in the address): open it this once, but don't learn a guess
         try:
-            self.memory.add(f"{name} is {url}", kind="website", source="learned")
+            m = self.memory.add(f"{name} is {url}", kind="website", source="learned")
+            self._last_learned_site = (m.get("id") if isinstance(m, dict) else None, time.time(), name)
             self.db.log("learning", f"Learned a site ({how}): “{name}” → {url}")
         except Exception as e:
             log.warning("couldn't remember site: %s", e)
@@ -1181,14 +1236,18 @@ class Assistant:
             return await self._reply(r.message, False)
         w = await self._call(self.computer.browser_wait_ready, b, self.settings.get("browser.page_load_timeout_s", 20), None, url)
         self.session.browser, self.session.browser_active = b, True
-        title = (w.data or {}).get("title") or url
+        self.session.last_action = f"opened {url} in {b}"
+        title = (w.data or {}).get("title") or ""
+        if not title or title.strip().lower() in ("untitled", "new tab", "loading…", "loading..."):
+            title = _host_of(url)
         from urllib.parse import urlparse as _up
 
         return await self._reply(f"{title} is open." if w.ok and not w.data.get("redirected") else w.message, w.ok, confirm=True,
                                  step_for_learning={"action": "open_url", "url": url, "browser": b},
                                  step_label=f"open {_up(url if '://' in url else 'https://' + url).netloc.removeprefix('www.')}")
 
-    async def _click_on_page(self, target: str, user_text: str, cancel: CancelToken, allow_agent: bool) -> dict:
+    async def _click_on_page(self, target: str, user_text: str, cancel: CancelToken, allow_agent: bool,
+                             quiet_miss: bool = False) -> dict | None:
         b = self.session.browser or self.settings.get("browser.default", "Arc")
         front = await asyncio.to_thread(self.computer.frontmost_app)
         if front in BROWSERS:
@@ -1220,6 +1279,8 @@ class Assistant:
                 return {"route": "builtin", "ok": True, "message": r.message} | await self._quiet_ok()
             if not allow_agent:
                 return await self._reply(r.message, False)
+        if quiet_miss:
+            return None                                   # caller tries something else
         if not allow_agent:
             return await self._reply(f"I couldn't find “{target}”.", False)
         return await self._run_agent(user_text, cancel)
@@ -1369,10 +1430,26 @@ class Assistant:
         except Exception:
             running = []
         keys = app_keys.describe(front, self.settings, 30) if front else None
+        memories = list(self.memory.context_for(text))
+        memories += [m for m in self._site_notes((bstate or {}).get("url"), text) if m not in memories]
         return context_block(mode=self.power.mode, frontmost=front, browser_state=bstate,
-                             memories=self.memory.context_for(text), shortcuts=[s["name"] for s in self.shortcuts.list()],
+                             memories=memories, shortcuts=[s["name"] for s in self.shortcuts.list()],
                              recent=self.session.history[:-1], last_results=self.session.last_results,
                              tabs=tabs, sites=await self._known_sites(), app_keys=keys, running=running)
+
+    def _site_notes(self, url: str | None, text: str = "") -> list[str]:
+        """Your instructions about the site you're on ("on canvas, click the book icon…"), even if the request
+        doesn't name the site: lincoln.instructure.com is Canvas."""
+        from .sites import SYNONYMS, names_for_url
+
+        names = set(names_for_url(url))
+        names |= {k for k in SYNONYMS if re.search(rf"\b{re.escape(k)}\b", text.lower())}
+        out = []
+        for name in names:
+            for r in self.memory.search(name, 6):
+                if r.get("kind") != "website" and name in r["content"].lower() and r["content"] not in out:
+                    out.append(r["content"])
+        return [f"(about {', '.join(sorted(names))}) {c}" for c in out[:6]] if out else []
 
     async def _known_sites(self) -> list[str]:
         """Sites the AI should know about: ones JARVIS learned, then the ones you visit most (refreshed every 30 min)."""

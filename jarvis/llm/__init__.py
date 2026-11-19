@@ -439,10 +439,10 @@ class SpokenStream:
         if self.decided:
             return True
         head = vis.lstrip()[:7].upper()
-        if len(head) < 7 and "LOOKUP:".startswith(head):
-            return False                       # could still be "LOOKUP:": wait a few characters
+        if len(head) < 7 and ("LOOKUP:".startswith(head) or "ACTION:".startswith(head)):
+            return False                       # could still be "LOOKUP:"/"ACTION:": wait a few characters
         self.decided = True
-        self.lookup = head.startswith("LOOKUP")
+        self.lookup = head.startswith("LOOKUP") or head.startswith("ACTION")   # held back, never spoken
         return True
 
     def feed(self, piece: str) -> list[str]:

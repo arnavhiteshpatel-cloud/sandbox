@@ -277,3 +277,67 @@ def test_page_script_results_decode_in_every_browser(monkeypatch):
     assert d(json.dumps(obj)) == obj                         # Chrome
     assert d(json.dumps(json.dumps(obj))) == obj             # Arc: a quoted JSON string (this crashed every page action)
     assert d("") == {} and d("missing value") == {} and d("oops") == {"raw": "oops"}
+
+
+# --- 2026-11-19 log: "learn this…" was answered "I have memorized that" (nothing saved); "open my ib150 course"
+#     opened a LabFlow page and remembered it; "yes" -> "Opening IB150 now" (nothing happened) ----------------------
+async def test_learn_this_is_actually_saved(assistant):
+    r = await assistant.handle_text("learn this, for canvas, you need to click the book icon the second one down from "
+                                    "my profile picture to get to the class dashboard")
+    assert r["route"] == "builtin" and r["message"] == "Noted."
+    assert any("book icon" in m["content"] for m in assistant.memory.all())
+
+
+async def test_canvas_tips_reach_the_ai_when_you_are_on_canvas(assistant, hist):
+    await assistant.handle_text("remember this, on canvas, if clicking the book doesnt open the course sidebar, click it again")
+    assistant.computer.front = "Arc"
+    assistant.computer.browser_open_url("https://lincoln.instructure.com/")
+    ctx = await assistant._agent_context("navigate to my ib150 class")          # doesn't say "canvas"
+    assert "click it again" in ctx
+
+
+def test_generic_words_never_pick_a_site(tmp_path, monkeypatch):
+    from jarvis import sites
+
+    f = tmp_path / "H"
+    make_history(f, HISTORY + [("https://courses.labflow.com/student/42", "LabFlow course", 50)])
+    monkeypatch.setattr(sites, "history_files", lambda: [str(f)])
+    assert sites.search_history("my ib150 course", strict=True) is None
+    assert sites.search_history("ib150") is None
+
+
+async def test_weak_guess_is_not_remembered(assistant, tmp_path, monkeypatch):
+    from jarvis import sites
+
+    f = tmp_path / "H"
+    make_history(f, [("https://app.example.com/x", "IB150 notes", 40)])         # name only in the title, not the address
+    monkeypatch.setattr(sites, "history_files", lambda: [str(f)])
+    assistant._remember_site("my ib150 site", "https://app.example.com/x", "browser history")
+    assert not [m for m in assistant.memory.all() if m.get("kind") == "website"]
+
+
+async def test_chat_never_claims_to_act_it_hands_over(assistant):
+    from jarvis.llm import ChatResult, ToolCall
+
+    class LLM:
+        def __init__(self):
+            self.n = 0
+
+        async def chat(self, messages, model, tools=None, **k):
+            self.n += 1
+            if tools:
+                return ChatResult("", [ToolCall("done", {"summary": "Opened IB150."})], 5, model)
+            return ChatResult("ACTION: open my IB150 course on Canvas", [], 5, model)
+
+        async def available(self):
+            return True
+    assistant.llm = assistant.agent.llm = LLM()
+    r = await assistant.handle_text("yes")
+    assert r["route"] == "agent" and r["message"] == "Opened IB150."              # really done by the agent
+
+
+def test_held_back_action_and_lookup_are_never_spoken():
+    from jarvis.llm import SpokenStream
+
+    s = SpokenStream()
+    assert s.feed("ACTION: open my IB150 course.") == [] and s.flush() == [] and s.lookup
