@@ -8,3 +8,6 @@ test-results
 artifacts/tmp
 artifacts/
 *.tsbuildinfo
+AirMix/.build
+AirMix/.swiftpm
+AirMix/dist
