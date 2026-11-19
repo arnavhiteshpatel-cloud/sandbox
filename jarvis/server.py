@@ -97,6 +97,28 @@ def make_app(assistant, token: str, port: int) -> web.Application:
         (a.voice.ptt_down if action == "down" else a.voice.ptt_up)()
         return J({"ok": True})
 
+    async def hotkey(request):
+        """The talk key (⌥⇧C). Typing mode: the app opens the type box. Talk mode: hold to talk."""
+        b = await body(request)
+        if a.settings.get("hotkeys.talk_key_action", "type") == "type":
+            if a.voice:
+                a.voice.prewarm()                 # you may press Return on an empty box to talk
+            return J({"action": "type"})
+        if not a.voice:
+            return J({"action": "type", "note": "voice unavailable"})
+        (a.voice.ptt_down if b.get("phase", "down") == "down" else a.voice.ptt_up)()
+        return J({"action": "talk"})
+
+    async def listen(request):
+        """Start listening once (Return on an empty type box): works on battery, when the wake word is off."""
+        if not a.voice:
+            return J({"error": "voice unavailable"}, status=409)
+        a.voice.stop_speaking()
+        a.voice.prewarm()
+        a.voice.events.emit("wake", source="type_box")
+        a.voice._request("wake", timeout=6.0)
+        return J({"ok": True})
+
     async def answer(request):
         return J({"ok": a.answer((await body(request)).get("text", ""))})
 
@@ -330,6 +352,8 @@ def make_app(assistant, token: str, port: int) -> web.Application:
     r.add_post("/api/stop", stop)
     r.add_post("/api/ptt/{action:down|up}", ptt)
     r.add_post("/api/answer", answer)
+    r.add_post("/api/hotkey", hotkey)
+    r.add_post("/api/listen", listen)
     r.add_post("/api/system/event", system_event)
     r.add_post("/api/mute", mute)
     r.add_post("/api/voice/preview", voice_preview)

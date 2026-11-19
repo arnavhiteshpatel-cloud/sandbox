@@ -343,6 +343,7 @@ class VoiceLoop:
                     continue
                 if not self.mic.active:
                     self.mic.start()
+                    self._errors = 0
                     if self.wake_enabled:
                         self.wake.load()
                         self.wake.reset()
@@ -370,13 +371,18 @@ class VoiceLoop:
                     self.prewarm()
                     self.on_wake()
                     self._request("wake", timeout=6.0)
-            except Exception as e:  # keep the assistant alive; report and back off
-                self.last_error = f"{type(e).__name__}: {e}"
-                log.exception("voice loop error")
-                self.events.emit("error", where="voice", message=self.last_error)
+            except Exception as e:  # keep the assistant alive; report once and back off (2 s, 4 s … 60 s)
+                err = f"{type(e).__name__}: {e}"
+                self._errors = getattr(self, "_errors", 0) + 1
+                if err != self.last_error:
+                    log.exception("voice loop error")
+                    self.events.emit("error", where="voice", message=err)
+                self.last_error = err
                 self.mic.stop()
                 self.capturing = False
-                time.sleep(2.0)
+                self._wakeup.wait(min(60.0, 2.0 * 2 ** min(self._errors - 1, 5)))
+                self._wakeup.clear()
+                continue
 
     def _on_barge_in(self) -> None:
         log.info("barge-in: you started talking over JARVIS")

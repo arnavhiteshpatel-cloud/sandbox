@@ -14,7 +14,7 @@ from typing import Any
 from . import paths
 
 DEFAULTS: dict[str, Any] = {
-    "settings_version": 4,
+    "settings_version": 5,
     "apps": {"aliases": {}},          # app names you taught ("arc" -> "Arc")
     "learning": {
         "ask_before_learning": True,   # user choice: ask before remembering a new phrasing
@@ -85,7 +85,8 @@ DEFAULTS: dict[str, Any] = {
         "max_utterance_s": 15,
         "muted": False,
         "chime": False,                # user choice: no listening sound
-        "speak_confirmations": False,  # user choice: simple confirmations are shown on the HUD, not spoken
+        "speak_confirmations": False,
+        "speak_typed_replies": False,  # typed requests get written answers on the HUD  # user choice: simple confirmations are shown on the HUD, not spoken
     },
     "agent": {
         "max_steps": {"battery_saver": 8, "balanced": 20, "max_performance": 40},
@@ -133,7 +134,8 @@ DEFAULTS: dict[str, Any] = {
         "hud_position": "top_left",    # user choice (2026-11-18)
     },
     "hotkeys": {                       # handled by the native shell (Carbon hot keys)
-        "push_to_talk": "opt+shift+c", # hold to talk
+        "push_to_talk": "opt+shift+c", # the talk key
+        "talk_key_action": "type",     # "type": ⌥⇧C opens a box to type to JARVIS; "talk": hold ⌥⇧C to talk
         "emergency_stop": "ctrl+opt+cmd+.",
     },
     "server": {
@@ -153,7 +155,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return out
 
 
-SETTINGS_VERSION = 4
+SETTINGS_VERSION = 5
 
 
 def _migrate(data: dict, stored_version: int) -> dict:
@@ -180,6 +182,9 @@ def _migrate(data: dict, stored_version: int) -> dict:
             v["followup_seconds"] = 8.0
         if int(v.get("end_silence_ms", 500)) > 500:
             v["end_silence_ms"] = 500        # speech end is now detected by a voice model, not loudness
+    if stored_version < 5:   # 2026-11-19: "when I do shift option c I want to be able to type to it"
+        data.setdefault("hotkeys", {})["talk_key_action"] = "type"
+        data.setdefault("voice", {}).setdefault("speak_typed_replies", False)
     data["settings_version"] = SETTINGS_VERSION
     return data
 

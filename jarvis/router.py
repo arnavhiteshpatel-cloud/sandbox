@@ -184,6 +184,16 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
     def I(intent_name, **args):
         return Intent(intent_name, args, s)
 
+    # --- JARVIS's own window (the menu-bar icon can be hidden behind the notch) ---------------
+    m = re.fullmatch(r"(?:open|show|go to|bring up|pull up)?\s*(?:the |your |jarvis(?:'s|s)? |my )?(?:jarvis )?"
+                     r"(command center|dashboard|settings|preferences|shortcuts|memory|activity)(?: page| window)?"
+                     r"(?: for jarvis| for you)?", s)
+    if m and (re.search(r"\b(?:jarvis|your|command center|dashboard)\b", s) or s in ("settings", "open settings")) \
+            and "system" not in s:
+        page = {"settings": "settings", "preferences": "settings", "shortcuts": "shortcuts", "memory": "memory",
+                "activity": "activity"}.get(m.group(1), "live")
+        return I("open_center", page=page)
+
     # --- assistant control ---------------------------------------------------------
     if re.fullmatch(r"(stop listening|mute yourself|go to sleep|mute the microphone|stop listening to me)", s):
         return I("mute_mic")

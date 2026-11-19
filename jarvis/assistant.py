@@ -6,6 +6,7 @@ Level 2/3 the local LLM agent with tools (bounded observe-act-verify loop)
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import datetime as dt
 import logging
 import os
@@ -44,6 +45,10 @@ PROGRESS_PHRASES = {"open_url": "Opening the page.", "read_page": "Reading the p
                     "look_at_screen": "Looking at the screen.", "find_duplicates": "Checking for duplicates.",
                     "list_folder": "Going through the folder.", "read_file": "Reading the document.",
                     "move_file": "Organizing the files.", "click": "Working through the page."}
+
+
+# True while handling a typed request: answers are written on the HUD, not spoken (setting voice.speak_typed_replies).
+SILENT = contextvars.ContextVar("jarvis_silent", default=False)
 
 
 @dataclass
@@ -154,6 +159,11 @@ class Assistant:
                 return True
             await asyncio.sleep(0.25)
         return False
+
+    def _followup(self) -> None:
+        """Keep listening for a follow-up, except after a typed request."""
+        if self.voice and not SILENT.get():
+            self.voice.request_followup()
 
     def _idle(self) -> None:
         """Report idle only when nothing is happening (the HUD hides on idle, so it must not hide while
@@ -328,12 +338,15 @@ class Assistant:
     async def say(self, text: str, followup: bool = False) -> None:
         if not text:
             return
+        if SILENT.get():                          # typed: the answer is written on the HUD
+            self.events.emit("response", text=text)
+            return
         self.events.emit("response", text=text)
         self._note_latency(True)
         if self.voice:
             completed = await self.voice.speak(self._brief(text))
             if completed and followup:
-                self.voice.request_followup()
+                self._followup()
 
     async def ask(self, question: str, timeout: float = 15.0) -> str | None:
         loop = asyncio.get_running_loop()
@@ -423,7 +436,7 @@ class Assistant:
             r = await asyncio.to_thread(self.computer.insert_text, chunk)
             self.events.emit("transcript", text=text, source="dictation")
             if self.voice:
-                self.voice.request_followup()
+                self._followup()
             return {"route": "dictation", "ok": r.ok, "message": ""}
         if intent and intent.name == "stop":
             self.dictation = False
@@ -433,7 +446,7 @@ class Assistant:
             return {"route": "builtin", "intent": "stop", "ok": True, "message": "Stopped."}
         if intent and intent.name == "empty":
             if text.strip() and self.voice:      # just "Hey JARVIS" and a pause: keep listening for the command
-                self.voice.request_followup()
+                self._followup()
             return {"route": "none", "ok": False, "message": ""}
         if intent and intent.name == "clarify":
             self._remember_turn("user", text)
@@ -469,6 +482,7 @@ class Assistant:
         if source not in ("wake", "ptt", "followup", "barge", "ask"):    # the voice loop already showed what you said
             self.events.emit("transcript", text=text, source=source)
         cancel = CancelToken()
+        SILENT.set(source == "typed" and not self.settings.get("voice.speak_typed_replies", False))
         task = asyncio.create_task(self._dispatch(text, intent, cancel))
         tid = self.db.task_start(text, "pending")
         self.current = {"task": task, "cancel": cancel, "id": tid, "text": text}
@@ -516,15 +530,17 @@ class Assistant:
         """confirm=True marks a routine success ("Opening Spotify."): shown on the HUD but not spoken, unless
         voice.speak_confirmations is on. Answers, questions and problems are always spoken."""
         self._remember_turn("assistant", text)
+        if SILENT.get():
+            followup = False                      # typed: don't open the microphone afterwards
         if already_spoken:                        # streamed: the voice has already said it
             self.events.emit("response", text=text)
             if followup and self.voice:
-                self.voice.request_followup()
+                self._followup()
         elif confirm and ok and not self.settings.get("voice.speak_confirmations", False):
             self.events.emit("response", text=text, silent=True)
             self._note_latency(False)
             if followup and self.voice:
-                self.voice.request_followup()
+                self._followup()
         else:
             await self.say(text, followup=followup)
         return {"route": route, "ok": ok, "message": text, **extra}
@@ -581,7 +597,9 @@ class Assistant:
             if not res.get("ok", True):
                 ok = False
                 break
-        return {"route": "builtin", "ok": ok, "message": " ".join(m for m in messages if m)}
+        combined = " ".join(m for m in messages if m)
+        self.events.emit("response", text=combined, silent=True)     # the HUD shows the whole result, not just the last part
+        return {"route": "builtin", "ok": ok, "message": combined}
 
     async def _teach(self, phrase: str, meaning: str) -> dict:
         """'Remember that when I say open arc, I mean the Arc browser.' Saved as a phrasing that runs instantly from
@@ -648,7 +666,7 @@ class Assistant:
 
         def say_now(sentences: list[str]) -> None:
             nonlocal q, speaking
-            if not sentences or not self.voice:
+            if not sentences or not self.voice or SILENT.get():
                 return
             if q is None:
                 q = queue.Queue()
@@ -884,6 +902,9 @@ class Assistant:
                 await asyncio.sleep(1.5)
                 return await self._run_agent(f"Spotify is showing search results for “{a['query']}”. Play the top result.", cancel)
             return await self._reply(f"Searching Spotify for {a['query']}.")
+        if n == "open_center":
+            self.events.emit("open_center", hash=a.get("page", "live"))
+            return await self._reply("Opening the Command Center.", True, followup=False, confirm=True)
         if n == "dock":
             r = await self._call(c.set_dock_autohide, a.get("hide"))
             return await self._reply(r.message, r.ok, followup=False, confirm=True)
@@ -982,7 +1003,7 @@ class Assistant:
     async def _quiet_ok(self) -> dict:
         """Routine follow-up actions (scroll, back) don't need a spoken reply; keep listening."""
         if self.voice:
-            self.voice.request_followup()
+            self._followup()
         return {}
 
     async def _is_browser_front(self) -> bool:

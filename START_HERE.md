@@ -42,17 +42,23 @@ Then **quit and reopen JARVIS** (menu-bar icon → right-click → Quit JARVIS; 
 Right-click the menu-bar icon → **Launch at Login**.
 
 ## 7. Make your "open my IB" shortcut
-Open your IB course page in Arc, then hold **⌥⇧C** and say: *"Create a shortcut called open my IB."*
-When it asks what the shortcut should do, hold ⌥⇧C again and say *"Open Arc and go to this URL."* Then say *"yes."*
-(Or: menu-bar icon → Command Center → Shortcuts → New → paste the URL.)
+Open your IB course page in Arc, then say *"Hey JARVIS, create a shortcut called open my IB."* (or press **⌥⇧C** and type it).
+When it asks what the shortcut should do, say *"Open Arc and go to this URL."* Then say *"yes."*
+(Or: press ⌥⇧C, type *settings*, then Shortcuts → New → paste the URL.)
 
 ## 8. Try it
-Hold **⌥⇧C**, speak, then release:
+- **Talk:** say **"Hey JARVIS"** (when plugged in), or press **⌥⇧C** and then **Return** on the empty box.
+- **Type:** press **⌥⇧C** anywhere: a box appears in the top-left. Type and press Return; the answer appears under it.
+  **↑** recalls what you typed before, **Esc** closes it, **⚙** (or typing *settings*) opens JARVIS's Command Center,
+  which matters if JARVIS's menu-bar icon is hidden behind the notch. Typed requests are answered in writing (Settings:
+  "Speak answers to typed requests"). Prefer the old hold-to-talk? Settings → "⌥⇧C does" → Hold to talk.
+
+Try:
 - "Open Spotify."
 - "Open my IB." → "Go to the assignments." → "Open the most recent one." → "Read the instructions and tell me what I need to do."
 - "What's my battery?" · "Remember that I prefer Arc for school websites."
 
-When plugged in, you can also just say **"Hey JARVIS"**. **⌃⌥⌘.** (Ctrl+Option+Cmd+Period) stops everything.
+**⌃⌥⌘.** (Ctrl+Option+Cmd+Period) or **Esc** while JARVIS is busy stops everything.
 
 ## 9. Verify and record results (optional, recommended)
 ```bash

@@ -10,6 +10,13 @@
 
 <!-- Floating HUD (minimal pill). Shown by the native shell only while JARVIS is active. -->
 <section id="hud" aria-live="polite">
+  <!-- Type box (⌥⇧C): type to JARVIS; Return on an empty box = talk; ⚙ = Command Center; Esc = close -->
+  <form class="typebox hidden" id="typebox" autocomplete="off">
+    <span class="dot" aria-hidden="true"><i></i></span>
+    <input id="type-text" type="text" spellcheck="false" placeholder="Type to JARVIS…   (Return on empty = talk)" aria-label="Type to JARVIS">
+    <button type="button" id="type-mic" title="Talk (Return on an empty box)" aria-label="Talk">🎙</button>
+    <button type="button" id="type-gear" title="Open the Command Center" aria-label="Command Center">⚙</button>
+  </form>
   <div class="pill">
     <span class="dot" aria-hidden="true"><i></i></span>
     <div class="pill-text">

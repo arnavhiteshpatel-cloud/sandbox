@@ -122,13 +122,17 @@ final class Daemon {
 
     // MARK: API
 
-    func post(_ path: String, _ body: [String: Any] = [:]) {
+    func post(_ path: String, _ body: [String: Any] = [:], completion: (([String: Any]?) -> Void)? = nil) {
         var req = URLRequest(url: baseURL.appendingPathComponent(path))
         req.httpMethod = "POST"
         req.setValue(token, forHTTPHeaderField: "X-Jarvis-Token")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
         req.timeoutInterval = 5
-        URLSession.shared.dataTask(with: req).resume()
+        URLSession.shared.dataTask(with: req) { data, _, _ in
+            guard let completion = completion else { return }
+            let obj = data.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+            DispatchQueue.main.async { completion(obj) }
+        }.resume()
     }
 }

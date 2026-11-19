@@ -227,3 +227,18 @@ main { overflow: auto; padding: 18px 22px 30px; background: radial-gradient(90% 
 .toggle input { width: 34px; height: 18px; }
 .help { color: var(--muted); font-size: 12px; }
 ::-webkit-scrollbar { width: 9px; height: 9px; } ::-webkit-scrollbar-thumb { background: #1d2a33; border-radius: 9px; } ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- type box (⌥⇧C) ---------- */
+#hud { flex-direction: column; gap: 6px; }
+.typebox { display: flex; align-items: center; gap: 10px; width: 640px; max-width: calc(100vw - 20px); padding: 8px 10px 8px 12px;
+  border-radius: 14px; background: rgba(8, 12, 16, .92); border: 1px solid rgba(56, 214, 255, .45);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.6), 0 10px 34px rgba(0,0,0,.6), 0 0 26px rgba(56,214,255,.18);
+  -webkit-backdrop-filter: blur(18px) saturate(140%); backdrop-filter: blur(18px) saturate(140%); }
+.typebox.hidden { display: none; }
+.typebox input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; color: var(--text, #e8f6ff);
+  font-size: 16px; padding: 4px 0; }
+.typebox input::placeholder { color: var(--muted); }
+.typebox button { background: transparent; border: 1px solid transparent; padding: 4px 7px; border-radius: 8px; font-size: 14px; }
+.typebox button:hover { border-color: var(--cyan); }
+/* while typing with nothing to show yet, hide the empty pill */
+html[data-typing="1"] .pill.empty { display: none; }

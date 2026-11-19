@@ -245,3 +245,16 @@ Three rounds, all through the real code:
    claimed success; "empty the trash" called trash_files with an empty path and claimed success → Dock and Trash are
    now real abilities (instant by voice, `system` actions for the agent; emptying asks first), empty paths are refused,
    and the agent can no longer report success when its last real action failed.
+
+### ⌥⇧C = type box (2026-11-19, user: "when I do shift option c I want to be able to type to it, because I have a lot of stuff in the menu bar and it doesn't show")
+- ⌥⇧C opens a Spotlight-style box in the top-left (the HUD panel takes keyboard focus without activating JARVIS);
+  Return sends, ↑/↓ history, Esc or ⌥⇧C again closes, clicking elsewhere closes. Return on an empty box (or 🎙) starts
+  listening, so voice still works on battery when the wake word is off. ⚙, or typing "settings" / "jarvis settings" /
+  "open command center", opens the Command Center: the menu-bar icon is hidden behind the notch on the user's Mac.
+  ("open system settings" / "open wifi settings" still open macOS settings.)
+- Typed requests are answered in writing on the HUD and never open the microphone afterwards (setting
+  `voice.speak_typed_replies`). Hold-to-talk remains a setting (`hotkeys.talk_key_action`). Settings migration v5.
+- Found while screenshotting it with the real server: when the microphone can't open, the voice loop retried every 2 s
+  and posted "Something went wrong" over the HUD each time, wiping the answer → reported once, retries back off to
+  60 s, and background voice errors go to the activity log instead of the HUD. Chained commands now show the combined
+  result on the HUD.

@@ -43,7 +43,8 @@ and copies the app to /Applications. Then grant the permissions JARVIS asks for.
 
 ## Use
 
-* **Talk:** hold **⌥⇧C** (always), or say **"Hey JARVIS"** when plugged in.
+* **Talk:** say **"Hey JARVIS"** when plugged in, or press **⌥⇧C** then Return.
+* **Type:** press **⌥⇧C** anywhere for a type box in the top-left; type *settings* (or click ⚙) for the Command Center.
 * **Stop everything:** **⌃⌥⌘.** or say "JARVIS, stop".
 * **Menu bar:** click the icon for the popover; right-click for modes, mute, launch at login and quit.
 * **Command Center:** live tasks, dashboard, shortcut editor, memory, file search, settings.

@@ -4,7 +4,12 @@ import ApplicationServices
 import ServiceManagement
 import WebKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+/// The HUD panel can take keyboard focus for the type box without activating JARVIS (like Spotlight).
+final class KeyPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     let daemon = Daemon()
     lazy var web = WebFactory(daemon: daemon)
     let hotkeys = HotKeys()
@@ -16,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var hudPanel: NSPanel?
     var center: NSWindow?
     var pttDown = false
+    var typing = false
     var jarvisActive = false
     var statusText = "Starting…"
 
@@ -84,6 +90,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             updateIcon(status: s)
             if s == "listening" && (ev["reason"] as? String) != "followup" { showHUD(true) }
             if ["transcribing", "thinking", "acting", "speaking"].contains(s) { showHUD(true) }
+        case "open_center":
+            closeTypeBox()
+            openCenter(hash: (ev["hash"] as? String) ?? "live")
         case "service_restart":
             // A permission was granted after the service started; a fresh process picks it up.
             statusText = "Service: restarting to use a new permission"
@@ -109,13 +118,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func hotkeyPressed(_ id: UInt32) {
         if id == HotKeys.pushToTalk, !pttDown {
+            if typing { closeTypeBox(); return }          // ⌥⇧C again closes the type box
             pttDown = true
-            showHUD(true)
-            daemon.post("api/ptt/down")
+            // The service says what the key does (Settings: type box, or hold to talk).
+            daemon.post("api/hotkey", ["phase": "down"]) { [weak self] resp in
+                guard let self = self else { return }
+                if (resp?["action"] as? String ?? "type") == "type" {
+                    self.pttDown = false
+                    self.openTypeBox()
+                } else {
+                    self.showHUD(true)
+                }
+            }
         } else if id == HotKeys.emergencyStop || id == HotKeys.escapeStop {
             daemon.post("api/stop", ["source": "hotkey"])
             jarvisActive = false
             hotkeys.setEscapeHotKey(false)
+            closeTypeBox()
             showHUD(false)
         }
     }
@@ -123,8 +142,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func hotkeyReleased(_ id: UInt32) {
         if id == HotKeys.pushToTalk, pttDown {
             pttDown = false
-            daemon.post("api/ptt/up")
+            daemon.post("api/hotkey", ["phase": "up"])
         }
+    }
+
+    // MARK: Type box (⌥⇧C): type to JARVIS from anywhere, even with the menu-bar icon hidden behind the notch
+
+    private func openTypeBox() {
+        guard let panel = hudPanel else { return }
+        typing = true
+        showHUD(true)
+        panel.makeKeyAndOrderFront(nil)            // keyboard focus without leaving the app you're in
+        if let wv = hudWebView { panel.makeFirstResponder(wv) }
+        hudWebView?.evaluateJavaScript("window.jarvisType && window.jarvisType()")
+    }
+
+    private func closeTypeBox(fromPage: Bool = false) {
+        guard typing else { return }
+        typing = false
+        if !fromPage { hudWebView?.evaluateJavaScript("window.jarvisTypeClose && window.jarvisTypeClose()") }
+        // Give the keyboard back to the app you were in: re-show the HUD without making it key.
+        if let panel = hudPanel, panel.isKeyWindow {
+            panel.orderOut(nil)
+            if jarvisActive { panel.orderFrontRegardless() }
+        }
+        if !jarvisActive { showHUD(false) }
+    }
+
+    func windowDidResignKey(_ note: Notification) {
+        // Clicked somewhere else: put the type box away (an answer still shows on the HUD).
+        if (note.object as? NSWindow) === hudPanel, typing { closeTypeBox() }
     }
 
     // MARK: Messages from the web UI
@@ -132,8 +179,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func handle(_ msg: [String: Any]) {
         switch msg["type"] as? String {
         case "hud":
-            showHUD((msg["visible"] as? Bool) ?? false)
+            let visible = (msg["visible"] as? Bool) ?? false
+            if visible || !typing { showHUD(visible) }   // the type box stays up until you close it
+        case "typeClose":
+            closeTypeBox(fromPage: true)
         case "openCenter":
+            closeTypeBox()
             popover?.performClose(nil)
             openCenter(hash: (msg["hash"] as? String) ?? "live")
         case "openURL":
@@ -269,8 +320,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// The floating pill. Hidden (and its animations paused) whenever JARVIS is idle.
     private func buildHUD() {
-        let size = NSSize(width: 720, height: 108)
-        let panel = NSPanel(contentRect: NSRect(origin: .zero, size: size),
+        let size = NSSize(width: 720, height: 168)   // type box + pill
+        let panel = KeyPanel(contentRect: NSRect(origin: .zero, size: size),
                             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
         panel.isFloatingPanel = true
         panel.level = .statusBar
@@ -278,7 +329,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
-        panel.becomesKeyOnlyIfNeeded = true
+        panel.becomesKeyOnlyIfNeeded = false
+        panel.delegate = self
         panel.hidesOnDeactivate = false
         let wv = web.make(view: "hud", transparent: true)
         panel.contentView = wv

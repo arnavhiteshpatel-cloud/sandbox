@@ -56,7 +56,7 @@ function hud(line, sub, actions) {
   const box = $("#hud-actions"); box.innerHTML = "";
   for (const [label, fn, cls] of actions || []) { const b = document.createElement("button"); b.textContent = label; b.className = cls || ""; b.onclick = fn; box.appendChild(b); }
 }
-function hudLinger() { clearTimeout(S.hudTimer); S.hudTimer = setTimeout(() => { if (root.dataset.status === "idle") native({ type: "hud", visible: false }); }, 3500); }
+function hudLinger() { clearTimeout(S.hudTimer); S.hudTimer = setTimeout(() => { if (root.dataset.status === "idle" && !root.dataset.typing) native({ type: "hud", visible: false }); }, 3500); }
 
 function onEvent(ev) {
   switch (ev.type) {
@@ -116,10 +116,49 @@ function onEvent(ev) {
       addActivity({ ts: Date.now() / 1000, level: "info", category: "system", message: "Restarting the background service to use a newly granted permission." });
       break;
     case "wake": if (VIEW === "hud") window.jarvisWake(); break;
-    case "error": addActivity({ ts: ev.ts, level: "error", category: ev.where || "error", message: ev.message }); if (VIEW === "hud") { root.dataset.status = "error"; hud("Something went wrong", ev.message); } break;
+    case "open_center": if (VIEW === "hud") native({ type: "openCenter", hash: ev.hash || "live" }); break;
+    case "error":
+      addActivity({ ts: ev.ts, level: "error", category: ev.where || "error", message: ev.message });
+      // Background problems (e.g. the microphone) go to the activity log; the HUD only shows errors for what you asked.
+      if (VIEW === "hud" && ev.where !== "voice") { root.dataset.status = "error"; hud("Something went wrong", ev.message); }
+      break;
     case "open_editor": if (VIEW === "center") { location.hash = "#shortcuts"; newShortcut(ev.name, ev.description); } else native({ type: "openCenter", hash: "shortcuts" }); break;
   }
 }
+/* ---------- type box (⌥⇧C) ---------- */
+const typed = []; let typedIdx = 0;
+function pillEmpty(on) { const p = $(".pill"); if (p) p.classList.toggle("empty", !!on); }
+window.jarvisType = () => {
+  const box = $("#typebox"); if (!box) return;
+  box.classList.remove("hidden"); root.dataset.typing = "1";
+  if (root.dataset.status === "idle" || !root.dataset.status) pillEmpty(true);
+  const t = $("#type-text"); t.value = ""; typedIdx = typed.length; setTimeout(() => t.focus(), 0);
+};
+window.jarvisTypeClose = () => {
+  const box = $("#typebox"); if (!box) return;
+  box.classList.add("hidden"); delete root.dataset.typing; pillEmpty(false);
+  if (root.dataset.status === "idle" || !root.dataset.status) hudLinger();
+};
+function typeSubmit(e) {
+  e && e.preventDefault();
+  const t = $("#type-text"), text = t.value.trim();
+  if (!text) { api("POST", "/api/listen", {}).catch(() => hud("Voice isn't available", "")); pillEmpty(false); return; }
+  typed.push(text); typedIdx = typed.length; t.value = "";
+  S.lastTranscript = text; pillEmpty(false); hud(text, "…");
+  if (S.question) { answer(text); return; }               // typing answers a pending question
+  api("POST", "/api/command", { text, source: "typed" }).catch(err => hud("Couldn't reach JARVIS", String(err)));
+}
+if (VIEW === "hud") {
+  $("#typebox").addEventListener("submit", typeSubmit);
+  $("#type-mic").onclick = () => { api("POST", "/api/listen", {}).catch(() => {}); pillEmpty(false); $("#type-text").focus(); };
+  $("#type-gear").onclick = () => native({ type: "openCenter", hash: "live" });
+  $("#type-text").addEventListener("keydown", e => {
+    if (e.key === "Escape") { e.preventDefault(); native({ type: "typeClose" }); window.jarvisTypeClose(); }
+    else if (e.key === "ArrowUp" && typed.length) { e.preventDefault(); typedIdx = Math.max(0, typedIdx - 1); e.target.value = typed[typedIdx]; }
+    else if (e.key === "ArrowDown" && typed.length) { e.preventDefault(); typedIdx = Math.min(typed.length, typedIdx + 1); e.target.value = typed[typedIdx] || ""; }
+  });
+}
+
 // Called natively the instant "Hey JARVIS" is heard (the app shows the HUD before this page has caught up).
 window.jarvisWake = () => { S.lastTranscript = ""; root.dataset.status = "listening"; clearTimeout(S.hudTimer); hud("Listening…", ""); };
 async function answer(text) { await api("POST", "/api/answer", { text }); showQuestion(null); }
@@ -140,7 +179,9 @@ function renderState() {
   root.dataset.motion = motion;
   $$(".seg [data-mode]").forEach(b => b.classList.toggle("on", b.dataset.mode === p.mode));
   const batt = p.percent != null ? `${p.percent}% ${p.source === "ac" ? "· charging" : "· on battery"}` : p.source || "";
-  const listening = v ? (v.muted ? "Muted" : v.wake_word ? "“Hey JARVIS” + ⌥⇧C" : "Hold ⌥⇧C") : "Voice off";
+  const typeKey = S.settings?.hotkeys?.talk_key_action !== "talk";
+  const listening = v ? (v.muted ? "Muted" : v.wake_word ? (typeKey ? "“Hey JARVIS” · ⌥⇧C to type" : "“Hey JARVIS” + ⌥⇧C")
+    : (typeKey ? "⌥⇧C to type (Return to talk)" : "Hold ⌥⇧C")) : "Voice off";
   if ($("#c-meta")) $("#c-meta").innerHTML = [`<span class="chip">${esc(MODES[p.mode] || p.mode)}</span>`, `<span class="chip">${esc(batt)}</span>`,
     `<span class="chip ${st.llm_available ? "on" : "warn"}">${esc(st.model)}${st.llm_available ? "" : " · offline"}</span>`, `<span class="chip">${esc(listening)}</span>`].join("");
   if ($("#c-mute")) $("#c-mute").textContent = v && v.muted ? "Unmute mic" : "Mute mic";
@@ -444,6 +485,8 @@ async function loadSettings() {
     ${fld("Follow-up window (seconds)", inputFor("voice.followup_seconds", s.voice.followup_seconds, { num: 1 }))}
     ${tog("Listening chime", inputFor("voice.chime", s.voice.chime, { bool: 1 }))}
     ${tog("Interrupt JARVIS by talking over it", inputFor("voice.barge_in", s.voice.barge_in, { bool: 1 }))}
+    ${fld("⌥⇧C does", inputFor("hotkeys.talk_key_action", s.hotkeys.talk_key_action, { select: { type: "Open the type box (Return on empty = talk)", talk: "Hold to talk" } }))}
+    ${tog("Speak answers to typed requests", inputFor("voice.speak_typed_replies", s.voice.speak_typed_replies, { bool: 1 }))}
     ${tog("Speak simple confirmations (“Opening Spotify.”)", inputFor("voice.speak_confirmations", s.voice.speak_confirmations, { bool: 1 }))}
     ${fld("Microphone (blank = system default)", inputFor("voice.input_device", s.voice.input_device ?? ""))}
     <button class="sm" id="v-preview">Preview voice</button></section>
