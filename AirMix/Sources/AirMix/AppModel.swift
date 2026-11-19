@@ -185,6 +185,7 @@ final class AppModel: ObservableObject {
     // MARK: Per-app controls
 
     func setVolume(_ id: String, _ value: Double) {
+        guard value.isFinite else { return }
         mutate(save: true) {
             var s = $0.settings(for: id)
             s.volume = value.clamped(to: 0...$0.preferences.maxBoost)
@@ -291,6 +292,7 @@ final class AppModel: ObservableObject {
     }
 
     func setMasterVolume(_ v: Double) {
+        guard v.isFinite else { return }
         if let d = devices.defaultOutput, d.hasVolumeControl {
             AudioDevices.setVolume(d.id, Float(v))
             devices.refreshVolume()

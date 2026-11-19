@@ -6,7 +6,7 @@ struct PopoverView: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject var engine: AudioEngine
     @ObservedObject var devices: DeviceMonitor
-    @State private var showInactive = false
+    @State var showInactive = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -163,9 +163,16 @@ struct PopoverView: View {
                 .padding(.bottom, 6)
                 .animation(.easeInOut(duration: 0.22), value: active.map(\.id))
             }
-            .frame(minHeight: 120, maxHeight: 400)
-            .fixedSize(horizontal: false, vertical: true)
+            .frame(height: listHeight(active: active.count, inactive: inactive.count))
         }
+    }
+
+    private func listHeight(active: Int, inactive: Int) -> CGFloat {
+        let rowHeight: CGFloat = 64
+        var h = CGFloat(active) * rowHeight + (inactive > 0 ? 30 : 0)
+        if showInactive { h += CGFloat(inactive) * rowHeight }
+        if active == 0 && inactive == 0 { h = 130 }
+        return min(430, max(84, h + 8))
     }
 
     // MARK: Footer
@@ -267,8 +274,8 @@ struct AppRow: View {
     let row: MixerRow
     @ObservedObject var engine: AudioEngine
     @ObservedObject var devices: DeviceMonitor
-    @State private var hovering = false
-    @FocusState private var focused: Bool
+    @State var hovering = false
+    @FocusState var focused: Bool
 
     var body: some View {
         let s = model.appSettings(row.id)
@@ -469,7 +476,7 @@ struct ProfilePill: View {
     let profile: Profile
     let active: Bool
     let action: () -> Void
-    @State private var hovering = false
+    @State var hovering = false
 
     var body: some View {
         Button(action: action) {

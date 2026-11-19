@@ -97,7 +97,7 @@ struct IconButton: View {
     var tint: Color = Theme.accent
     var size: CGFloat = 24
     let action: () -> Void
-    @State private var hovering = false
+    @State var hovering = false
 
     var body: some View {
         Button(action: action) {

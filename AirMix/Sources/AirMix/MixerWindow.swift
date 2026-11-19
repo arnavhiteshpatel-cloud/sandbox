@@ -115,7 +115,7 @@ private struct SidebarItem: View {
     let section: MixerSection
     let selected: Bool
     let action: () -> Void
-    @State private var hovering = false
+    @State var hovering = false
 
     var body: some View {
         Button(action: action) {
@@ -196,7 +196,7 @@ struct VerticalFader: View {
     @Binding var value: Double
     var maxValue: Double = 1
     var muted = false
-    @State private var dragging = false
+    @State var dragging = false
 
     var body: some View {
         GeometryReader { geo in
@@ -228,13 +228,14 @@ struct VerticalFader: View {
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { g in
+                    guard h > 0 else { return }
                     dragging = true
                     var v = Double((1 - g.location.y / h).clamped(to: 0...1)) * maxValue
                     if maxValue > 1, abs(v - 1) < 0.025 * maxValue { v = 1 }
                     value = (v * 100).rounded() / 100
                 }
                 .onEnded { _ in dragging = false })
-            .onTapGesture(count: 2) { value = 1 }
+            .simultaneousGesture(TapGesture(count: 2).onEnded { value = 1 })
         }
     }
 }
@@ -271,7 +272,7 @@ struct ChannelStrip: View {
     let row: MixerRow
     @ObservedObject var engine: AudioEngine
     @ObservedObject var devices: DeviceMonitor
-    @State private var hovering = false
+    @State var hovering = false
 
     var body: some View {
         let s = model.appSettings(row.id)

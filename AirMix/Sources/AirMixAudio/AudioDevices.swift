@@ -230,7 +230,8 @@ public final class DeviceMonitor: ObservableObject {
             PropertyListener(systemAudioObject, propertyAddress(kAudioHardwarePropertyDevices), handler: handler),
             PropertyListener(systemAudioObject, propertyAddress(kAudioHardwarePropertyDefaultOutputDevice), handler: handler),
             PropertyListener(systemAudioObject, propertyAddress(kAudioHardwarePropertyServiceRestarted)) { [weak self] in
-                MainActor.assumeIsolated {
+                // Don't tear listeners down from inside their own callback; restart shortly after.
+                onMain(after: 0.3) {
                     self?.start()
                     self?.onChange?(.serviceRestarted)
                 }

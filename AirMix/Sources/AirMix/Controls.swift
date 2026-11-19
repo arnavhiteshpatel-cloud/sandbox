@@ -13,8 +13,8 @@ struct VolumeFader: View {
     var height: CGFloat = 20
     var onEditingChanged: (Bool) -> Void = { _ in }
 
-    @State private var dragging = false
-    @State private var hovering = false
+    @State var dragging = false
+    @State var hovering = false
 
     var body: some View {
         GeometryReader { geo in
@@ -54,6 +54,7 @@ struct VolumeFader: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { g in
+                        guard w > 0 else { return }
                         if !dragging { dragging = true; onEditingChanged(true) }
                         var v = Double((g.location.x / w).clamped(to: 0...1)) * maxValue
                         if maxValue > 1, abs(v - 1) < 0.025 * maxValue { v = 1 }  // detent at 100 %
@@ -61,7 +62,7 @@ struct VolumeFader: View {
                     }
                     .onEnded { _ in dragging = false; onEditingChanged(false) }
             )
-            .onTapGesture(count: 2) { value = 1 }
+            .simultaneousGesture(TapGesture(count: 2).onEnded { value = 1 })
             .onHover { hovering = $0 }
             .animation(.spring(response: 0.25, dampingFraction: 0.8), value: dragging)
             .animation(.easeOut(duration: 0.12), value: hovering)

@@ -206,9 +206,10 @@ public final class AudioEngine: ObservableObject {
             let involvedInDucking = isDuckingParticipant(app)
             let needsProcessing = !prefs.processOnlyAdjustedApps || !s.isNeutral || involvedInDucking
                 || settings.softwareMasterVolume < 0.999 || softwareMute
-            // Adjusted apps keep an (idle, auto-starting) tap while their process exists, so their
-            // audio is controlled from the very first sample when they start playing again.
-            let wanted = needsProcessing && (app.isPlaying || recentlyActive || !s.isNeutral)
+            // Paths exist while an app plays and for a grace period afterwards, so pausing and
+            // resuming stays seamless. (A brand-new playback start can be heard unprocessed for the
+            // few milliseconds it takes to build the path.)
+            let wanted = needsProcessing && (app.isPlaying || recentlyActive)
             guard wanted, !app.processObjectIDs.isEmpty else { continue }
 
             var device: OutputDevice?

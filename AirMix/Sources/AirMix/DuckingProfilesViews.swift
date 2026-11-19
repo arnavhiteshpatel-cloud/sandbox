@@ -225,9 +225,9 @@ struct DuckingRuleCard: View {
 struct ProfilesView: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject var devices: DeviceMonitor
-    @State private var selected: UUID?
-    @State private var newName = ""
-    @State private var naming = false
+    @State var selected: UUID?
+    @State var newName = ""
+    @State var naming = false
 
     var body: some View {
         Page(title: "Profiles", subtitle: "Save volumes, EQ, routing and ducking together; switch instantly from the menu bar.",
@@ -549,8 +549,8 @@ struct ShortcutsView: View {
 struct ShortcutField: View {
     @EnvironmentObject var model: AppModel
     let binding: ShortcutBinding
-    @State private var recording = false
-    @State private var problem: String?
+    @State var recording = false
+    @State var problem: String?
 
     var body: some View {
         HStack(spacing: 6) {

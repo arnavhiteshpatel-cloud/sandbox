@@ -5,9 +5,9 @@ import SwiftUI
 struct EQSectionView: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject var engine: AudioEngine
-    @State private var selectedBand: UUID?
-    @State private var savingPreset = false
-    @State private var presetName = ""
+    @State var selectedBand: UUID?
+    @State var savingPreset = false
+    @State var presetName = ""
 
     private var appID: String? { model.selectedAppID ?? model.rows.first?.id }
 
