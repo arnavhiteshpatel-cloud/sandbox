@@ -1,5 +1,6 @@
 import AirMixAudio
 import AirMixCore
+import AppKit
 import SwiftUI
 
 /// The AirMix fader: a slim track whose fill is the volume, with the app's live output level

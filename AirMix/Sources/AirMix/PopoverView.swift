@@ -1,5 +1,6 @@
 import AirMixAudio
 import AirMixCore
+import AppKit
 import SwiftUI
 
 struct PopoverView: View {
@@ -21,7 +22,7 @@ struct PopoverView: View {
             footer
         }
         .frame(width: 368)
-        .background(VisualEffect(material: .popover).ignoresSafeArea())
+        .background(VisualEffectBackground(material: .popover).ignoresSafeArea())
     }
 
     // MARK: Header

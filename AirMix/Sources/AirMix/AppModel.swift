@@ -60,12 +60,14 @@ final class AppModel: ObservableObject {
             }
             .store(in: &cancellables)
         engine.$apps
+            .receive(on: DispatchQueue.main)   // @Published emits in willSet; read state after it's stored
             .sink { [weak self] apps in
                 MainActor.assumeIsolated { self?.appsChanged(apps) }
             }
             .store(in: &cancellables)
         engine.devices.$defaultOutput
             .removeDuplicates { $0?.uid == $1?.uid }
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 MainActor.assumeIsolated { self?.evaluateAutoProfile() }
             }
@@ -73,7 +75,7 @@ final class AppModel: ObservableObject {
         engine.$audioConfirmed
             .sink { [weak self] confirmed in
                 MainActor.assumeIsolated {
-                    guard let self, confirmed, !UserDefaults.standard.bool(forKey: "audioConfirmed") else { return }
+                    guard self != nil, confirmed, !UserDefaults.standard.bool(forKey: "audioConfirmed") else { return }
                     UserDefaults.standard.set(true, forKey: "audioConfirmed")
                 }
             }

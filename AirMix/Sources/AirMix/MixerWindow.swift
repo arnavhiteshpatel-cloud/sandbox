@@ -1,5 +1,6 @@
 import AirMixAudio
 import AirMixCore
+import AppKit
 import SwiftUI
 
 enum MixerSection: String, CaseIterable, Identifiable {
@@ -47,10 +48,10 @@ struct MixerWindowView: View {
         HStack(spacing: 0) {
             sidebar
                 .frame(width: 210)
-                .background(VisualEffect(material: .sidebar).ignoresSafeArea())
+                .background(VisualEffectBackground(material: .sidebar).ignoresSafeArea())
             Divider().opacity(0.4)
             ZStack {
-                VisualEffect(material: .underWindowBackground).ignoresSafeArea()
+                VisualEffectBackground(material: .underWindowBackground).ignoresSafeArea()
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }

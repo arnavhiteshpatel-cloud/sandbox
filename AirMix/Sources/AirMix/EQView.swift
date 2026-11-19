@@ -1,5 +1,6 @@
 import AirMixAudio
 import AirMixCore
+import AppKit
 import SwiftUI
 
 struct EQSectionView: View {
@@ -262,8 +263,8 @@ struct BandStrip: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(eq.bands.indices, id: \.self) { i in
-                    bandCard(i)
+                ForEach(eq.bands) { band in
+                    bandCard(band)
                 }
                 if eq.bands.count < 12 {
                     Button {
@@ -284,33 +285,42 @@ struct BandStrip: View {
         }
     }
 
-    private func bandCard(_ i: Int) -> some View {
-        let band = eq.bands[i]
+    /// Applies a change to the band with this id (looked up fresh, so edits never hit a stale index).
+    private func edit(_ id: UUID, _ change: (inout EQBand) -> Void) {
+        guard let i = eq.bands.firstIndex(where: { $0.id == id }) else { return }
+        change(&eq.bands[i])
+        eq.presetID = nil
+    }
+
+    private func bandCard(_ band: EQBand) -> some View {
         let selected = selectedBand == band.id
+        let id = band.id
         return VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Picker("", selection: Binding(get: { band.type }, set: { eq.bands[i].type = $0; eq.presetID = nil })) {
+                Picker("", selection: Binding(get: { band.type }, set: { v in edit(id) { $0.type = v } })) {
                     ForEach(FilterType.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
                 .labelsHidden()
                 .controlSize(.mini)
                 .frame(width: 84)
                 Spacer(minLength: 0)
-                Toggle("", isOn: Binding(get: { band.isEnabled }, set: { eq.bands[i].isEnabled = $0; eq.presetID = nil }))
+                Toggle("", isOn: Binding(get: { band.isEnabled }, set: { v in edit(id) { $0.isEnabled = v } }))
                     .toggleStyle(.switch).controlSize(.mini).labelsHidden()
             }
-            field("Hz", value: Binding(get: { band.frequency }, set: { eq.bands[i].frequency = $0.clamped(to: EQBand.frequencyRange); eq.presetID = nil }),
+            field("Hz", value: Binding(get: { band.frequency },
+                                       set: { v in edit(id) { $0.frequency = v.clamped(to: EQBand.frequencyRange) } }),
                   digits: 0)
-            field("dB", value: Binding(get: { band.gainDB }, set: { eq.bands[i].gainDB = $0.clamped(to: EQBand.gainRange); eq.presetID = nil }),
+            field("dB", value: Binding(get: { band.gainDB },
+                                       set: { v in edit(id) { $0.gainDB = v.clamped(to: EQBand.gainRange) } }),
                   digits: 1)
                 .disabled(!band.type.usesGain)
-            field("Q", value: Binding(get: { band.q }, set: { eq.bands[i].q = $0.clamped(to: EQBand.qRange); eq.presetID = nil }),
+            field("Q", value: Binding(get: { band.q }, set: { v in edit(id) { $0.q = v.clamped(to: EQBand.qRange) } }),
                   digits: 2)
             if eq.bands.count > 1 {
                 Button("Remove") {
-                    let id = eq.bands[i].id
                     eq.bands.removeAll { $0.id == id }
                     eq.presetID = nil
+                    if selectedBand == id { selectedBand = nil }
                 }
                 .buttonStyle(.borderless)
                 .font(.system(size: 10))
@@ -321,7 +331,7 @@ struct BandStrip: View {
         .frame(width: 128)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(selected ? Theme.accent.opacity(0.12) : Theme.cardFill))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(selected ? Theme.accent.opacity(0.5) : Theme.cardStroke, lineWidth: 0.5))
-        .onTapGesture { selectedBand = band.id }
+        .onTapGesture { selectedBand = id }
     }
 
     private func field(_ label: String, value: Binding<Double>, digits: Int) -> some View {

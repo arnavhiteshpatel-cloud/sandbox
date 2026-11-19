@@ -109,7 +109,7 @@ struct AppResolver {
         var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
         let n = proc_pidpath(pid, &buffer, UInt32(buffer.count))
         guard n > 0 else { return nil }
-        return String(cString: buffer)
+        return buffer.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
     }
 
     static func parentPID(_ pid: pid_t) -> pid_t? {

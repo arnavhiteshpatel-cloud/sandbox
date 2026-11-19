@@ -21,7 +21,7 @@ final class HotKeyCenter {
             guard let event, let userData else { return OSStatus(eventNotHandledErr) }
             var hotKeyID = EventHotKeyID()
             let status = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
-                                           nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID)
+                                           nil, ByteCount(MemoryLayout<EventHotKeyID>.size), nil, &hotKeyID)
             guard status == noErr else { return status }
             let center = Unmanaged<HotKeyCenter>.fromOpaque(userData).takeUnretainedValue()
             let id = hotKeyID.id

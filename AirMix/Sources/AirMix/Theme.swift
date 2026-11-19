@@ -71,7 +71,7 @@ struct SectionHeader: View {
 }
 
 /// Native window/popover vibrancy.
-struct VisualEffect: NSViewRepresentable {
+struct VisualEffectBackground: NSViewRepresentable {
     var material: NSVisualEffectView.Material = .popover
     var blending: NSVisualEffectView.BlendingMode = .behindWindow
 

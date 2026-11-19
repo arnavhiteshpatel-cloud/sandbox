@@ -89,12 +89,16 @@ public final class IndependenceTest {
         guard let objA, let objB else { return fail("The test tones never appeared as audio processes.") }
 
         // AirMix paths for each player (same code path as the mixer).
-        let pathA: AppAudioPath, pathB: AppAudioPath
-        do {
-            pathA = try AppAudioPath(appKey: "selftest.440", processObjectIDs: [objA], output: device)
-            pathB = try AppAudioPath(appKey: "selftest.660", processObjectIDs: [objB], output: device)
-        } catch { return fail("Could not create audio paths: \(error.localizedDescription)") }
-        defer { pathA.stop(); pathB.stop() }
+        let pathA: AppAudioPath
+        do { pathA = try AppAudioPath(appKey: "selftest.440", processObjectIDs: [objA], output: device) } catch {
+            return fail("Could not create audio path A: \(error.localizedDescription)")
+        }
+        defer { pathA.stop() }
+        let pathB: AppAudioPath
+        do { pathB = try AppAudioPath(appKey: "selftest.660", processObjectIDs: [objB], output: device) } catch {
+            return fail("Could not create audio path B: \(error.localizedDescription)")
+        }
+        defer { pathB.stop() }
 
         // Measurement tap: everything except the two players' own (muted) streams.
         let measurement: Measurement
