@@ -131,6 +131,13 @@ class Assistant:
         if self.voice:
             self.voice.shutdown()
         self.power.stop_indexing("shutdown")
+        # Give the memory back: Ollama keeps models loaded for a while after use (that's what makes replies fast), and
+        # quitting JARVIS didn't release them: ~10 GB stayed taken and the Mac lagged.
+        models = {m for m in (self.chat_model, self.task_model, self.model, self.settings.get("llm.embed_model")) if m}
+        try:
+            await asyncio.wait_for(asyncio.gather(*(self.llm.unload(m) for m in models), return_exceptions=True), 5)
+        except Exception:
+            pass
         await self.llm.close()
 
     async def _ask_to_learn(self, text: str, tool: str, args: dict) -> None:

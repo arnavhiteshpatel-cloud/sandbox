@@ -169,3 +169,79 @@ async def test_my_site_while_browsing_opens_the_site_not_a_link(assistant, hist)
     assistant.computer.front = "Arc"
     r = await assistant.handle_text("open my canvas")
     assert r["ok"] and assistant.computer.tab["url"] == "https://lincoln.instructure.com/"
+
+
+# --- navigating a school site step by step (2026-11-19: "made it to canvas, didn't think to go to the course
+#     dashboard, then opened it in Safari and gave up") ---------------------------------------------------------
+CANVAS = {
+    "https://lincoln.instructure.com/": {
+        "title": "Dashboard",
+        "elements": [{"role": "link", "name": "Account", "href": "https://lincoln.instructure.com/profile"}]
+                    + [{"role": "link", "name": f"Announcement {i}", "href": f"https://lincoln.instructure.com/a/{i}"} for i in range(1, 70)]
+                    + [{"role": "link", "name": "IB Biology HL - Lincoln", "href": "https://lincoln.instructure.com/courses/77"},
+                       {"role": "link", "name": "IB English A", "href": "https://lincoln.instructure.com/courses/78"}],
+        "text": "Dashboard. To Do: nothing.",
+    },
+    "https://lincoln.instructure.com/courses/77": {
+        "title": "IB Biology HL",
+        "elements": [{"role": "link", "name": "Home", "href": "https://lincoln.instructure.com/courses/77"},
+                     {"role": "link", "name": "Assignments", "href": "https://lincoln.instructure.com/courses/77/assignments"}],
+        "text": "Course home.",
+    },
+    "https://lincoln.instructure.com/courses/77/assignments": {
+        "title": "Assignments: IB Biology HL",
+        "elements": [{"role": "link", "name": "Photosynthesis worksheet (due Nov 21)",
+                      "href": "https://lincoln.instructure.com/courses/77/assignments/5"}],
+        "text": "Upcoming assignments: Photosynthesis worksheet due Nov 21.",
+    },
+}
+
+
+async def test_agent_sees_each_new_page_and_how_canvas_works(settings, scripted):
+    from jarvis.agent import Agent, ToolContext
+    from jarvis.platform.fake import FakeComputer
+    from jarvis.shortcuts import CancelToken
+
+    c = FakeComputer(sites=CANVAS)
+    llm = scripted([
+        ("tools", [("open_url", {"url": "https://lincoln.instructure.com/", "browser": "Safari"})]),   # model picks Safari
+        ("tools", [("find_on_page", {"query": "biology"})]),
+        ("tools", [("click", {"text": "IB Biology HL - Lincoln"})]),
+        ("tools", [("click", {"text": "Assignments"})]),
+        ("tools", [("done", {"summary": "Your biology homework: the Photosynthesis worksheet, due Nov 21."})])])
+    ctx = ToolContext(computer=c, settings=settings, user_text="go to canvas, then my biology course, and find my homework")
+    res = await Agent(llm, settings).run(ctx.user_text, ctx, mode="balanced", model="m", cancel=CancelToken())
+    assert res.ok and c.tab["url"].endswith("/courses/77/assignments")
+    tool_msgs = [m["content"] for m in llm.calls if m.get("role") == "tool"]
+    opened = tool_msgs[0]
+    assert "how_this_site_works" in opened and "Assignments" in opened          # Canvas know-how right after opening
+    assert "IB Biology HL" in tool_msgs[1]                                       # found beyond the first 45 elements
+    assert "Photosynthesis worksheet" in tool_msgs[3]                            # sees the assignments page after the click
+    assert ctx.browser == "Arc"                                                  # never switched to Safari
+
+
+async def test_web_links_never_open_in_the_macs_default_browser(settings):
+    from jarvis.agent.tools import TOOL_MAP, ToolContext
+    from jarvis.platform.fake import FakeComputer
+
+    c = FakeComputer(sites=CANVAS)
+    ctx = ToolContext(computer=c, settings=settings, user_text="open canvas")
+    await TOOL_MAP["system"].fn(ctx, {"action": "open_location", "value": "https://lincoln.instructure.com/"})
+    await TOOL_MAP["run_shell"].fn(ctx, {"command": "open https://lincoln.instructure.com/courses/77"})
+    assert not any(e.startswith(("location:", "shell:")) for e in c.log)       # both went through the browser instead
+    assert c.tab["url"] == "https://lincoln.instructure.com/courses/77" and ctx.browser == "Arc"
+
+
+async def test_quitting_jarvis_releases_its_ai_models(assistant):
+    """2026-11-19: "I just quit JARVIS and my Mac is lagging": Ollama kept ~10 GB of models loaded."""
+    unloaded = []
+
+    class LLM:
+        async def unload(self, m):
+            unloaded.append(m)
+
+        async def close(self):
+            pass
+    assistant.llm = LLM()
+    await assistant.shutdown()
+    assert {"qwen3.5:9b", "qwen3.5:4b"} <= set(unloaded)

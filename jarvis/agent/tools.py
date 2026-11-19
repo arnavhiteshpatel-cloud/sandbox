@@ -153,14 +153,68 @@ async def open_app(ctx, a):
     return _res(r)
 
 
+def _user_browser(ctx, asked: str | None) -> str:
+    """Always the browser you're using (Arc), unless YOU named another one in your request. Never the Mac's default."""
+    if asked and ctx.user_text and asked.lower().split()[0] in ctx.user_text.lower():
+        return asked
+    return ctx.browser or ctx.settings.get("browser.default", "Arc")
+
+
+async def _page_summary(ctx, limit: int = 45) -> dict:
+    """After a page changes: its address, title, main links/buttons (with ids) and how this site is laid out."""
+    from .site_hints import hint_for
+
+    try:
+        snap = await _t(ctx.computer.browser_snapshot, ctx.browser, 120)
+    except Exception:
+        return {}
+    els = snap.get("elements", [])
+    ctx.last_elements = {e["id"]: e for e in els}
+    out = {"url": snap.get("url"), "title": snap.get("title"),
+           "page": wrap_untrusted("web page", f"Interactive elements ({snap.get('total_elements', len(els))} total; use "
+                                  f"find_on_page if what you need isn't listed):\n" + _fmt_elements(els, limit))}
+    hint = hint_for(snap.get("url"))
+    if hint:
+        out["how_this_site_works"] = hint
+    return out
+
+
 async def open_url(ctx, a):
-    b = a.get("browser") or ctx.browser
+    b = _user_browser(ctx, a.get("browser"))
     r = await _t(ctx.computer.browser_open_url, a["url"], b, a.get("new_tab", True))
     if not r.ok:
         return _res(r)
     ctx.browser = b
     w = await _t(ctx.computer.browser_wait_ready, b, ctx.settings.get("browser.page_load_timeout_s", 20), None, a["url"])
-    return _res(w)
+    out = _res(w)
+    if w.ok:
+        out.update(await _page_summary(ctx))
+    return out
+
+
+async def find_on_page(ctx, a):
+    """Search the WHOLE page (not just the first elements) for links/buttons matching your words."""
+    from rapidfuzz import fuzz
+
+    snap = await _t(ctx.computer.browser_snapshot, ctx.browser, 800)
+    els = snap.get("elements", [])
+    q = a["query"].lower()
+    scored = []
+    for e in els:
+        label = " ".join(str(e.get(k) or "") for k in ("name", "value", "href")).lower()
+        if not label.strip():
+            continue
+        sc = max(fuzz.partial_ratio(q, label), fuzz.token_set_ratio(q, label))
+        if sc >= 60:
+            scored.append((sc, e))
+    scored.sort(key=lambda x: -x[0])
+    found = [e for _, e in scored[:10]]
+    for e in found:
+        ctx.last_elements[e["id"]] = e
+    if not found:
+        return {"ok": False, "error": f"Nothing on this page matches “{a['query']}”. Try other words, scroll, or open a section "
+                                      f"that would contain it (see how_this_site_works)."}
+    return {"ok": True, "matches": wrap_untrusted("web page", _fmt_elements(found, 10))}
 
 
 def _option_owner(ctx, text: str) -> tuple[str, str] | None:
@@ -179,6 +233,13 @@ def _option_owner(ctx, text: str) -> tuple[str, str] | None:
 
 
 async def click(ctx, a):
+    before_url = None
+    eid0 = a.get("element_id") or ""
+    if ctx.browser and (eid0.startswith("w") or (not eid0 and await _t(ctx.computer.frontmost_app) == ctx.browser)):
+        try:
+            before_url = (await _t(ctx.computer.browser_state, ctx.browser)).get("url")
+        except Exception:
+            before_url = None
     eid = a.get("element_id")
     text = a.get("text")
     target = ctx.last_elements.get(eid) if eid else None
@@ -212,6 +273,12 @@ async def click(ctx, a):
                        "type_text with the dropdown's element_id and the option label.")
     elif el:
         out["clicked"] = el.get("name")
+    if r.ok and before_url is not None:                 # a link took us somewhere: show the new page right away
+        await asyncio.sleep(0.4)
+        after = (await _t(ctx.computer.browser_state, ctx.browser)).get("url")
+        if after and after != before_url:
+            await _t(ctx.computer.browser_wait_ready, ctx.browser, ctx.settings.get("browser.page_load_timeout_s", 20))
+            out.update(await _page_summary(ctx))
     return out
 
 
@@ -254,7 +321,12 @@ async def scroll(ctx, a):
 
 
 async def browser_nav(ctx, a):
-    return _res(await _t(ctx.computer.browser_nav, a["action"], ctx.browser))
+    r = await _t(ctx.computer.browser_nav, a["action"], ctx.browser)
+    out = _res(r)
+    if r.ok and a["action"] in ("back", "forward", "reload"):
+        await _t(ctx.computer.browser_wait_ready, ctx.browser, ctx.settings.get("browser.page_load_timeout_s", 20))
+        out.update(await _page_summary(ctx))
+    return out
 
 
 async def click_screen_text(ctx, a):
@@ -524,6 +596,11 @@ async def quit_app(ctx, a):
 
 
 async def run_shell(ctx, a):
+    import re as _re
+
+    m = _re.fullmatch(r"\s*open\s+(?:-a\s+\S+\s+)?[\"']?(https?://[^\s\"']+)[\"']?\s*", a["command"])
+    if m:                                                         # `open https://…` would use the Mac's default browser
+        return await open_url(ctx, {"url": m.group(1)})
     r = await _t(ctx.computer.run_shell, a["command"], float(a.get("timeout", 60)))
     if "output" in r:
         r["output"] = wrap_untrusted("command output", r["output"])
@@ -634,7 +711,10 @@ async def system(ctx, a):
     elif act == "screenshot":
         r = await _t(c.take_screenshot)
     elif act == "open_location":
-        r = await _t(c.open_location, a.get("value") or "")
+        v = a.get("value") or ""
+        if v.lower().startswith(("http://", "https://")):     # web links open in your browser, not the Mac's default
+            return await open_url(ctx, {"url": v})
+        r = await _t(c.open_location, v)
     elif act in ("minimize", "fullscreen", "hide", "new_window", "close_window", "show_desktop", "mission_control"):
         r = await _t(c.window_action, act, a.get("value") or None)
     elif act in ("lock_screen", "display_sleep", "empty_trash"):
@@ -744,6 +824,9 @@ TOOLS: list[Tool] = [
     Tool("compose_email", "Open a Mail draft (not sent).", {"to": {"type": "array", "items": S}, "subject": S, "body": S}, ["subject", "body"], "low", compose_email),
     Tool("send_message", "Send an iMessage to a contact name, phone number or email (the user is always asked first).",
          {"to": S, "text": S}, ["to", "text"], "high", send_message),
+    Tool("find_on_page", "Search the whole current web page for links/buttons/fields matching words (e.g. a course name, "
+         "'assignments', 'homework 5'). Returns element ids to click. Use when observe doesn't list what you need.",
+         {"query": S}, ["query"], "read", find_on_page),
     Tool("app_shortcuts", "Keyboard shortcuts known for an app (default: the front app), built in and learned.", {"app": S}, [],
          "read", app_shortcuts),
     Tool("learn_app_shortcut", "Save a keyboard shortcut you looked up and confirmed works, so it's known next time.",
@@ -807,7 +890,7 @@ def validate_args(tool: Tool, args: dict) -> str | None:
 # cuts time-to-first-action and energy. Groups are chosen from the request; when unsure, all.
 import re as _re
 
-CORE = {"observe", "open_app", "quit_app", "open_url", "click", "type_text", "press_keys", "scroll", "browser_nav", "read_page",
+CORE = {"observe", "find_on_page", "open_app", "quit_app", "open_url", "click", "type_text", "press_keys", "scroll", "browser_nav", "read_page",
         "wait", "ask_user", "done", "remember", "recall", "run_shortcut", "clipboard", "app_shortcuts", "learn_app_shortcut"}
 CORE |= {"menu", "media", "system", "web_search", "read_webpage"}
 FILES = {"search_files", "list_folder", "read_file", "move_file", "make_folder", "trash_files", "find_duplicates",

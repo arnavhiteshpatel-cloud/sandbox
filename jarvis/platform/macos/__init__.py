@@ -598,6 +598,8 @@ class MacComputer(Computer):
         return I.reminders_due(days)
 
     def open_location(self, url):
+        if url.lower().startswith(("http://", "https://")):    # web links: your browser (Arc), not the Mac's default
+            return self.browser.open_url(url, None, True)
         p = subprocess.run(["open", url], capture_output=True, text=True, timeout=15)
         return ActionResult(p.returncode == 0, "Opened." if p.returncode == 0 else p.stderr.strip()[:200])
 

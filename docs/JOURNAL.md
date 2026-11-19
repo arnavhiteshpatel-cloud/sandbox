@@ -288,3 +288,14 @@ Root cause: JARVIS didn't know the user's Canvas address, so the agent improvise
   stays on the fast model; falls back if not downloaded. Not default: on 24 GB it competes with speech models for memory.
 - Found by the tests: "bring up my scribbles" would have asked "What's the address for your scribbles?" ("my" isn't a
   site) — only explicit site words ask now.
+
+### Canvas → course → homework failed (opened Safari, gave up); Mac lagged after quitting JARVIS (2026-11-19)
+- Safari: two routes handed web links to the Mac's DEFAULT browser (system open_location, `open https://…` in the
+  shell), and the model could pick a different browser. Now every web link opens in the browser you're using (Arc)
+  unless you named another one in the request.
+- Giving up: after opening/clicking/back, the agent now immediately gets the new page's links and buttons (no blind
+  steps), a find_on_page tool searches the whole page (Canvas dashboards are long), and built-in know-how for Canvas,
+  ManageBac, Google Classroom, Schoology, Moodle and Gmail (where courses and assignments live) is added when you're on
+  those sites. Rules: navigate section by section; don't stop after one page.
+- Lag after quitting: Ollama kept the models loaded (keep-alive) after JARVIS quit: ~10 GB on a 24 GB Mac. JARVIS now
+  unloads its models when it quits.

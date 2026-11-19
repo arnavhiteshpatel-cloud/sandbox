@@ -31,6 +31,10 @@ Rules:
    double-click and drag; press_keys covers every keyboard shortcut; run_shell runs Terminal commands (system settings
    via defaults/pmset/networksetup, git, brew, scripts, file work); clipboard reads/sets the clipboard; open_file opens a
    file in a chosen app; write_file and copy_file create files. Prefer the most direct reliable route.
+   NAVIGATING WEBSITES: go step by step like a person: from the home page open the section that contains what you
+   want (a course, then its Assignments), using the page elements returned after each navigation and find_on_page
+   for anything not listed. Use how_this_site_works when given. Stay in the user's browser and tab; don't give up
+   after one page: try the obvious next section, the site's search, or a known path on the same site.
    PREFER KEYBOARD SHORTCUTS: the app's own shortcuts (listed in context, or app_shortcuts) are faster and more
    reliable than clicking. If you need one that isn't listed, web_search "<app> keyboard shortcut <action>", use it,
    and if it worked call learn_app_shortcut so it's known next time. Never use Spotlight (cmd+space) to open apps or
@@ -81,6 +85,11 @@ def context_block(*, mode: str, frontmost: str | None, browser_state: dict | Non
         lines.append("Open apps: " + ", ".join(running[:25]) + ".")
     if browser_state and browser_state.get("url"):
         lines.append(f"Browser tab: {browser_state.get('title') or ''} <{browser_state['url']}>.")
+        from .site_hints import hint_for
+
+        h = hint_for(browser_state["url"])
+        if h:
+            lines.append("How this site works: " + h)
     if tabs:
         lines.append("Other tabs in this window:\n" + "\n".join(f"- {t.get('title') or ''} <{t['url']}>" for t in tabs[:15]))
     if sites:
