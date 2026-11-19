@@ -483,6 +483,25 @@ class MacComputer(Computer):
         from . import integrations as I
         return I.set_appearance(dark)
 
+    def set_dock_autohide(self, hide):
+        """Hide/show the Dock (automatic hiding), via System Events: no restart of the Dock needed."""
+        val = "not (autohide of dock preferences)" if hide is None else ("true" if hide else "false")
+        try:
+            AS.run(f'tell application "System Events" to set autohide of dock preferences to {val}', timeout=8)
+            now = AS.run('tell application "System Events" to get autohide of dock preferences', timeout=8).strip()
+        except AutomationError as e:
+            return ActionResult.fail(f"Couldn't change the Dock: {e}")
+        hidden = now == "true"
+        return ActionResult(True, "Dock hidden." if hidden else "Dock showing.", verified=(hide is None or hidden == hide))
+
+    def empty_trash(self):
+        try:
+            AS.run('tell application "Finder" to empty trash', timeout=60)
+            left = AS.run('tell application "Finder" to count items of trash', timeout=10).strip()
+        except AutomationError as e:
+            return ActionResult.fail(f"Couldn't empty the Trash: {e}")
+        return ActionResult(True, "Trash emptied.", verified=(left == "0"))
+
     def set_wifi(self, on):
         from . import integrations as I
         return I.set_wifi(on)

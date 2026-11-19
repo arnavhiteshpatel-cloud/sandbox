@@ -466,7 +466,8 @@ class Assistant:
             self.session = Session()
         self.session.last_active = time.time()
         self._remember_turn("user", text)
-        self.events.emit("transcript", text=text, source=source)
+        if source not in ("wake", "ptt", "followup", "barge", "ask"):    # the voice loop already showed what you said
+            self.events.emit("transcript", text=text, source=source)
         cancel = CancelToken()
         task = asyncio.create_task(self._dispatch(text, intent, cancel))
         tid = self.db.task_start(text, "pending")
@@ -883,6 +884,14 @@ class Assistant:
                 await asyncio.sleep(1.5)
                 return await self._run_agent(f"Spotify is showing search results for “{a['query']}”. Play the top result.", cancel)
             return await self._reply(f"Searching Spotify for {a['query']}.")
+        if n == "dock":
+            r = await self._call(c.set_dock_autohide, a.get("hide"))
+            return await self._reply(r.message, r.ok, followup=False, confirm=True)
+        if n == "empty_trash":
+            if not await self.confirm("Empty the Trash? Those files will be gone for good."):
+                return await self._reply("Left the Trash alone.", True, followup=False)
+            r = await self._call(c.empty_trash)
+            return await self._reply(r.message, r.ok, followup=False, confirm=True)
         if n == "appearance":
             r = await self._call(c.set_appearance, a.get("dark"))
             cmd = {True: "dark_mode", False: "light_mode"}.get(a.get("dark"), "toggle_appearance")

@@ -621,8 +621,10 @@ async def system(ctx, a):
         r = await _t(c.open_location, a.get("value") or "")
     elif act in ("minimize", "fullscreen", "hide", "new_window", "close_window", "show_desktop", "mission_control"):
         r = await _t(c.window_action, act, a.get("value") or None)
-    elif act in ("lock_screen", "display_sleep"):
+    elif act in ("lock_screen", "display_sleep", "empty_trash"):
         r = await _t(getattr(c, act))
+    elif act in ("dock_hide", "dock_show", "dock_toggle"):
+        r = await _t(c.set_dock_autohide, {"dock_hide": True, "dock_show": False}.get(act))
     else:
         return {"ok": False, "error": f"unknown system action {act}"}
     return _res(r)
@@ -712,10 +714,11 @@ TOOLS: list[Tool] = [
     Tool("media", "Media and hardware keys for whatever is playing or the display.",
          {"key": {"type": "string", "enum": ["play", "next", "previous", "brightness_up", "brightness_down", "keyboard_light_up", "keyboard_light_down"]}},
          ["key"], "low", media),
-    Tool("system", "System actions. value = Settings pane name (open_settings), URL like spotify:… (open_location) or app (window actions).",
+    Tool("system", "System actions (dock_hide/dock_show = auto-hide the Dock; empty_trash empties the Trash). value = Settings pane name (open_settings), URL like spotify:… (open_location) or app (window actions).",
          {"action": {"type": "string", "enum": ["dark_mode", "light_mode", "toggle_appearance", "wifi_on", "wifi_off", "open_settings",
                                                  "screenshot", "open_location", "minimize", "fullscreen", "hide", "new_window", "close_window",
-                                                 "show_desktop", "mission_control", "lock_screen", "display_sleep"]}, "value": S},
+                                                 "show_desktop", "mission_control", "lock_screen", "display_sleep",
+                                                 "dock_hide", "dock_show", "dock_toggle", "empty_trash"]}, "value": S},
          ["action"], "low", system),
     Tool("create_note", "Create a note in Apple Notes.", {"body": S, "title": S}, ["body"], "low", create_note),
     Tool("create_reminder", "Create a reminder in Apple Reminders. when: e.g. 'at 5pm', 'tomorrow at 9am', 'in 20 minutes'.",

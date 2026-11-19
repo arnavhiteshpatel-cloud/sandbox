@@ -328,6 +328,8 @@ class FakeComputer(Computer):
     def open_settings(self, pane): return self._ok(f"settings:{pane}", f"{pane} settings.")
     def take_screenshot(self, path=None): return self._ok("screenshot", "Screenshot saved to your Desktop.")
     def window_action(self, action, app=None): return self._ok(f"window:{action}", action)
+    def set_dock_autohide(self, hide): return self._ok(f"dock:{'hide' if hide else 'show'}", "Dock hidden." if hide else "Dock showing.")
+    def empty_trash(self): return self._ok("empty_trash", "Trash emptied.")
     def app_script(self, script, language="AppleScript"):
         self.scripts = getattr(self, "scripts", []) + [script]
         return self._ok("script", "Done.", output="")

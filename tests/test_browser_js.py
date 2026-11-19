@@ -40,7 +40,10 @@ PAGE = """
 @pytest.fixture(scope="module")
 def page():
     with pw.sync_playwright() as p:
-        b = p.chromium.launch()
+        try:
+            b = p.chromium.launch()
+        except Exception:   # this Playwright build doesn't match the installed browser: use the system Chromium
+            b = p.chromium.launch(executable_path="/opt/pw-browsers/chromium", args=["--headless", "--no-sandbox"])
         pg = b.new_page(viewport={"width": 1200, "height": 800})
         pg.set_content(PAGE)
         yield pg

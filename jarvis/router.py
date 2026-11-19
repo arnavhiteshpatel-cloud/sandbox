@@ -302,6 +302,11 @@ def _route(text: str, ctx: dict | None = None) -> Intent | None:
                         (r"(?:open |show )?mission control|show (?:me )?all (?:my )?windows", "mission_control")):
         if re.fullmatch(pat, s):
             return I("window", action=action)
+    m = re.fullmatch(r"(?:hide|auto ?hide|turn on auto ?hide for) (?:the )?dock|(show|unhide|bring back) (?:the )?dock|toggle (?:the )?dock", s)
+    if m:
+        return I("dock", hide=None if s.startswith("toggle") else not bool(m.group(1)))
+    if re.fullmatch(r"empty (?:the |my )?(?:trash|bin|recycle bin)(?: can)?|clear (?:the |my )?trash", s):
+        return I("empty_trash")
     m = re.fullmatch(r"hide (?:the )?(.+?)(?: app)?", s)
     if m:
         return I("window", action="hide", app=None if m.group(1) in ("this", "it", "this app", "this window") else m.group(1))

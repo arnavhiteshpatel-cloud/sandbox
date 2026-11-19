@@ -227,3 +227,21 @@ running are **remembered** (`seen_apps.json`) so they open after being quit, kno
 LaunchServices (`NSWorkspace URLForApplicationWithBundleIdentifier`, no Spotlight needed), one level of subfolders in
 /Applications plus Downloads/Desktop are scanned, and "arc" also answers to a running Browser Company app.
 Teaching accepts "every time I say X, I mean Y" and "the browser I have open" / "this app".
+
+## Scenario sweep (2026-11-19, user: "simulate as many scenarios as you can … find as many bugs as you can")
+Three rounds, all through the real code:
+1. **~250 utterances** through the real assistant on the simulated Mac, tracing route (instant / chat / web / agent),
+   actions and reply. 20 bugs fixed (commit "Scenario sweep"), pinned by `tests/test_scenarios.py`.
+2. **Multi-turn sequences** (shortcut dialogs with "yes", teaching then using, follow-ups, messy transcripts, failures,
+   model down): repeated transcripts, cut-off commands, "hey jarvis" alone, volume by amount, shortcut read-back,
+   "next one" repeating the current result, model runtime dying mid-session — fixed.
+3. **Voice loop end to end in real time** (`tests/test_voice_end_to_end.py`, `tests/_voice_sim.py`): a simulated mic
+   mixes room noise, recorded speech, key clicks and JARVIS's own voice returning 120 ms later at 40 %. Found and fixed:
+   your sentence posted twice; a "Thinking…" flicker; two interruptions per barge-in; the echo learner learning from
+   *your* voice (the bar rose while you talked: up to 3 s late); the voice model scoring two overlapping voices at
+   0.2–0.7 (now loudness-led confirmation while ducked; key clicks can't produce sustained loudness). Six scenarios
+   (follow-up, typing, talk-over, silence, quiet voice, short "mm") pass repeatedly.
+4. **Real model (Qwen3.5-4B) with the new tools:** "close notes" ✓, clipboard ✓; "hide the dock" used light mode and
+   claimed success; "empty the trash" called trash_files with an empty path and claimed success → Dock and Trash are
+   now real abilities (instant by voice, `system` actions for the agent; emptying asks first), empty paths are refused,
+   and the agent can no longer report success when its last real action failed.

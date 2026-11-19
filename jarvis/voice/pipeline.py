@@ -195,9 +195,9 @@ class VoiceLoop:
 
     def _emit_idle(self) -> None:
         """Say "idle" only when nothing is happening: not speaking, not listening, no task running."""
-        if self.speaking or self.capturing or self._capture_req is not None:
-            return
-        self.events.emit("status", status="thinking" if self.busy_fn() else "idle")
+        if self.speaking or self.capturing or self._capture_req is not None or self.busy_fn():
+            return          # a running request reports its own next state (no "Thinking…" flicker)
+        self.events.emit("status", status="idle")
 
     # --- speaking -------------------------------------------------------------------------
     async def speak(self, text: str) -> bool:
@@ -348,7 +348,7 @@ class VoiceLoop:
                         self.wake.reset()
                     self.events.emit("voice", mic="open")
                 frame = None
-                if self.speaking and self._barge_in_enabled():
+                if self.speaking and self._barge_in_enabled() and not self._speak_stop.is_set():
                     # While JARVIS talks, the only question is whether you are talking over it.
                     frame = self.mic.read(timeout=0.2)
                     if frame is not None and self._barge_check(frame):
@@ -526,14 +526,20 @@ class VoiceLoop:
                 self._estimate_lag(hist)
         o, ratio = self._expected_echo(t, hist)
         if self._duck_t is None:
-            if o > 0.02 and now - self._speak_t0 > 0.15:            # learn (never while ducked)
+            # Learn the echo level (never while ducked, and never from frames clearly louder than the echo we
+            # expect: those may be you, and learning them would raise the bar while you talk).
+            if o > 0.02 and now - self._speak_t0 > 0.15 and (ratio is None or mic <= ratio * o * 1.15):
                 (self._echo_samples if self._echo_lag is not None else self._win_samples).append(mic / o)
             if ratio is None:
                 if now - self._speak_t0 < 0.6:
                     return False                                     # very first reply: learn before judging
                 ratio = 0.5
             louder = mic > max(ratio * o * self._suspect_k, noise * 4, 0.006)
-            self._barge_hits = self._barge_hits + 1 if (voice and louder) else 0
+            # Two voices at once make the voice model less sure (0.4-0.55 instead of ~1.0). When the mic is far
+            # louder than JARVIS's echo alone, a lower score is enough (key clicks still score lower than that).
+            much_louder = mic > max(ratio * o * 3.0, noise * 6, 0.02)
+            hit = louder and (voice or (much_louder and p >= 0.3))
+            self._barge_hits = self._barge_hits + 1 if hit else max(0, self._barge_hits - 1)   # 2 of 3 frames
             if self._barge_hits >= 2:
                 self.player.duck(0.15)
                 self._duck_t = now
@@ -544,12 +550,15 @@ class VoiceLoop:
         if since < min(0.3, (self._echo_lag or 0.2) + 0.02):
             return False                                            # the ducked audio hasn't reached the mic yet
         self._confirm_seen += 1
-        if voice and mic > max((ratio or 0.5) * o * 1.5, noise * 4, 0.006):
+        r = ratio or 0.5
+        # JARVIS is at 15 % now, so sustained loudness well above its echo is strong evidence by itself
+        # (key clicks can't produce sustained loudness); the voice model only has to agree weakly.
+        if mic > max(r * o * 1.5, noise * 4, 0.006) and (voice or (mic > max(r * o * 2.5, noise * 5, 0.015) and p >= 0.2)):
             self._confirm += 1
         if self._confirm >= 2:
             self._suspect_k = max(1.25, self._suspect_k * 0.97)    # real interruption: a bit more sensitive
             return True
-        if self._confirm_seen >= 5:                                 # not you after all: back to normal volume
+        if self._confirm_seen >= 6:                                 # not you after all: back to normal volume
             self._suspect_k = min(2.0, self._suspect_k * 1.1)      # false alarm: a bit stricter in this room
             log.info("false alarm while speaking; sensitivity now %.2f", self._suspect_k)
             self.player.unduck()

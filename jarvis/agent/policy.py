@@ -118,10 +118,14 @@ def check(tool: str, args: dict, *, user_text: str, settings, element_label: str
                 return Verdict(True, confirm=True, reason=f"{p} is outside the folders I normally organize.")
         return Verdict(True)
     if tool == "trash_files":
+        if not [p for p in (args.get("paths") or []) if str(p).strip()]:
+            return Verdict(False, reason="No files were named. To empty the Trash, use system action empty_trash.")
         n = len(args.get("paths") or [])
         return Verdict(True, confirm=True, reason=f"This moves {n} item{'s' if n != 1 else ''} to the Trash.")
     if tool == "run_shortcut":
         return Verdict(True)
+    if tool == "system" and args.get("action") == "empty_trash":
+        return Verdict(True, confirm=True, reason="Emptying the Trash deletes those files for good.")
     if tool == "run_shell":
         return shell_verdict(str(args.get("command", "")))
     if tool == "write_file":

@@ -71,8 +71,7 @@ async def test_conversation_takes_the_fast_path(a, said):
     assert r["route"] == "chat" and a.llm.calls == ["chat"], (said, r, a.llm.calls)
 
 
-AGENT = ["what's on my screen", "what does this say", "summarize this page", "read my emails", "hide the dock",
-         "empty the trash", "log out", "right click the desktop", "how many tabs do i have open", "crank up my tunes"]
+AGENT = ["what's on my screen", "what does this say", "summarize this page", "read my emails", "log out", "right click the desktop", "how many tabs do i have open", "crank up my tunes"]
 
 
 @pytest.mark.parametrize("said", AGENT)
@@ -161,3 +160,30 @@ def test_app_names_with_vendor_or_version():
     apps = ["Adobe Photoshop 2025", "Microsoft Word", "Audio MIDI Setup", "Archive Utility", "Logic Pro"]
     assert r("photoshop", apps) == "Adobe Photoshop 2025" and r("word", apps) == "Microsoft Word"
     assert r("audio", apps) is None and r("logic", apps) == "Logic Pro" and r("archive", apps) == "Archive Utility"
+
+
+async def test_dock_and_trash_are_instant(a):
+    await a.handle_text("hide the dock")
+    await a.handle_text("show the dock")
+    assert "dock:hide" in a.computer.log and "dock:show" in a.computer.log and not a.llm.calls
+    r = await a.handle_text("empty the trash")                 # a.confirm says no
+    assert "empty_trash" not in a.computer.log and "alone" in r["message"]
+
+    async def yes(q):
+        return True
+    a.confirm = yes
+    await a.handle_text("empty the trash")
+    assert "empty_trash" in a.computer.log
+
+
+async def test_agent_never_claims_success_after_a_failed_step(settings, scripted):
+    """Real-model run: it called trash_files with no paths, then said "Trash emptied successfully"."""
+    from jarvis.agent import Agent, ToolContext
+    from jarvis.platform.fake import FakeComputer
+    from jarvis.shortcuts import CancelToken
+
+    llm = scripted([("tools", [("trash_files", {"paths": [""]})]),
+                    ("tools", [("done", {"summary": "Trash emptied successfully.", "success": True})])])
+    res = await Agent(llm, settings).run("empty the trash", ToolContext(computer=FakeComputer(), settings=settings),
+                                         mode="balanced", model="m", cancel=CancelToken())
+    assert not res.ok and "didn't work" in res.message and "No files were named" in res.message

@@ -196,6 +196,8 @@ class Computer:
     def open_settings(self, pane: str) -> ActionResult: raise NotImplementedError
     def take_screenshot(self, path: str | None = None) -> ActionResult: raise NotImplementedError
     def window_action(self, action: str, app: str | None = None) -> ActionResult: raise NotImplementedError
+    def set_dock_autohide(self, hide: bool | None) -> ActionResult: raise NotImplementedError   # None = toggle
+    def empty_trash(self) -> ActionResult: raise NotImplementedError
     """minimize | fullscreen | hide | new_window | close_window | show_desktop | mission_control"""
     def app_script(self, script: str, language: str = "AppleScript") -> ActionResult: raise NotImplementedError
     def app_dictionary(self, app: str, max_chars: int = 6000) -> str: raise NotImplementedError

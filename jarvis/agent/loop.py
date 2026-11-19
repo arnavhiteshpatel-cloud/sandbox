@@ -20,6 +20,10 @@ from .tools import TOOL_MAP, TOOLS, ToolContext, select_tools, validate_args
 MAX_RESULT_CHARS = 6000
 
 
+READ_ONLY_TOOLS = {"observe", "read_page", "look_at_screen", "wait", "recall", "done", "ask_user", "web_search",
+                   "read_webpage", "calendar", "search_files", "list_folder", "read_file", "app_dictionary", "calculate"}
+
+
 @dataclass
 class AgentResult:
     ok: bool
@@ -156,13 +160,20 @@ class Agent:
                 key = tc.name + json.dumps(tc.arguments, sort_keys=True)
                 seen_calls[key] = seen_calls.get(key, 0) + 1
                 entry = {"step": step + 1, "tool": tc.name, "args": _short(tc.arguments), "ok": bool(out.get("ok")),
-                         "result": _short(out, 300)}
+                         "result": _short(out, 300), "error": out.get("error")}
                 self.progress({"type": "agent_step", **entry})
                 entry["raw_args"] = tc.arguments
                 steps.append(entry)
                 if tc.name == "done":
                     res.ok = bool(tc.arguments.get("success", True))
                     res.message = tc.arguments.get("summary") or "Done."
+                    # Never report success when the last real action failed (the model sometimes claims it anyway).
+                    actions = [s for s in steps[:-1] if s["tool"] not in READ_ONLY_TOOLS and s["tool"] in TOOL_MAP
+                               and "declined" not in str(s.get("error") or "")]
+                    if res.ok and actions and not actions[-1]["ok"]:
+                        err = str(actions[-1].get("error") or "the last step failed")
+                        res.ok = False
+                        res.message = f"That didn't work: {err.rstrip('.')}."
                     return res
                 if not out.get("ok"):
                     failures += 1
