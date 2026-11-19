@@ -286,7 +286,7 @@ extension ShelfController {
     }
 
     func share(_ items: [ShelfItem], from view: NSView) {
-        let objects: [Any] = items.compactMap { item in
+        let objects: [Any] = items.compactMap { (item: ShelfItem) -> Any? in
             switch item.content {
             case .file, .storedFile: return model.fileURL(for: item)
             case .data(let d):

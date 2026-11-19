@@ -207,7 +207,7 @@ enum SelfTest {
                 "ok": failed == 0,
                 "passed": checks.count - failed,
                 "total": checks.count,
-                "checks": checks.map { ["name": $0.name, "ok": $0.ok, "detail": $0.detail] },
+                "checks": checks.map { ["name": $0.name, "ok": $0.ok, "detail": $0.detail] as [String: Any] },
             ]
             if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) {
                 try? data.write(to: URL(fileURLWithPath: arguments[i + 1]))
