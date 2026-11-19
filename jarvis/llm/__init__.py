@@ -137,6 +137,32 @@ class LLMClient:
         except asyncio.TimeoutError as e:
             raise LLMError("The local AI model took too long to answer.") from e
 
+    async def _stream_lines(self, path: str, payload: dict, headers: dict | None = None):
+        """POST and yield the response line by line as it arrives (NDJSON or server-sent events)."""
+        s = await self.session()
+        try:
+            async with s.post(self.base_url + path, json=payload, headers=headers or {}) as r:
+                if r.status >= 400:
+                    raise LLMError(f"{r.status} from {path}: {(await r.text())[:400]}")
+                async for raw in r.content:
+                    line = raw.decode("utf-8", "ignore").strip()
+                    if line:
+                        yield line
+        except aiohttp.ClientConnectorError as e:
+            raise LLMError(f"The local AI runtime isn't reachable at {self.base_url}. Is it running?") from e
+        except aiohttp.ClientError as e:
+            raise LLMError(f"The local AI runtime dropped the connection ({type(e).__name__}).") from e
+        except asyncio.TimeoutError as e:
+            raise LLMError("The local AI model took too long to answer.") from e
+
+    async def chat_stream(self, messages: list[dict], model: str, *, think: bool = False, max_tokens: int = 300,
+                          temperature: float = 0.4, keep_alive=None, num_ctx: int = 16384):
+        """Yield the reply text piece by piece as the model writes it (so speech can start on the first
+        sentence). Default: one non-streamed call."""
+        r = await self.chat(messages, model, think=think, max_tokens=max_tokens, temperature=temperature, keep_alive=keep_alive)
+        if r.content:
+            yield r.content
+
     async def _get(self, path: str) -> dict:
         s = await self.session()
         try:
@@ -215,6 +241,37 @@ class OllamaClient(LLMClient):
             content, calls = _parse_inline_calls(content)
         return ChatResult(content, calls, int((time.monotonic() - t0) * 1000), model,
                           data.get("prompt_eval_count"), data.get("eval_count"), msg.get("thinking") or thinking)
+
+    async def chat_stream(self, messages, model, *, think=False, max_tokens=300, temperature=0.4, keep_alive=None,
+                          num_ctx=16384):
+        payload: dict[str, Any] = {
+            "model": model, "messages": self._to_ollama(messages), "stream": True, "think": bool(think),
+            # num_ctx must match the other calls: a different value makes Ollama reload the model.
+            "options": {"temperature": temperature, "num_ctx": num_ctx, "num_predict": max_tokens},
+        }
+        if keep_alive is not None:
+            payload["keep_alive"] = keep_alive
+        try:
+            async for line in self._stream_lines("/api/chat", payload):
+                d = json.loads(line)
+                if d.get("error"):
+                    raise LLMError(str(d["error"]))
+                piece = (d.get("message") or {}).get("content") or ""
+                if piece:
+                    yield piece
+                if d.get("done"):
+                    return
+        except LLMError as e:
+            if "think" not in str(e).lower():
+                raise
+            payload.pop("think", None)          # model without a thinking switch
+            async for line in self._stream_lines("/api/chat", payload):
+                d = json.loads(line)
+                piece = (d.get("message") or {}).get("content") or ""
+                if piece:
+                    yield piece
+                if d.get("done"):
+                    return
 
     async def embed(self, texts, model):
         data = await self._post("/api/embed", {"model": model, "input": texts, "keep_alive": "2m"})
@@ -298,6 +355,25 @@ class OpenAICompatClient(LLMClient):
         return ChatResult(content, calls, int((time.monotonic() - t0) * 1000), model,
                           usage.get("prompt_tokens"), usage.get("completion_tokens"), choice.get("reasoning_content") or thinking, raw)
 
+    async def chat_stream(self, messages, model, *, think=False, max_tokens=300, temperature=0.4, keep_alive=None,
+                          num_ctx=16384):
+        payload: dict[str, Any] = {"model": model, "messages": self._to_openai(messages), "temperature": temperature,
+                                   "max_tokens": max_tokens, "stream": True,
+                                   "chat_template_kwargs": {"enable_thinking": bool(think)}}
+        async for line in self._stream_lines("/v1/chat/completions", payload, self._headers()):
+            if not line.startswith("data:"):
+                continue
+            data = line[5:].strip()
+            if data == "[DONE]":
+                return
+            try:
+                d = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            piece = ((d.get("choices") or [{}])[0].get("delta") or {}).get("content") or ""
+            if piece:
+                yield piece
+
     async def embed(self, texts, model):
         data = await self._post("/v1/embeddings", {"model": model, "input": texts}, self._headers())
         return [d["embedding"] for d in data.get("data", [])]
@@ -328,3 +404,80 @@ def make_client(settings) -> LLMClient:
         except Exception:
             key = ""
     return OpenAICompatClient(url, timeout, key)
+
+
+class SpokenStream:
+    """Turns a streamed model reply into speakable sentences the moment each one is complete.
+
+    - Hidden reasoning (`<think>…</think>`) is never spoken; an unfinished one yields nothing.
+    - A reply that starts with `LOOKUP:` is held back entirely (it's a request to search, not an answer).
+    - The first piece may be cut at a comma once it's long enough, so the voice starts sooner.
+    """
+
+    END = re.compile(r"(?<=[.!?])[\"')\]]*\s+|\n+")
+
+    def __init__(self) -> None:
+        self.raw = ""
+        self.pos = 0
+        self.decided = False
+        self.lookup = False
+        self.emitted = 0
+
+    @property
+    def visible(self) -> str:
+        r = self.raw.lstrip()
+        if r.startswith("<think>"):
+            i = r.find("</think>")
+            return "" if i < 0 else r[i + 8:].lstrip()
+        return self.raw.lstrip()
+
+    @property
+    def text(self) -> str:
+        return self.visible.strip()
+
+    def _decide(self, vis: str) -> bool:
+        if self.decided:
+            return True
+        head = vis.lstrip()[:7].upper()
+        if len(head) < 7 and "LOOKUP:".startswith(head):
+            return False                       # could still be "LOOKUP:": wait a few characters
+        self.decided = True
+        self.lookup = head.startswith("LOOKUP")
+        return True
+
+    def feed(self, piece: str) -> list[str]:
+        self.raw += piece
+        vis = self.visible
+        if not vis or not self._decide(vis) or self.lookup:
+            return []
+        out = []
+        while True:
+            rest = vis[self.pos:]
+            m = self.END.search(rest)
+            if m is None:
+                if self.emitted == 0 and len(rest) > 60:
+                    c = rest.find(", ", 30)
+                    if c > 0:
+                        out.append(rest[:c + 1].strip())
+                        self.pos += c + 2
+                        self.emitted += 1
+                        continue
+                break
+            sent = rest[:m.start()].strip()
+            self.pos += m.end()
+            if sent:
+                out.append(sent)
+                self.emitted += 1
+        return out
+
+    def flush(self) -> list[str]:
+        vis = self.visible
+        if self.lookup or not vis:
+            return []
+        if not self.decided:
+            self._decide(vis + " " * 7)
+            if self.lookup:
+                return []
+        rest = vis[self.pos:].strip()
+        self.pos = len(vis)
+        return [rest] if rest else []

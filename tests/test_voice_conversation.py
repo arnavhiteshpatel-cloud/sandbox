@@ -361,3 +361,102 @@ def test_unfinished_model_reasoning_is_never_spoken():
     assert _strip_think("<think>\nThinking Process:\n1. Analyze") == ("", "Thinking Process:\n1. Analyze")
     assert _strip_think("<think>x</think>\nCanberra.") == ("Canberra.", "x")
     assert _strip_think("Canberra.") == ("Canberra.", "")
+
+
+# --- seamless conversation: the reply is spoken while the model is still writing it ------------------------
+class _StreamLLM:
+    """Writes its reply a few characters every 50 ms, like a real model."""
+
+    def __init__(self, reply, delay=0.05):
+        self.reply, self.delay, self.done_at, self.calls = reply, delay, None, 0
+
+    async def chat_stream(self, messages, model, **kw):
+        self.calls += 1
+        for i in range(0, len(self.reply), 6):
+            await asyncio.sleep(self.delay)
+            yield self.reply[i:i + 6]
+        self.done_at = time.monotonic()
+
+    async def chat(self, *a, **k):
+        raise AssertionError("conversation should stream")
+
+    async def warm(self, *a, **k):
+        pass
+
+
+async def test_speech_starts_before_the_model_finishes(assistant):
+    v = _voice(assistant.settings, assistant.events)
+    assistant.voice = v
+    llm = _StreamLLM("Canberra, sir. It became the capital in 1913, chosen as a compromise between Sydney and Melbourne.")
+    assistant.llm = llm
+    r = await assistant.handle_text("what's the capital of australia")
+    assert r["route"] == "chat" and r["message"].startswith("Canberra, sir.")
+    first_audio = min(s for s, _ in v.player.log)
+    assert first_audio < llm.done_at - 0.3                  # talking well before the reply was fully written
+    assert v.current_speech[0] == "Canberra, sir."
+    assistant.voice = None
+
+
+async def test_interrupting_a_streamed_reply_stops_generation(assistant):
+    v = _voice(assistant.settings, assistant.events)
+    assistant.voice = v
+    llm = _StreamLLM("First sentence here. " * 30)
+    assistant.llm = llm
+
+    async def interrupt():
+        await asyncio.sleep(0.25)
+        v.stop_speaking()
+    asyncio.create_task(interrupt())
+    t0 = time.monotonic()
+    await assistant.handle_text("tell me a long story")
+    assert llm.done_at is None and time.monotonic() - t0 < 2.0   # stopped generating, didn't read it all out
+    assistant.voice = None
+
+
+def test_conversation_is_the_default_route():
+    from jarvis.router import classify_question as c
+
+    for t in ("i'm bored", "my day was rough", "write a poem about the sea", "good morning jarvis", "what's my name",
+              "can you help me think of a name for my dog"):
+        assert c(t) == "chat", t
+    for t in ("crank up my tunes", "how many tabs do I have open", "what time is my meeting today", "read my emails",
+              "can you open spotify", "explain this"):
+        assert c(t) is None, t
+
+
+async def test_ollama_streaming_protocol(aiohttp_unused_port=None):
+    """A stand-in Ollama server that streams NDJSON the way /api/chat does."""
+    import json as _json
+
+    from aiohttp import web
+
+    from jarvis.llm import OllamaClient
+
+    seen = {}
+
+    async def chat(request):
+        seen.update(await request.json())
+        resp = web.StreamResponse()
+        await resp.prepare(request)
+        for piece in ["Can", "berra", ", sir."]:
+            await resp.write((_json.dumps({"message": {"role": "assistant", "content": piece}, "done": False}) + "\n").encode())
+            await asyncio.sleep(0.01)
+        await resp.write((_json.dumps({"message": {"content": ""}, "done": True}) + "\n").encode())
+        return resp
+
+    app = web.Application()
+    app.router.add_post("/api/chat", chat)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", 0)
+    await site.start()
+    port = site._server.sockets[0].getsockname()[1]
+    try:
+        c = OllamaClient(f"http://127.0.0.1:{port}")
+        pieces = [p async for p in c.chat_stream([{"role": "user", "content": "capital of australia"}], "qwen3.5:4b",
+                                                  keep_alive="30m")]
+        await c.close()
+    finally:
+        await runner.cleanup()
+    assert "".join(pieces) == "Canberra, sir." and len(pieces) == 3
+    assert seen["stream"] is True and seen["think"] is False and seen["options"]["num_ctx"] == 16384

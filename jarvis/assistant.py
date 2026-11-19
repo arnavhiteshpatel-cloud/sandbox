@@ -9,6 +9,7 @@ import asyncio
 import datetime as dt
 import logging
 import os
+import queue
 import re
 import subprocess
 import sys
@@ -249,6 +250,8 @@ class Assistant:
                     break
         self.llm_ok = ok
         self.events.emit("llm", available=ok, model=self.model)
+        if ok and PROFILES[self.power.mode]["prewarm_on_wake"]:
+            asyncio.create_task(self._warm())   # ready before the first question
         return ok
 
     async def _janitor(self) -> None:
@@ -267,6 +270,11 @@ class Assistant:
     @property
     def model(self) -> str:
         return self.settings.per_mode("llm.models", self.power.mode, "qwen3.5:9b")
+
+    @property
+    def chat_model(self) -> str:
+        """Conversation uses a smaller, faster model (about twice the speed); tasks use `model`."""
+        return self.settings.per_mode("llm.chat_models", self.power.mode, "qwen3.5:4b") or self.model
 
     def _on_mode_change(self, mode: str) -> None:
         self._apply_voice_profile()
@@ -293,10 +301,12 @@ class Assistant:
             asyncio.run_coroutine_threadsafe(self._warm(), self.events._loop)
 
     async def _warm(self) -> None:
-        try:
-            await self.llm.warm(self.model, PROFILES[self.power.mode]["keep_alive"])
-        except LLMError:
-            pass
+        """Load the conversation model first (most requests are conversation), then the task model."""
+        for m in dict.fromkeys([self.chat_model, self.model]):
+            try:
+                await self.llm.warm(m, PROFILES[self.power.mode]["keep_alive"])
+            except LLMError:
+                pass
 
     async def _embed(self, texts: list[str]) -> list[list[float]]:
         return await self.llm.embed(texts, self.settings.get("llm.embed_model"))
@@ -496,11 +506,15 @@ class Assistant:
                         (self.session.id, role, content, time.time()))
 
     async def _reply(self, text: str, ok: bool = True, route: str = "builtin", followup: bool = True,
-                     confirm: bool = False, **extra) -> dict:
+                     confirm: bool = False, already_spoken: bool = False, **extra) -> dict:
         """confirm=True marks a routine success ("Opening Spotify."): shown on the HUD but not spoken, unless
         voice.speak_confirmations is on. Answers, questions and problems are always spoken."""
         self._remember_turn("assistant", text)
-        if confirm and ok and not self.settings.get("voice.speak_confirmations", False):
+        if already_spoken:                        # streamed: the voice has already said it
+            self.events.emit("response", text=text)
+            if followup and self.voice:
+                self.voice.request_followup()
+        elif confirm and ok and not self.settings.get("voice.speak_confirmations", False):
             self.events.emit("response", text=text, silent=True)
             self._note_latency(False)
             if followup and self.voice:
@@ -579,10 +593,12 @@ class Assistant:
         return await self._reply(msg, True, "learning", followup=False)
 
     async def _chat(self, text: str, cancel: CancelToken) -> dict:
-        """Conversation and general questions: one short model call (~250 tokens of instructions instead of the
-        agent's ~3,300), so the answer starts in about a second. Falls back to a web lookup when it needs to."""
+        """Conversation and general questions: the fast conversation model, ~250 tokens of instructions instead of
+        the agent's ~3,300, and the reply is streamed: JARVIS starts speaking the first sentence while the model is
+        still writing the rest. Falls back to a web lookup when it needs current facts."""
         from .agent.prompts import chat_prompt
         from .agent.thinking import decide
+        from .llm import SpokenStream
 
         d = decide(text, self.power.mode, self.settings.get("llm.think_policy", "auto"))
         if d.think:                      # "think it through", or a genuinely complex question
@@ -592,30 +608,64 @@ class Assistant:
         system = chat_prompt(self.settings) + ("\nThings the user told you to remember: " + " | ".join(notes) if notes else "")
         msgs = [{"role": "system", "content": system}] + [
             {"role": m["role"], "content": m["content"]} for m in self.session.history[-7:]]
+        model, keep = self.chat_model, PROFILES[self.power.mode]["keep_alive"]
+        ss = SpokenStream()
+        q: queue.Queue | None = None
+        speaking: asyncio.Task | None = None
+
+        def say_now(sentences: list[str]) -> None:
+            nonlocal q, speaking
+            if not sentences or not self.voice:
+                return
+            if q is None:
+                q = queue.Queue()
+                speaking = asyncio.create_task(self.voice.speak_stream(q))
+                self._note_latency(True)
+            for x in sentences:
+                q.put(x)
+
         try:
-            reply = await self.llm.chat(msgs, model=self.model, think=False, max_tokens=220, temperature=0.4,
-                                        keep_alive=PROFILES[self.power.mode]["keep_alive"])
+            stream = self.llm.chat_stream if hasattr(self.llm, "chat_stream") else None
+            if stream is None:           # simple clients (tests): one call
+                r = await self.llm.chat(msgs, model=model, think=False, max_tokens=220, temperature=0.4, keep_alive=keep)
+                ss.feed(r.content or "")
+            else:
+                async for piece in stream(msgs, model, think=False, max_tokens=220, temperature=0.4, keep_alive=keep):
+                    cancel.check()
+                    say_now(ss.feed(piece))
+                    if ss.text:
+                        self.events.emit("partial", text=ss.text)
+                    if speaking is not None and speaking.done():
+                        break            # you talked over it or said stop: don't keep generating
         except LLMError:
-            return await self._run_agent(text, cancel)   # same "model isn't running" handling as everything else
+            if q is None:
+                return await self._run_agent(text, cancel)   # same "model isn't running" handling as everything else
+        finally:
+            if q is not None:
+                if not (speaking and speaking.done()):
+                    for x in ss.flush():
+                        q.put(x)
+                q.put(None)
         cancel.check()
-        answer = (reply.content or "").strip()
-        if not answer and reply.thinking:
-            # The server ignored "don't think" and ran out of room mid-thought: give it room to finish.
-            try:
-                reply = await self.llm.chat(msgs, model=self.model, think=False, max_tokens=1500, temperature=0.4,
-                                            keep_alive=PROFILES[self.power.mode]["keep_alive"])
-            except LLMError:
-                return await self._reply("Sorry, my local model took too long with that one. Try asking again.", False, "chat")
-            cancel.check()
-            answer = (reply.content or "").strip()
-        m = re.match(r"^\W*LOOKUP:\s*(.+)", answer, re.I | re.S)
-        if m:
-            if self.settings.get("web.enabled", True):
+        if ss.lookup:
+            m = re.match(r"^\W*LOOKUP:\s*(.+)", ss.text, re.I | re.S)
+            if self.settings.get("web.enabled", True) and m:
                 return await self._web_lookup(m.group(1).strip().splitlines()[0], cancel)
             return await self._reply("I'd need to look that up, and internet lookups are off in Settings.", False, "chat")
+        answer = ss.text
         if not answer:
-            return await self._run_agent(text, cancel)
-        return await self._reply(answer, True, "chat")
+            # The server ignored "don't think" and ran out of room mid-thought: give it room to finish.
+            try:
+                r = await self.llm.chat(msgs, model=model, think=False, max_tokens=1500, temperature=0.4, keep_alive=keep)
+            except LLMError:
+                return await self._reply("Sorry, my local model took too long with that one. Try asking again.", False, "chat")
+            answer = (r.content or "").strip()
+            if not answer:
+                return await self._run_agent(text, cancel)
+        if speaking is None:
+            return await self._reply(answer, True, "chat")
+        completed = await speaking
+        return await self._reply(answer, True, "chat", already_spoken=True, followup=completed)
 
     async def _replay_learned(self, lp: dict, cancel: CancelToken) -> dict:
         """Run a phrasing JARVIS learned earlier, instantly and without the AI model."""

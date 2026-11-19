@@ -5,11 +5,13 @@
 | Role | Model | Runtime | Memory (approx.) | License |
 |---|---|---|---|---|
 | Reasoning + tool calling + screenshots, Balanced & Max | **Qwen3.5 9B** (`qwen3.5:9b`) | Ollama | ~6.6 GB weights | Apache-2.0 |
-| Battery Saver | **Qwen3.5 4B** (`qwen3.5:4b`) | Ollama | ~3.3 GB | Apache-2.0 |
+| Battery Saver (everything) and **conversation** in Battery Saver/Balanced | **Qwen3.5 4B** (`qwen3.5:4b`) | Ollama | ~3.3 GB | Apache-2.0 |
 | File-search embeddings | **EmbeddingGemma 300M** (`embeddinggemma:300m`) | Ollama | ~0.6 GB, only while indexing/searching | Gemma terms |
 | Speech recognition | **Whisper large-v3-turbo** (Battery Saver: small.en) | mlx-whisper (Metal) | ~1.6 GB while loaded | MIT |
 | Voice | **Kokoro-82M** int8, voice `bm_george` | kokoro-onnx (CPU) | ~0.3 GB while loaded | Apache-2.0 |
 | Wake word | **openWakeWord `hey_jarvis`** | onnxruntime (CPU) | ~10 MB | code Apache-2.0, model CC BY-NC-SA 4.0 |
+
+**Conversation uses the 4B, tasks the 9B** (`llm.chat_models` / `llm.models`, changed 2026-11-19 for "seamless" conversation): chat replies are short and streamed, so the 4B's ~2× faster generation matters more than the 9B's extra quality there; both stay loaded (~10 GB together, fine with 24 GB).
 
 **One model handles reasoning, tool calls and screenshots.** Qwen3.5 small models are natively multimodal, so JARVIS
 doesn't keep a second vision model in memory. That saves about 5 GB and a second load on every "what's on my screen". The

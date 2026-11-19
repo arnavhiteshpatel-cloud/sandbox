@@ -43,6 +43,11 @@ DEFAULTS: dict[str, Any] = {
         "provider": "ollama",          # ollama | openai_compatible
         "base_url": "http://127.0.0.1:11434",
         "api_key": "",                 # only for optional OpenAI-compatible servers; prefer Keychain
+        "chat_models": {               # conversation: smaller and ~2x faster; tasks use "models"
+            "battery_saver": "qwen3.5:4b",
+            "balanced": "qwen3.5:4b",
+            "max_performance": "qwen3.5:9b",
+        },
         "models": {                    # per power mode; benchmark with `jarvis bench`
             "battery_saver": "qwen3.5:4b",
             "balanced": "qwen3.5:9b",

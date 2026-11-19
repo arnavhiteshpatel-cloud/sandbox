@@ -445,36 +445,54 @@ def parse_reminder(text: str, now=None) -> tuple[str, float | None]:
 # --- conversation vs. computer work --------------------------------------------------------------
 # A question that doesn't involve your screen, files or apps doesn't need the full agent (36 tool
 # descriptions, ~3,300 tokens to process before the first word). It gets one short model call instead.
-CHAT_START = re.compile(
-    r"^(?:what|what's|whats|who|who's|whos|when|where|why|how|how's|which|is|are|was|were|will|would|should|could|"
-    r"can (?:you|i|we)|do you|does|did|tell me|explain|define|describe|give me (?:a|an|some)|"
-    r"hi|hello|hey|yo|good (?:morning|afternoon|evening|night)|thanks|thank you|cheers|nice|cool|great|"
-    r"i think|i'm|im|i am|you're|youre|you are)\b")
-LOCAL_CONTEXT = re.compile(
-    r"\b(?:this|these|those|here|screen|tab|tabs|window|windows|file|files|folder|folders|document|documents|doc|docs|"
-    r"pdf|email|emails|mail|inbox|message|messages|text|desktop|downloads|my|mine|open|click|type|press|scroll|close|"
-    r"quit|play|pause|skip|find|assignment|form|quiz|worksheet|homework|page|website|site|link|app|apps|arc|safari|"
-    r"chrome|spotify|finder|calendar|reminder|reminders|note|notes|remind|schedule|meeting|battery|volume|brightness|"
-    r"wifi|wi-fi|bluetooth|clipboard|selected|highlighted|copy|paste|save|delete|move|rename|send|shortcut|"
-    r"mac|computer|laptop|settings)\b")
+COMPUTER_OBJECT = (r"(?:screen|page|tab|tabs|window|windows|file|files|folder|folders|document|documents|doc|docs|pdf|"
+                   r"email|emails|mail|inbox|message|messages|texts|desktop|downloads|calendar|reminders?|notes?|"
+                   r"mac|computer|laptop|apps?|browser|clipboard|playlist|photos|homework|assignments?|form|quiz|"
+                   r"worksheet|essay|slides?|presentation|spreadsheet|site|website|link|selection|paragraph|question|"
+                   r"meetings?|appointments?|events?|schedule|agenda|battery|volume|wifi|wi-fi|bluetooth|music|song)")
+COMPUTER_WORK = re.compile(
+    r"\b(?:click|type|scroll|press|select|highlight|copy|paste|drag|download|upload|install|uninstall|bookmark|"
+    r"submit|fill|log ?in|sign ?in|on (?:my|the) screen|what(?:'s| is) (?:this|that|on)|"
+    r"(?:read|summari[sz]e|explain|translate|check|fix|edit|finish|answer|look at|go through) (?:this|that|it|these|the)\b|"
+    r"(?:my|this|that|these|the|current|open) " + COMPUTER_OBJECT + r"\b|"
+    r"\b(?:arc|safari|chrome|spotify|finder|notion|canvas|word|excel|powerpoint|keynote|pages|terminal|vs code|xcode)\b|"
+    r"\b(?:tabs|windows|desktop|downloads|clipboard|inbox|calendar|reminders)\b)")
+DO_VERB = re.compile(r"^(?:open|go|show|start|launch|close|quit|find|search|play|turn|set|make|create|delete|move|send|"
+                     r"bring|pull|fire|boot|get|grab|fetch|take|summari[sz]e|list|sort|compare|check|look up|"
+                     r"type|click|put|add|remind|schedule|switch|mute|unmute|save|rename|organi[sz]e|clean|"
+                     r"download|install|book|order|buy|email|text|message|call|do|complete|run)\b")
+POLITE = re.compile(r"^(?:(?:can|could|would|will) you(?: please)?|please|jarvis|hey jarvis|i (?:want|need) you to|"
+                    r"go ahead and|i'd like you to)\s+")
 LIVE_INFO = re.compile(
     r"\b(?:weather|forecast|temperature outside|news|headlines|price|prices|stock|stocks|score|scores|won|winning|"
     r"election|today|tonight|tomorrow|yesterday|this week|this weekend|latest|current|currently|right now|recent|"
     r"recently|20[2-3]\d|open now|release date|exchange rate)\b")
-DO_VERB = re.compile(r"^(?:open|go|show|start|launch|close|find|search|play|turn|set|make|create|delete|move|send|"
-                     r"write|type|click|put|add|remind|schedule|switch|mute|unmute)\b")
+CONVERSATIONAL_OPENER = re.compile(
+    r"^(?:what|what's|whats|who|who's|when|where|why|how|how's|which|is|are|was|were|will|would|should|could|can|"
+    r"do|does|did|tell me|explain|define|describe|guess|i|i'm|im|i've|i'd|my|me|we|we're|you|you're|it|it's|its|that|"
+    r"that's|this is|there|there's|hi|hello|hey|yo|good|thanks|thank|cheers|nice|cool|great|ok|okay|yes|yeah|no|nope|"
+    r"well|so|honestly|actually|lol|haha|wow|oh|hmm|any|let's|lets|imagine|pretend|"
+    r"help me (?:think|come up|decide|figure out|brainstorm|understand|pick|choose))\b")
+PERSONAL_LIVE = re.compile(r"\b(?:my|i|i'm|me)\b")
 
 
 def classify_question(text: str, last_route: str | None = None) -> str | None:
-    """'chat' (answer directly), 'web' (needs current facts: look it up) or None (computer work: use the agent)."""
+    """'chat' (answer directly, fast), 'web' (needs current facts: look it up) or None (computer work: agent).
+    Conversation is the default; only clear computer tasks go to the slower agent."""
     n = normalize(text)
     words = n.split()
-    if not words or len(words) > 40 or LOCAL_CONTEXT.search(n):
+    if not words or len(words) > 60:
         return None
-    chatty = bool(CHAT_START.match(n)) or (last_route in ("chat", "web") and len(words) <= 12 and not DO_VERB.match(n))
-    if not chatty:
+    core = POLITE.sub("", n)
+    if DO_VERB.match(core) or COMPUTER_WORK.search(n):
         return None
-    return "web" if LIVE_INFO.search(n) else "chat"
+    # An instruction about something of yours ("crank up my tunes"), as opposed to conversation that merely
+    # mentions it ("my day was rough", "I think my dog is hungry", "what's my name").
+    if re.search(r"\bmy\b", core) and not CONVERSATIONAL_OPENER.match(core):
+        return None
+    if LIVE_INFO.search(n) and not PERSONAL_LIVE.search(n):
+        return "web"
+    return "chat"
 
 
 # --- several commands at once: "close archive utility and open arc" -----------------------------------

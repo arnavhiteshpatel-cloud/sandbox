@@ -206,3 +206,15 @@ toolchain here; reviewed by hand), timings on the M4 Pro.
 - "Remember that when I say open arc, I mean the Arc browser" only saved a note that nothing consulted → it is now a
   taught phrasing that wins over everything else and an app alias ("arc" → Arc) so "close arc", "switch to arc" work
   too; visible and deletable under Memory → Learned phrasings. Quick answers now include your saved memories.
+
+### Same day: "still taking too long; conversation should be basically seamless"
+- **Streaming:** conversation replies stream from the model (Ollama NDJSON / OpenAI SSE) through `SpokenStream`, which
+  hands each finished sentence (or a long first clause) to the voice immediately; hidden reasoning and `LOOKUP:` replies
+  are never spoken. Measured with the real Qwen3.5-4B on the Linux test box: first sentence ready at 5.0 s vs the full
+  reply at 11.4 s (the M4 Pro is far faster in absolute terms; the overlap is the point). Talking over a streamed reply
+  also stops the generation.
+- **Conversation model:** `llm.chat_models` = 4B in Battery Saver/Balanced (≈2× faster), 9B in Max; tasks keep the 9B.
+  Both are warmed at start-up and on "Hey JARVIS"; `setup-models` downloads both.
+- **Conversation is the default:** only clear computer work (command verbs, the screen/this page/files/apps, your
+  calendar/emails/etc., instructions about your things like "crank up my tunes") goes to the agent; everything else —
+  including "my day was rough", "write a poem", "help me think of a name" — gets the fast streamed path.

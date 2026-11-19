@@ -210,14 +210,37 @@ class VoiceLoop:
         gen = self._speak_gen
         return await asyncio.to_thread(self._speak_blocking, text, gen)
 
-    def _speak_blocking(self, text: str, gen: int, followup: bool = False) -> bool:
+    async def speak_stream(self, source: "queue.Queue") -> bool:
+        """Speak sentences as they arrive in `source` (None ends it): the voice starts on the first sentence
+        while the model is still writing the rest."""
+        if self.muted and self.settings.get("voice.mute_speech_when_muted", False):
+            return True
+        gen = self._speak_gen
+        return await asyncio.to_thread(self._speak_blocking, source, gen)
+
+    def _iter_queue(self, q: "queue.Queue"):
+        while True:
+            try:
+                item = q.get(timeout=0.05)
+            except queue.Empty:
+                if self._speak_stop.is_set():
+                    return
+                continue
+            if item is None:
+                return
+            item = speakable(item)
+            if item:
+                yield item
+
+    def _speak_blocking(self, text, gen: int, followup: bool = False) -> bool:
+        """`text`: a string, or a queue of sentences (streaming)."""
         with self._speak_lock:                     # wait for the previous utterance to finish
             if gen != self._speak_gen:             # a stop/interruption happened while waiting
                 return False
             self._speak_stop.clear()
             self.player.begin()
-            sentences = split_sentences(text, first_short=True)
-            self.current_speech, self._sentence_idx = sentences, 0
+            source = iter(split_sentences(text, first_short=True)) if isinstance(text, str) else self._iter_queue(text)
+            self.current_speech, self._sentence_idx = [], 0
             self._interrupted = None
             self._barge_reset()
             self.speaking = True
@@ -225,7 +248,7 @@ class VoiceLoop:
             self._wakeup.set()                     # open the mic so you can talk over it
             completed = False
             try:
-                completed = self._play_sentences(sentences, text)
+                completed = self._play_sentences(source)
                 return completed
             finally:
                 self.player.finish()
@@ -235,23 +258,32 @@ class VoiceLoop:
                 self.speaking = False
                 self._speak_end_t = time.monotonic()
                 if not completed and self._speak_stop.is_set():
-                    self._interrupted = {"sentences": sentences[self._sentence_idx:], "t": time.monotonic(), "followup": followup}
+                    self._interrupted = {"sentences": self.current_speech[self._sentence_idx:], "t": time.monotonic(),
+                                         "followup": followup}
                 self._emit_idle()
                 if completed and followup:
                     self.request_followup()
 
-    def _play_sentences(self, sentences: list[str], text: str) -> bool:
+    def _play_sentences(self, source) -> bool:
         if self.tts.backend == "say":
-            return self.tts.say_blocking(text, self._speak_stop)
+            for s in source:
+                self.current_speech.append(s)
+                self._sentence_idx = len(self.current_speech) - 1
+                if not self.tts.say_blocking(s, self._speak_stop):
+                    return False
+            return not self._speak_stop.is_set()
         if self.tts.backend != "kokoro":
-            return True  # no audio output available (e.g. headless test)
+            for s in source:                     # no audio output available (e.g. headless test)
+                self.current_speech.append(s)
+            return True
         q: queue.Queue = queue.Queue(maxsize=2)
 
         def produce():
             try:
-                for s in sentences:
+                for s in source:
                     if self._speak_stop.is_set():
                         break
+                    self.current_speech.append(s)
                     q.put(self.tts.synth(s))
             except Exception as e:  # fall back to `say` for this utterance
                 q.put(e)
@@ -270,7 +302,8 @@ class VoiceLoop:
                 return not self._speak_stop.is_set()
             if isinstance(item, Exception):
                 log.warning("Kokoro failed (%s); using macOS say", item)
-                return self.tts.say_blocking(" ".join(sentences[idx:]), self._speak_stop)
+                rest = self.current_speech[idx:] + list(source)
+                return self.tts.say_blocking(" ".join(rest), self._speak_stop)
             self._sentence_idx = idx
             if self._speak_stop.is_set() or not self.player.play(*item):
                 return False

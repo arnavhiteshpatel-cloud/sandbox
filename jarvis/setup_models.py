@@ -105,7 +105,7 @@ def main(args) -> None:
         if s.get("llm.provider") != "ollama":
             print("LLM provider is not Ollama; download your model with your runtime's tools.")
         else:
-            models = sorted(set(s.get("llm.models").values()) | {s.get("llm.embed_model")})
+            models = sorted(set(s.get("llm.models").values()) | set((s.get("llm.chat_models") or {}).values()) | {s.get("llm.embed_model")})
             ollama_pull(models, s.get("llm.base_url"))
     print("\nAll models are installed. JARVIS can now run offline.")
 
